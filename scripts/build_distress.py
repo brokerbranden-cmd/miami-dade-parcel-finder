@@ -103,6 +103,35 @@ for f in glob.glob(f'{RAW}/clerk/LIS/*.json') + glob.glob(f'{RAW}/clerk/LIS_lega
     for m in (d.get('models') or d.get('recordingModels') or []) if isinstance(d, dict) else []: take_model(m)
 for f in glob.glob(f'{RAW}/clerk/LIS_legacy/*lis-pendens-raw-all.csv'):
     for m in csv.DictReader(open(f, encoding='utf-8', errors='replace')): take_model(m)
+# fresh Official Records CSV exports (logged-in browser session) -> same model shape; one row per party pairing
+LPDIR = os.environ.get('LP_DOWNLOADS', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'raw', 'lp_downloads'))
+PLF_RX = re.compile(r'\b(BANK|BANC|MORTGAGE|MTG|LOAN|LENDING|SERVIC|FUNDING|FINANC|CAPITAL|CREDIT UNION|FEDERAL|SAVINGS|FSB|N\s?A$|NATIONAL ASS|TRUST CO|TRUSTEE|SECRETARY OF|HOUSING|ASS(OCIATIO)?N|ASSOC|CONDO|HOMEOWNER|HOA|MASTER|COMMUNITY|NATIONSTAR|MR COOPER|LAKEVIEW|FREEDOM|NEWREZ|CARRINGTON|ROCKET|PENNYMAC|DEUTSCHE|WILMINGTON|U S BANK|US BANK|COMPUTERSHARE|FANNIE|FREDDIE|CITIBANK|WELLS FARGO|JPMORGAN|CHASE|HSBC|MIDFIRST|SPECIALIZED|SELECT PORTFOLIO|SHELLPOINT|PHH|LOANCARE|PLANET HOME|CHAMPION|REVERSE|CIVIC|ONEMAIN)')
+n_csv_rows = 0
+for f in sorted(glob.glob(f'{LPDIR}/*.csv')):
+    by = collections.defaultdict(list)
+    for r in csv.DictReader(open(f, encoding='utf-8-sig', errors='replace')):
+        n_csv_rows += 1; by[r["Clerk's File Number"].strip()].append(r)
+    for cfn, rs in by.items():
+        if not cfn or not rs[0]['Document Type'].startswith('LIS PENDENS'): continue
+        G = collections.defaultdict(set)
+        for r in rs:
+            a, _, b = r['Party Name'].partition(' / '); a, b = a.strip(), b.strip()
+            if a and b: G[a].add(b); G[b].add(a)
+        side, plfs, defs = {}, set(), set()   # pairings are plaintiff x defendant -> 2-colour each component, plaintiff side = more lender/HOA names
+        for n0 in G:
+            if n0 in side: continue
+            comp, st = [], [(n0, 0)]
+            while st:
+                n, c = st.pop()
+                if n in side: continue
+                side[n] = c; comp.append(n); st += [(x, 1 - c) for x in G[n]]
+            score = [sum(1 for n in comp if side[n] == k and PLF_RX.search(n)) - sum(1 for n in comp if side[n] == k and not PLF_RX.search(n)) * .01 for k in (0, 1)]
+            k = 0 if score[0] >= score[1] else 1
+            for n in comp: (plfs if side[n] == k else defs).add(n)
+        r0 = rs[0]; bp = (r0['Rec Book/Page'] + '/').split('/'); pp = (r0['Plat Book/Page'] + '/').split('/')
+        lp_docs[cfn] = [{'clerk_File': cfn, 'doC_TYPE': r0['Document Type'], 'reC_DATE': r0['Rec Date'], 'reC_BOOK': bp[0], 'reC_PAGE': bp[1],
+                         'plaT_BOOK': pp[0], 'plaT_PAGE': pp[1], 'blocK_NO': r0['Block Number'], 'legaL_DESCRIPTION': r0['Legal'], 'misC_REF': r0['Misc Ref'],
+                         'address': r0['Address'].strip(), '_plfs': plfs, '_defs': defs, '_src': 'csv'}]   # fresh export replaces cached JSON copy of the same CFN
 cancelled = set()  # CFNs of lis pendens released by a recorded cancellation (CLP links to the original by book/page)
 for f in glob.glob(f'{RAW}/clerk/CLP/*.json'):
     for m in json.load(open(f)).get('models', []):
@@ -122,6 +151,8 @@ TOK_SKIP = {'THE', 'OF', 'AND', 'INC', 'LLC', 'TR', 'TRUST', 'EST', 'ESTATE', 'U
 def name_tokens(n): return [t for t in re.findall(r'[A-Z]{2,}', n.upper()) if t not in TOK_SKIP]
 def owner_has(folio, toks): o = OWN.get(folio, ''); return len(toks) >= 2 and all(re.search(r'\b' + t + r'\b', o) for t in toks[:2])
 n_lp, n_lp_m, how = 0, 0, collections.Counter()
+LPKIND = collections.Counter(); _hl = ['']
+CLERK_URL = 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch.aspx'
 for cfn, ms in lp_docs.items():
     m0 = ms[0]; n_lp += 1
     rd = pdate(m0.get('reC_DATE'))
@@ -130,12 +161,14 @@ for cfn, ms in lp_docs.items():
     except ValueError: pass
     defs, plfs = set(), set()
     for m in ms:
+        if '_plfs' in m: plfs |= m['_plfs']; defs |= m['_defs']; continue
         a, b = (m.get('firsT_PARTY') or '').strip(), (m.get('seconD_PARTY') or '').strip()
         if (m.get('partY_CODE') or '').strip() == 'R': defs.add(a); plfs.add(b)
         else: plfs.add(a); defs.add(b)
     defs -= plfs; defs.discard(''); plfs.discard('')
     folio = prior.get(cfn) if prior.get(cfn) else None
-    if folio: how['prior PA lookup'] += 1
+    mh = 'prior PA lookup' if folio else ''
+    if folio: how[mh] += 1
     if not folio:
         try: pb, pg = int(m0.get('plaT_BOOK') or 0), int(m0.get('plaT_PAGE') or 0)
         except ValueError: pb = pg = 0
@@ -147,7 +180,7 @@ for cfn, ms in lp_docs.items():
                 c += LEG.get((pb, pgv, lot.group(1), blk), []) or (LEG.get((pb, pgv, lot.group(1), ''), []) if blk else [])
             c = sorted(set(c))
             if len(c) > 1: c = [f for f in c if any(owner_has(f, name_tokens(d)) for d in defs)]
-            if len(c) == 1: folio = c[0]; how['plat book/page + lot/block'] += 1
+            if len(c) == 1: folio = c[0]; mh = 'plat book/page + lot/block'; how[mh] += 1
         if not folio:  # defendant name on the PA roll + the same lot number or subdivision word in the PA legal
             subw = [w for w in re.findall(r'[A-Z]{4,}', (m0.get('subdiV_NAME') or '').upper()) if w not in ('CONDO', 'CONDOMINIUM', 'ESTATES', 'SECTION', 'ADDITION', 'SUBDIVISION', 'REVISED', 'AMENDED', 'PLAT')]
             lotn = lot.group(1) if lot else None
@@ -162,19 +195,29 @@ for cfn, ms in lp_docs.items():
                     ok_sub = bool(subw) and subw[0] in l
                     ok_lot = bool(lotn) and re.search(r'\bLOTS?\s+(?:\d+[A-Z]?\s*(?:&|AND|,)\s*)*' + lotn + r'\b', l)
                     ok_unit = bool(unit) and re.search(r'\bUNIT\s+(?:NO\s+)?' + unit.group(1) + r'\b', l)
-                    if ok_sub and (ok_lot or ok_unit or not (lotn or unit)): hits.add(f)
-            if len(hits) == 1: folio = hits.pop(); how['defendant name + subdivision/lot'] += 1
+                    ok_pb = bool(pb) and re.search(r'\bPB\s*%d\s*-\s*%d\b' % (pb, pg if pg % 10 or pg < 10 else pg), l) is not None
+                    blkv = (m0.get('blocK_NO') or '').strip().upper()
+                    ok_blk = not blkv or re.search(r'\bBLK\s+' + re.escape(blkv) + r'\b', l)
+                    if (ok_sub or ok_pb) and (ok_lot or ok_unit or not (lotn or unit)): hits.add(f)
+                    elif (ok_lot and ok_blk and blkv) or ok_unit: hits.add(f)
+            if len(hits) == 1: folio = hits.pop(); mh = 'defendant name + legal (plat/lot/block/unit)'; how[mh] += 1
     if not folio and m0.get('address'):
         folio = addr_to_folio(m0['address'])
-        if folio: how['address'] += 1
+        if folio and defs and not any(owner_has(folio, name_tokens(d)) for d in defs): folio = None  # precision: owner must be a defendant
+        if folio: mh = 'address + defendant name'; how[mh] += 1
     if not folio: continue
     n_lp_m += 1
     case = re.sub(r'\s+LIS\w*$', '', (m0.get('casE_NUM') or m0.get('misC_REF') or '').strip())
-    hoa = any(re.search(r'ASS(OCIATIO)?N|CONDO|HOMEOWNER|HOA\b', p) for p in plfs)
-    add(folio, 'LP', rd, 'Lis pendens' + (' (HOA/condo assn)' if hoa else ''), 0, case or cfn,
-        'https://onlineservices.miamidadeclerk.gov/officialrecords/', f"CFN {cfn}; plaintiff: {'; '.join(sorted(plfs))[:120]}; defendant: {'; '.join(sorted(defs))[:120]}")
+    BANKY = r'BANK|NATIONAL ASS|N\s?A$|TRUST|LOAN|MORTGAGE|MTG|SERVIC|FUNDING|LENDING|FEDERAL|SAVINGS|CREDIT UNION|FINANC|CAPITAL'
+    hoa = any(re.search(r'ASS(OCIATIO)?N|ASSOC|CONDO|HOMEOWNER|HOA\b|MASTER|COMMUNITY|\bCOA\b|\bPOA\b', p) and not re.search(BANKY, p) for p in plfs)
+    lender = any(PLF_RX.search(p) for p in plfs)
+    kind = 'HOA/condo lien foreclosure' if hoa else ('Mortgage foreclosure' if '-CA-' in case and lender else 'Other lis pendens')
+    LPKIND[kind] += 1
+    conf = 'high' if mh != 'plat book/page + lot/block' or any(owner_has(folio, name_tokens(d)) for d in defs) else 'medium'
+    add(folio, 'LP', rd, 'Lis pendens: ' + kind, 0, case or cfn,
+        CLERK_URL, f"CFN {cfn}; match: {mh} ({conf} confidence); plaintiff: {'; '.join(sorted(plfs))[:120]}; defendant: {'; '.join(sorted(defs))[:120]}")
 lp_range = sorted(pdate(v[0].get('reC_DATE')) for v in lp_docs.values() if pdate(v[0].get('reC_DATE')))
-STATS['lis_pendens'] = {'documents': n_lp, 'matched': n_lp_m, 'how': dict(how), 'recorded_from': d2s(lp_range[0]) if lp_range else '', 'recorded_to': d2s(lp_range[-1]) if lp_range else '',
+STATS['lis_pendens'] = {'documents': n_lp, 'matched': n_lp_m, 'how': dict(how), 'kind': dict(LPKIND), 'csv_rows': n_csv_rows, 'recorded_from': d2s(lp_range[0]) if lp_range else '', 'recorded_to': d2s(lp_range[-1]) if lp_range else '',
                         'source': 'https://onlineservices.miamidadeclerk.gov/officialrecords/ (LIS PENDENS - LIS)'}
 
 # ---------- 2. foreclosure + tax-deed sales (RealAuction) ----------

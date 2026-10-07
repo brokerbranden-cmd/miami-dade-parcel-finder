@@ -94,7 +94,7 @@ Every signal is a real public record matched to a folio; nothing is inferred exc
 |---|---|---|---|---|
 | FC | Foreclosure sale scheduled | miamidade.realforeclose.com auction calendar (`fetch_auctions.py`) | scraped, ~1 req/s | 35 |
 | TD | Tax deed application / sale | TaxSys "Public-Open Deeds" report + realforeclose TAXDEED sales | scraped (headless browser) | 30 |
-| LP | Lis pendens | Clerk Official Records (`fetch_clerk.py`) | scraped; **blocked by reCAPTCHA** without a Clerk login, cached data used | 25 (15 if >12 mo) |
+| LP | Lis pendens | Clerk Official Records CSV exports (logged-in browser) dropped in `raw/lp_downloads/lp_YYYYMMDD_YYYYMMDD.csv`, merged with cached scrapes, deduped by CFN; matched by plat book/page+lot/block, defendant name+legal, address+defendant; classified mortgage / HOA-condo / other | login (manual/browser export); `fetch_clerk.py` scrape is fallback only (reCAPTCHA) | 25 (15 if >12 mo) |
 | US | Unsafe structure case | County Open_Building_Violations (ArcGIS) | official API | 22 |
 | TC | Unpaid tax certificates | TaxSys "Public-Open Certificates wAddr" | scraped report | 10 +4/extra yr (max 18) |
 | PR | Probate / estate / unknown heirs | owner name "EST OF"/heirs + No-Heir Probates output | derived/local | 15 |
@@ -108,7 +108,7 @@ Every signal is a real public record matched to a folio; nothing is inferred exc
 Soft factors (capped at 20 total): out-of-state owner 6 / absentee 4; owned 20+ yrs 5 / 10+ yrs 2; teardown (bldg < 20% of value) 6 or vacant lot 3; no homestead 3.
 **Score = min(100, hard points + soft points)**; government-owned parcels score 0. The drawer shows the breakdown.
 
-Blocked / not covered: Clerk Official Records search (reCAPTCHA; needs a free registered Clerk login session or paid units),
+Blocked / not covered: unattended Clerk search (reCAPTCHA; solved by the logged-in CSV exports above; CFN deep links need a per-session token, so links go to the Official Records search page with the CFN + case # shown),
 City of Miami code cases/liens (not published; CityView per-case lookup only), miamidade.realtaxdeed.com (403; tax deeds sell on realforeclose).
 
 UI: "Distress signals" filter (chips with counts, min score), presets 🔥 Hottest leads / Pre-foreclosure / Tax deeds / Unsafe,

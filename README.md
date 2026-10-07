@@ -120,7 +120,23 @@ Weekly refresh: `scripts/build_all.sh` (or just the four `fetch_*` + `build_dist
 New-lead digest: `python3 scripts/top_leads.py --since 2026-10-01 [--min 40 --limit 50 --out out/top_leads]`
 writes `out/top_leads.csv` and `out/top_leads.html` (email body). It sends nothing.
 
+## Saved properties
+
+Star (☆) any property on a card, table row, map popup or in the detail drawer (keyboard: Tab to the star, Enter/Space).
+The **Saved** button in the sticky bar shows the count and switches to your saved list (search filters pause; cards, table, map,
+sort incl. "Recently saved", Copy folios and Export CSV all work on the saved list). Each saved property keeps the date saved,
+a status (New, Researching, Mailed, Called, Offer sent, Under contract, Pass) and a free-text note, editable in the drawer and
+shown on cards; filter the saved list by status. Saved condo units load the condo pack automatically. Saved properties are
+ringed in brand orange on the map.
+
+Storage: `saved.js` (`window.PFSaved`) keeps the list in localStorage (`mdpf.saved.v1`), keyed by folio, and syncs across tabs.
+**Export saved (JSON/CSV)** and **Import saved (JSON)** move the list between browsers/computers; import merges by folio and keeps
+the most recently edited copy. The storage backend is a small `{load(), save(items)}` interface (`PFSaved.use(backend)`), so a
+cloud sync can be plugged in later; `PFSaved.onChange(fn)` reports every edit.
+
 ## Testing
+
+`tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
 
 ```bash
 pip install playwright && playwright install chromium

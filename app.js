@@ -1,0 +1,751 @@
+
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const fmt = new Intl.NumberFormat('en-US');
+const money = v => v>=1e9 ? '$'+(v/1e9).toFixed(1)+'B' : v>=1e6 ? '$'+(v/1e6).toFixed(v>=1e7?1:2).replace(/\.?0+$/,'')+'M' : v>=1e3 ? '$'+Math.round(v/1e3)+'K' : '$'+fmt.format(v);
+const dollars = v => '$'+fmt.format(v);
+const SQFT_AC = 43560;
+const DAY0 = Date.UTC(1900,0,1);
+const today = Math.floor((Date.now()-DAY0)/86400000);
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dt = d => new Date(DAY0+d*86400000);
+const dateStr = d => { if(!d) return ''; const t=dt(d); return (t.getUTCMonth()+1)+'/'+t.getUTCDate()+'/'+t.getUTCFullYear(); };
+const monYr = d => { const t=dt(d); return MON[t.getUTCMonth()]+' '+t.getUTCFullYear(); };
+const folioFmt = f => f.length===13 ? f.slice(0,2)+'-'+f.slice(2,6)+'-'+f.slice(6,9)+'-'+f.slice(9) : f;
+const acres = sf => sf>=SQFT_AC*10 ? fmt.format(Math.round(sf/SQFT_AC))+' acres' : (sf/SQFT_AC).toFixed(2)+' acres';
+const esc = s => String(s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+const FLAG = {homestead:1, oos:2, absz:4, corp:8, trust:16, govt:32, estate:64, senior:128};
+const MZ_MIAMI=[['T3','Sub-urban (single family, duplex)'],['T4','General urban (small apartments)'],['T5','Urban center (up to 5 stories)'],['T6','Urban core (8+ stories)'],['CI','Civic institution'],['CS','Civic space'],['D1','Work place'],['D2','Industrial'],['D3','Waterfront industrial']];
+const MZ_COUNTY=[['RU-1','Single family'],['RU-2','Duplex'],['RU-TH','Townhouse'],['RU-3','Small multifamily'],['RU-4','Apartments'],['RU-5','Residential / office'],['EU','Estates'],['BU','Business'],['IU','Industrial'],['GU','Interim'],['PAD','Planned area development']];
+const OWNER_KINDS = [['all','All owners'],['person','Individuals'],['corp','LLCs & companies'],['trust','Trusts']];
+const OWNER_ROWS = [
+  ['homestead','Owner lives there (homestead)'],['oos','Owner mails from out of state'],['absz','Owner mails to a different ZIP'],
+  ['corp','Owned by an LLC or company'],['trust','Owned by a trust'],['estate','Estate or heirs'],['senior','Senior exemption']];
+const dec = new TextDecoder();
+
+/* plain-language categories */
+const TYPES = [
+  ['vacant','Vacant land','vacant'],['sf','Single family','res'],['th','Townhouse','res'],['mf29','2–9 units','multi'],
+  ['apt10','10+ unit apartments','multi'],['condo','Condo units','res'],['mixed','Mixed use','com'],['com','Commercial','com'],
+  ['ind','Industrial','ind'],['mobile','Mobile home','res'],['inst','Church, school, nonprofit','gov'],['gov','Government','gov'],['other','Other','ind']];
+const TYPE_LABEL = Object.fromEntries(TYPES.map(t=>[t[0],t[1]])), TYPE_TONE = Object.fromEntries(TYPES.map(t=>[t[0],t[2]]));
+function luType(s){
+  const code=parseInt(s.slice(0,4),10)||0, u=s.toUpperCase();
+  if(/CONDOMINIUM|COOPERATIVE/.test(u)) return 'condo';
+  if(code===0) return 'other';
+  if(/GOVERN/.test(u) || (code>=8000 && code<9000)) return 'gov';
+  if(/VACANT|ACREAGE NOT CLASSIFIED/.test(u)) return 'vacant';
+  const g=Math.floor(code/100);
+  if(g===1) return 'sf'; if(g===2) return 'mobile'; if(g===3) return 'apt10';
+  if(g===4) return /TOWNHOUSE/.test(u)?'th':'other';
+  if(g===6) return 'inst'; if(g===8) return 'mf29';
+  if(g===12) return 'mixed';
+  if(g>=10 && g<=39) return 'com';
+  if(g>=41 && g<=49) return 'ind';
+  if(g>=70 && g<=79) return 'inst';
+  return 'other';
+}
+const ZONES = [
+  ['sf','Single family','res'],['duplex','Duplex','res'],['th','Townhouse','res'],['mf','Multifamily','multi'],['mixed','Mixed use / urban','com'],
+  ['com','Commercial','com'],['ind','Industrial','ind'],['pud','Planned development','gov'],['interim','Interim (no final zoning)','gov'],['civic','Civic, parks, special','gov'],['other','Unclassified','ind']];
+const ZONE_LABEL = Object.fromEntries(ZONES.map(z=>[z[0],z[1]])), ZONE_TONE = Object.fromEntries(ZONES.map(z=>[z[0],z[2]]));
+function zGroup(s){
+  const code=parseInt(s,10)||0, u=s.toUpperCase();
+  if(!code || !/[A-Z]/.test(u.replace(/^\S+\s*-\s*/,''))) return 'other';
+  if(code===1900 || (code>=5400&&code<=5600) || code===9300 || code===9400 || code===9450) return 'pud';
+  if(code===9301||code===9302) return 'mf';
+  if(code>=100 && code<=2700) return 'sf';
+  if(code===2800) return 'th';
+  if(code>=5700 && code<=5900) return 'duplex';
+  if((code>=3000 && code<=4700) || code===4900 || code===5100) return 'mf';
+  if(code>=4800 && code<=4802) return 'mixed';
+  if(code>=5000 && code<=5300) return /MIX/.test(u)?'mixed':'com';
+  if(code>=6000 && code<7000) return /MIX|UC |URBAN|CORE|TOWN CENTER|TRANSIT|DKUC|MAIN STREET|RESIDENTIAL|RES \/|ARTS|MARKET|OVERTOWN|HIGH DENS|CEN-PED|PERFORMING|UNIVERSITY|DESIGN D|NBHD/.test(u)?'mixed':'com';
+  if(code===7610) return 'mixed';
+  if(code>=7000 && code<7800) return 'ind';
+  if(code===8900) return 'interim';
+  if(code===9500) return 'com';
+  return 'civic';
+}
+const KEEP_UP = new Set(['UC','PUD','CRA','MC','MM','MO','MD','MCS','MCI','MCD','AD','ID','RM','RML','SD','DKUC','HT','I','II','III','TOD','LLC','MH-1','DRI','CB','PDR']);
+function nice(s){
+  let t=s.replace(/^\S+\s*-\s*/,'').replace(/\s+/g,' ').trim();
+  if(!t) return '';
+  t=t.replace(/\bU\/A\b/g,'units/acre').replace(/\bSGL\b/g,'SINGLE').replace(/\bFAM\b/g,'FAMILY').replace(/\bSQF?T?\b/g,'SQ FT').replace(/\bCONDOMINUM\b/g,'CONDOMINIUM');
+  return t.split(' ').map(w=>{ const W=w.replace(/[(),]/g,''); if(KEEP_UP.has(W)||/\d/.test(w)||w==='units/acre') return w; return w.charAt(0)+w.slice(1).toLowerCase(); }).join(' ');
+}
+const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
+
+/* data */
+let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
+let results=new Uint32Array(0);
+const S = { types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+let facet = {lc:null, zc:null, mc:null, kc:null};
+let MZ=null, MZ_UP=null;
+const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
+function mzAllow(q){ const toks=mzTokens(q); if(!toks.length) return null; const a=new Uint8Array(MZ.length); for(let i=1;i<MZ.length;i++){ const c=MZ_UP[i]; for(const t of toks){ if(c===t || c.startsWith(t)){ a[i]=1; break; } } } return a; }
+
+const IDB=(()=>{ let dbp=null;
+  const open=()=>dbp||(dbp=new Promise((res,rej)=>{ try{ const r=indexedDB.open('mdpf',1); r.onupgradeneeded=()=>r.result.createObjectStore('f'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>rej(new Error('blocked')); }catch(e){ rej(e); } }));
+  const withTimeout=(pr,ms)=>Promise.race([pr,new Promise(r=>setTimeout(()=>r(null),ms))]);
+  async function get(k){ try{ const db=await withTimeout(open(),1500); if(!db) return null; return await withTimeout(new Promise(res=>{ const q=db.transaction('f').objectStore('f').get(k); q.onsuccess=()=>res(q.result||null); q.onerror=()=>res(null); }),3000); }catch(e){ return null; } }
+  async function put(k,v){ try{ const db=await withTimeout(open(),1500); if(db) db.transaction('f','readwrite').objectStore('f').put(v,k); }catch(e){} }
+  async function prune(ver){ try{ const db=await withTimeout(open(),1500); if(!db) return; const r=db.transaction('f','readwrite').objectStore('f').openCursor(); r.onsuccess=()=>{ const cur=r.result; if(!cur) return; if(!String(cur.key).startsWith(ver+'/')) cur.delete(); cur.continue(); }; }catch(e){} }
+  return {get,put,prune}; })();
+async function fetchAll(files, onBytes){
+  const bufs = await Promise.all(files.map(async f => {
+    const key=META.ver+'/'+f, hit=await IDB.get(key);
+    if(hit && hit.byteLength){ onBytes(hit.byteLength); return new Uint8Array(hit); }
+    const r = await fetch('data/'+f); if(!r.ok) throw new Error('Could not load '+f+' ('+r.status+')');
+    if(!r.body){ const b=new Uint8Array(await r.arrayBuffer()); onBytes(b.length); return b; }
+    const rd=r.body.getReader(), chunks=[]; let len=0;
+    for(;;){ const {done,value}=await rd.read(); if(done) break; chunks.push(value); len+=value.length; onBytes(value.length); }
+    const out=new Uint8Array(len); let o=0; for(const c of chunks){out.set(c,o);o+=c.length;} IDB.put(key,out.buffer); return out;
+  }));
+  const all=new Uint8Array(bufs.reduce((a,b)=>a+b.length,0)); let o=0; for(const b of bufs){all.set(b,o);o+=b.length;} return all;
+}
+async function gunzip(u8){
+  if(u8[0]===0x1f && u8[1]===0x8b){ const ds=new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip')); return new Uint8Array(await new Response(ds).arrayBuffer()); }
+  return u8;
+}
+const TA={uint8:Uint8Array,uint16:Uint16Array,uint32:Uint32Array};
+function parsePack(u8,name,idx){
+  const buf=u8.buffer, base=u8.byteOffset, hl=new DataView(buf,base,4).getUint32(0,true);
+  const hdr=JSON.parse(dec.decode(u8.subarray(4,4+hl))), start=4+hl, c={}, s={};
+  for(const col of hdr.cols){
+    if(col.type==='str') s[col.name]={bytes:u8.subarray(start+col.offset,start+col.offset+col.bytes),off:null,all:null};
+    else { const T=TA[col.type]; c[col.name]=new T(buf,base+start+col.offset,col.bytes/T.BYTES_PER_ELEMENT); }
+  }
+  return {name,idx,n:hdr.n,c,s};
+}
+function strOffsets(sc,n){ if(sc.off) return sc.off; const off=new Uint32Array(n+1),b=sc.bytes; let k=1; for(let i=0;i<b.length;i++) if(b[i]===10) off[k++]=i+1; off[n]=b.length+1; sc.off=off; return off; }
+function getStr(p,col,i){ const sc=p.s[col]; if(sc.all) return sc.all[i]; const off=strOffsets(sc,p.n); return dec.decode(sc.bytes.subarray(off[i],off[i+1]-1)); }
+function strCol(p,col){ const sc=p.s[col]; if(!sc.all) sc.all=dec.decode(sc.bytes).split('\n'); return sc.all; }
+async function loadPack(i,label){
+  const pk=META.packs[i]; let got=0;
+  $('loadbox').hidden=false; $('loadMsg').textContent=label; $('loadBar').style.width='0%';
+  const raw=await fetchAll(pk.files,n=>{ got+=n; $('loadBar').style.width=Math.min(100,got/pk.bytes*100).toFixed(1)+'%'; $('loadSub').textContent=(got/1e6).toFixed(1)+' of '+(pk.bytes/1e6).toFixed(1)+' MB'; });
+  $('loadMsg').textContent=label;
+  $('loadSub').textContent='Unpacking…';
+  PACKS[i]=parsePack(await gunzip(raw),pk.name,i);
+  $('loadbox').hidden=true;
+}
+const DET=[];
+function loadDetail(i){
+  if(!PACKS[i]) return Promise.resolve();
+  if(DET[i]) return DET[i];
+  const pk=META.packs[i];
+  DET[i]=(async()=>{ const u8=await gunzip(await fetchAll(pk.detail,()=>{})); const d=parsePack(u8,pk.name,i); Object.assign(PACKS[i].c,d.c); Object.assign(PACKS[i].s,d.s); PACKS[i].det=true; })();
+  DET[i].catch(()=>{ DET[i]=null; });
+  return DET[i];
+}
+const ensureDetail=()=>Promise.all(PACKS.map((p,i)=>p&&!p.det?loadDetail(i):null));
+const P=id=>PACKS[id>>>24], I=id=>id&0xFFFFFF;
+
+/* state */
+const NUM_IDS=['lotMin','lotMax','sfMin','sfMax','ybMin','ybMax','unMin','unMax','bdMin','stMax','lsMin','lsMax','hdMin','hdMax','spMin','spMax'];
+const ADV_IDS=NUM_IDS.slice(2);
+const MONEY_STEPS=[0,50e3,100e3,150e3,200e3,300e3,400e3,500e3,750e3,1e6,1.5e6,2e6,3e6,5e6,10e6,25e6];
+const num=id=>{ const v=$(id).value.trim(); if(v==='') return null; const n=Number(v); return isFinite(n)?n:null; };
+function readState(){
+  const st={}; NUM_IDS.forEach(id=>st[id]=num(id));
+  st.mvMin=+$('mvMin').value||null; st.mvMax=+$('mvMax').value||null;
+  st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
+  st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
+  st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
+  st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; return st;
+}
+function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
+function applyState(st){
+  NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':st[id]);
+  $('mvMin').value=st.mvMin||0; $('mvMax').value=st.mvMax||0;
+  $('mzq').value=st.mzq||''; $('q').value=st.q||''; $('qScope').value=st.qScope||'ao'; $('city').value=st.city||''; $('zips').value=st.zips||''; $('cra').value=st.cra||'';
+  $('hideGov').checked=st.hideGov!==false; $('noBldg').checked=!!st.noBldg; $('qualOnly').checked=!!st.qualOnly;
+  S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]);
+  S.exZ=new Set((st.exZ||[]).map(v=>D.zoning.indexOf(v)).filter(i=>i>=0)); S.exL=new Set((st.exL||[]).map(v=>D.landuse.indexOf(v)).filter(i=>i>=0));
+  S.owner=OWNER_KINDS.some(o=>o[0]===st.owner)?st.owner:'all'; S.flags={}; OWNER_ROWS.forEach(([k])=>{ S.flags[k]=(st.flags&&st.flags[k])||'any'; $('ow_'+k).value=S.flags[k]; });
+  S.sort=SORT_MAP[st.sort]?st.sort:'lot_d'; $('sortSel').value=S.sort; S.view=['cards','table','map'].includes(st.view)?st.view:(S.view||'cards');
+  S.bbox=Array.isArray(st.bbox)&&st.bbox.length===4&&st.bbox.every(Number.isFinite)?st.bbox:null; $('areaRow').hidden=!S.bbox;
+}
+
+/* filtering */
+function textMatcher(st){
+  if(!st.q) return null;
+  const q=st.q.toUpperCase().replace(/\s+/g,' '), digits=q.replace(/[^0-9]/g,'');
+  const folioMode = st.qScope==='ao' && /^[\d\s-]+$/.test(q) && digits.length>=5;
+  const cols = folioMode?['folio'] : st.qScope==='ao'?['addr','owner'] : [st.qScope];
+  const needle = folioMode?digits:q;
+  return p=>{ const hit=new Uint8Array(p.n); for(const col of cols){ if(!p.s[col]){ loadDetail(p.idx).then(()=>schedule(0)); toast('Loading mailing and legal data…'); continue; } const a=strCol(p,col); for(let i=0;i<p.n;i++) if(!hit[i] && a[i].includes(needle)) hit[i]=1; } return hit; };
+}
+function allowLU(){ if(!S.types.size && !S.exL.size) return null; const a=new Uint8Array(D.landuse.length); for(let i=0;i<a.length;i++) a[i]=(!S.types.size||S.types.has(LU_T[i])) && (!S.exL.size||S.exL.has(i)) ? 1:0; return a; }
+function allowZ(){ if(!S.zones.size && !S.exZ.size) return null; const a=new Uint8Array(D.zoning.length); for(let i=0;i<a.length;i++) a[i]=(!S.zones.size||S.zones.has(Z_G[i])) && (!S.exZ.size||S.exZ.has(i)) ? 1:0; return a; }
+
+function run(){
+  const st=readState(); save();
+  const zipSet=new Set(st.zips.split(/[\s,;]+/).map(z=>z.trim().slice(0,5)).filter(Boolean).map(z=>D.zip.indexOf(z)));
+  const cityI=st.city?D.city.indexOf(st.city):-1, craI=st.cra?D.cra.indexOf(st.cra):-1;
+  let fMust=0,fNot=0; for(const [k] of OWNER_ROWS){ if(st.flags[k]==='yes') fMust|=FLAG[k]; else if(st.flags[k]==='no') fNot|=FLAG[k]; }
+  if(st.hideGov) fNot|=FLAG.govt;
+  const lA=allowLU(), zA=allowZ();
+  const govLU = st.hideGov? Uint8Array.from(LU_T,t=>t==='gov'?1:0) : null;
+  const lc=new Uint32Array(D.landuse.length), zc=new Uint32Array(D.zoning.length);
+  const tm=textMatcher(st);
+  const hdMinD=st.hdMin!=null?st.hdMin*365.25:null, hdMaxD=st.hdMax!=null?st.hdMax*365.25:null;
+  const lsMin=st.lsMin!=null?st.lsMin/100:null, lsMax=st.lsMax!=null?st.lsMax/100:null;
+  const incCondo=S.types.has('condo');
+  const wantK = {all:-1,person:0,corp:1,trust:2}[S.owner]; const kc=new Uint32Array(4);
+  const mA = mzAllow(st.mzq||''); const mc=new Uint32Array(MZ.length);
+  const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
+  let out=new Uint32Array(1<<20), m=0;
+  for(const p of PACKS){
+    if(!p || (p.name==='condo' && !incCondo)) continue;
+    const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null;
+    if(bb && !gl) continue;
+    for(let i=0;i<n;i++){
+      if(hits && !hits[i]) continue;
+      if(gl){ const la=gl.lat[i], lo=gl.lon[i]; if(!(la>=bb[0]&&la<=bb[2]&&lo>=bb[1]&&lo<=bb[3])) continue; }
+      if(cityI>=0 && c.city[i]!==cityI) continue;
+      if(zipSet.size && !zipSet.has(c.zip[i])) continue;
+      if(craI>=0 && c.cra[i]!==craI) continue;
+      const lot=c.lot[i]; if(st.lotMin!=null && lot<st.lotMin) continue; if(st.lotMax!=null && lot>st.lotMax) continue;
+      const mv=c.mkt[i]; if(st.mvMin && mv<st.mvMin) continue; if(st.mvMax && mv>st.mvMax) continue;
+      const sf=c.sqft[i]; if(st.sfMin!=null && sf<st.sfMin) continue; if(st.sfMax!=null && sf>st.sfMax) continue;
+      if(st.noBldg && (sf>0 || c.bldg[i]>0)) continue;
+      const yb=c.yb[i]; if(st.ybMin!=null && (!yb||yb<st.ybMin)) continue; if(st.ybMax!=null && (!yb||yb>st.ybMax)) continue;
+      if(st.unMin!=null && c.units[i]<st.unMin) continue; if(st.unMax!=null && c.units[i]>st.unMax) continue;
+      if(st.bdMin!=null && c.beds[i]<st.bdMin) continue; if(st.stMax!=null && c.stories[i]>st.stMax) continue;
+      if(lsMin!=null||lsMax!=null){ if(!mv) continue; const r=c.land[i]/mv; if(lsMin!=null&&r<lsMin) continue; if(lsMax!=null&&r>lsMax) continue; }
+      if(hdMinD!=null||hdMaxD!=null){ const d=c.sd1[i], held=d?today-d:99999; if(hdMinD!=null&&held<hdMinD) continue; if(hdMaxD!=null&&held>hdMaxD) continue; }
+      if(st.spMin!=null && c.sale1[i]<st.spMin) continue; if(st.spMax!=null && c.sale1[i]>st.spMax) continue;
+      if(st.qualOnly && c.sq1[i]!==1) continue;
+      const fl=c.flags[i]; if((fl&fMust)!==fMust || (fl&fNot)) continue;
+      const li=c.landuse[i], zi=c.zoning[i];
+      if(govLU && govLU[li]) continue;
+      const mi=c.mz[i];
+      const fu=lA&&!lA[li]?1:0, fz=zA&&!zA[zi]?1:0, fm=mA&&!mA[mi]?1:0;
+      const kind = fl&8 ? 1 : fl&16 ? 2 : fl&32 ? 3 : 0, fk = wantK>=0 && kind!==wantK ? 1:0;
+      const nf=fu+fz+fm+fk;
+      if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
+      else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else kc[kind]++; }
+    }
+  }
+  results=out.subarray(0,m); facet={lc,zc,kc,mc};
+  doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true);
+}
+
+/* sorting */
+const SORTS=[
+  ['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
+  ['mv_a','Lowest value first','mkt',1],['mv_d','Highest value first','mkt',-1],
+  ['held_d','Owned the longest','sd1',1],['sold_d','Sold most recently','sd1',-1],
+  ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
+  ['addr_a','Address A–Z','addr',1]];
+const SORT_MAP=Object.fromEntries(SORTS.map(s=>[s[0],s]));
+function doSort(){
+  if(!results.length) return;
+  const [, , k, dir]=SORT_MAP[S.sort]||SORTS[0];
+  if(k==='addr'){
+    if(results.length>200000){ toast('Address sorting works on up to 200,000 results. Narrow the filters first.'); return; }
+    const arr=Array.from(results), cache=new Map(), g=id=>{let s=cache.get(id); if(s===undefined){s=getStr(P(id),'addr',I(id)); cache.set(id,s);} return s;};
+    arr.sort((a,b)=>{const x=g(a),y=g(b); return x<y?-dir:x>y?dir:0;}); results=Uint32Array.from(arr); return;
+  }
+  const n=results.length, key=new Float64Array(n);
+  for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id);
+    key[j] = k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
+  const idx=new Uint32Array(n); for(let i=0;i<n;i++) idx[i]=i;
+  idx.sort((a,b)=>(key[a]-key[b])*dir || a-b);
+  const r2=new Uint32Array(n); for(let i=0;i<n;i++) r2[i]=results[idx[i]]; results=r2;
+}
+
+/* chips & summary */
+const short=n=> n>=1e6?(n/1e6).toFixed(1)+'M' : n>=1e4?Math.round(n/1e3)+'K' : fmt.format(n);
+function renderChips(){
+  const tc={}, zc={};
+  for(let i=0;i<D.landuse.length;i++) tc[LU_T[i]]=(tc[LU_T[i]]||0)+facet.lc[i];
+  for(let i=0;i<D.zoning.length;i++) zc[Z_G[i]]=(zc[Z_G[i]]||0)+facet.zc[i];
+  const hideGov=$('hideGov').checked;
+  $('types').innerHTML=TYPES.filter(([k])=>!(hideGov&&k==='gov')).map(([k,l])=>{ const n=tc[k]||0, on=S.types.has(k);
+    const cnt = (k==='condo' && !on) ? '' : `<span class="n">${short(n)}</span>`;
+    return `<button type="button" class="chip ${on?'on':''} ${!n&&!on&&k!=='condo'?'zero':''}" data-t="${k}" aria-pressed="${on}">${l}${cnt}</button>`; }).join('');
+  $('zones').innerHTML=ZONES.map(([k,l])=>{ const n=zc[k]||0, on=S.zones.has(k);
+    return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-z="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
+  const lm=num('lotMin'), lx=num('lotMax');
+  $('lotChips').querySelectorAll('.chip').forEach(b=>{ const v=+b.dataset.v; b.classList.toggle('on', lx==null && (v===0? lm==null : lm===v)); });
+  const toks=mzTokens($('mzq').value);
+  const mzCount=t=>{ let n=0; for(let i=1;i<MZ.length;i++){ const c=MZ_UP[i]; if(c===t||c.startsWith(t)) n+=facet.mc[i]; } return n; };
+  for(const [host,list] of [['mzMiami',MZ_MIAMI],['mzCounty',MZ_COUNTY]]){
+    $(host).innerHTML=list.map(([t,l])=>{ const on=toks.includes(t), n=mzCount(t); return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-mz="${t}" aria-pressed="${on}" title="${esc(l)}">${t}<span class="n">${short(n)}</span></button>`; }).join('');
+  }
+  const kc=facet.kc, kAll=kc[0]+kc[1]+kc[2]+kc[3], kN={all:kAll,person:kc[0],corp:kc[1],trust:kc[2]};
+  $('ownerKind').innerHTML=OWNER_KINDS.map(([k,l])=>`<button type="button" data-k="${k}" class="${S.owner===k?'on':''}" aria-pressed="${S.owner===k}">${l}<span class="n">${short(kN[k])}</span></button>`).join('');
+  renderFacet('zoning'); renderFacet('landuse');
+}
+function median(a){ if(!a.length) return 0; a.sort(); return a[a.length>>1]; }
+function renderSummary(){
+  const n=results.length; let oos=0, corp=0;
+  const lots=new Float64Array(n), mvs=new Float64Array(n); let ln=0, mn=0;
+  for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id); if(c.lot[i]) lots[ln++]=c.lot[i]; if(c.mkt[i]) mvs[mn++]=c.mkt[i]; const f=c.flags[i]; if(f&2) oos++; if(f&8) corp++; }
+  const ml=median(lots.subarray(0,ln)), mm=median(mvs.subarray(0,mn));
+  $('sCount').textContent=fmt.format(n); $('liveCount').textContent=fmt.format(n); $('liveCount').classList.remove('busy');
+  const bits=[];
+  if(ml) bits.push(`Typical lot <b>${fmt.format(Math.round(ml))} sq ft</b> (${acres(ml)})`);
+  if(mm) bits.push(`typical value <b>${money(mm)}</b>`);
+  if(n) bits.push(`<b>${fmt.format(oos)}</b> out-of-state owners`);
+  if(corp) bits.push(`<b>${fmt.format(corp)}</b> owned by companies`);
+  $('summary').innerHTML=bits.join(' · ');
+}
+function renderAdvCount(st){
+  const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
+  $('advCount').hidden=!k; $('advCount').textContent=k+' on';
+  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0);
+  const tot=k+main; $('onCount').hidden=!tot; $('onCount').textContent=tot+(tot===1?' filter on':' filters on'); $('resetBtn').disabled=!tot;
+}
+function renderFacet(f){
+  const isZ=f==='zoning', list=$(f+'List'), find=$(f+'Find').value.trim().toUpperCase(), cnt=isZ?facet.zc:facet.lc, vals=D[f], set=isZ?S.exZ:S.exL;
+  const items=[]; for(let i=0;i<vals.length;i++){ const v=vals[i]; if(find && !v.toUpperCase().includes(find)) continue; const c=cnt?cnt[i]:0; if(!c && !set.has(i) && !find) continue; items.push([i,v,c]); }
+  items.sort((a,b)=>(set.has(b[0])-set.has(a[0]))||b[2]-a[2]);
+  list.innerHTML=items.slice(0,300).map(([i,v,c])=>`<label class="${c?'':'zero'}"><input type="checkbox" data-f="${f}" data-i="${i}" ${set.has(i)?'checked':''}><span class="nm" title="${esc(v)}">${esc(v)}</span><span class="ct">${fmt.format(c)}</span></label>`).join('') || '<div class="note" style="padding:9px">No matches.</div>';
+}
+
+/* cards */
+const PAGE=60; let shown=0;
+function ownerBadges(fl){
+  const b=[]; if(fl&64) b.push('<span class="hot">Estate / heirs</span>'); if(fl&2) b.push('<span class="warm">Out-of-state owner</span>'); else if((fl&4) && !(fl&1)) b.push('<span>Absentee owner</span>');
+  if(fl&8) b.push('<span>LLC / company</span>'); if(fl&16) b.push('<span>Trust</span>'); if(fl&1) b.push('<span>Owner lives there</span>'); if(fl&128) b.push('<span>Senior</span>'); return b.join('');
+}
+function mzLabel(mi){ const e=MZ[mi]; if(!e) return ''; const bits=[]; if(e[4]) bits.push(e[4]+' stories'); if(e[3]&&+e[3]>0) bits.push(e[3]+' units/acre'); return e[2]+(bits.length?' ('+bits.join(', ')+')':''); }
+function mzHTML(mi){ const e=MZ[mi]; if(!e) return ''; return `<span class="mzcode">${esc(e[0])}</span> · ${esc(mzLabel(mi))}`; }
+function cardHTML(id){
+  const p=P(id), i=I(id), c=p.c;
+  const addr=getStr(p,'addr',i)||'No street address', lu=D.landuse[c.landuse[i]], zn=D.zoning[c.zoning[i]], t=LU_T[c.landuse[i]], zg=Z_G[c.zoning[i]];
+  const lot=c.lot[i], sf=c.sqft[i], mv=c.mkt[i], yb=c.yb[i], un=c.units[i], bd=c.beds[i];
+  const bldgS = sf? [yb?'Built '+yb:'', un>1?un+' units':bd?bd+' bd / '+(c.baths[i]/10)+' ba':''].filter(Boolean).join(' · ') : 'Land only';
+  const sale = c.sd1[i]? `${monYr(c.sd1[i])}${c.sale1[i]>100?' for '+money(c.sale1[i]):''} · owned ${Math.max(0,Math.floor((today-c.sd1[i])/365.25))} yrs` : 'No sale on record';
+  return `<button type="button" class="card" data-id="${id}">
+    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span><span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span></div>
+    <div><h3>${esc(addr)}</h3><div class="city">${esc(D.city[c.city[i]])}, FL ${D.zip[c.zip[i]]}</div></div>
+    <div class="facts">
+      <div><div class="k">Lot</div><div class="v">${!lot?'–':lot>=100000?acres(lot):fmt.format(lot)+' sf'}</div><div class="s">${!lot?'Shared lot':lot>=100000?short(lot)+' sq ft':acres(lot)}</div></div>
+      <div><div class="k">Building</div><div class="v">${sf?fmt.format(sf)+' sf':'None'}</div><div class="s">${esc(bldgS)}</div></div>
+      <div><div class="k">Value</div><div class="v">${mv?money(mv):'–'}</div><div class="s">${mv&&c.land[i]?Math.round(c.land[i]/mv*100)+'% is land':'&nbsp;'}</div></div>
+    </div>
+    <div class="line"><span class="k">Zoning</span><span class="v" title="${esc(zn)}">${mzHTML(c.mz[i]) || esc(nice(zn)||'Not listed')}</span></div>
+    <div class="line"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
+    <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
+    <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
+    <div class="ob">${ownerBadges(c.flags[i])}</div>
+  </button>`;
+}
+function renderResults(reset){
+  const n=results.length, cardsOn=S.view==='cards', mapOn=S.view==='map', tableOn=S.view==='table';
+  $('empty').hidden=n>0 || mapOn;
+  $('vCards').classList.toggle('on',cardsOn); $('vTable').classList.toggle('on',tableOn); $('vMap').classList.toggle('on',mapOn);
+  $('cards').hidden=!cardsOn||!n; $('tablebox').hidden=!tableOn||!n; $('mapbox').hidden=!mapOn;
+  if(mapOn){ $('moreRow').hidden=true; if(reset) $('cards').innerHTML=''; showMap(reset); return; }
+  if(cardsOn){
+    if(reset){ $('cards').innerHTML=''; shown=0; }
+    const end=Math.min(n,shown+PAGE); let h=''; for(let j=shown;j<end;j++) h+=cardHTML(results[j]);
+    $('cards').insertAdjacentHTML('beforeend',h); shown=end;
+    $('moreRow').hidden=shown>=n; $('showMore').textContent=`Show more (${fmt.format(n-shown)} left)`;
+  } else { $('moreRow').hidden=true; renderTable(reset); }
+}
+
+/* table */
+const COLS=[
+  {h:'Address',s:'addr_a'},{h:'Property'},{h:'City zoning'},{h:'Zoning type'},{h:'Lot sq ft',num:true,s:'lot_d'},{h:'Acres',num:true,s:'lot_d'},
+  {h:'Building sq ft',num:true},{h:'Units',num:true,s:'un_d'},{h:'Built',num:true,s:'yb_a'},{h:'Value',num:true,s:'mv_d'},
+  {h:'Land %',num:true,s:'lp_d'},{h:'Last sale',num:true,s:'sold_d'},{h:'Sale price',num:true},{h:'Owner'}];
+function renderHead(){ $('thead').innerHTML=COLS.map(c=>`<th data-s="${c.s||''}" class="${c.num?'num':''} ${c.s&&S.sort===c.s?'sorted':''}" scope="col">${c.h}</th>`).join(''); }
+function rowHTML(id){
+  const p=P(id), i=I(id), c=p.c, mv=c.mkt[i];
+  return `<tr data-id="${id}"><td class="addr">${esc(getStr(p,'addr',i)||'No street address')}<small>${esc(D.city[c.city[i]])} ${D.zip[c.zip[i]]}</small></td>
+  <td>${TYPE_LABEL[LU_T[c.landuse[i]]]}</td><td title="${esc(mzLabel(c.mz[i]))}"><span class="mzcode">${MZ[c.mz[i]]?esc(MZ[c.mz[i]][0]):'–'}</span></td><td title="${esc(D.zoning[c.zoning[i]])}">${esc(nice(D.zoning[c.zoning[i]])||'–')}</td>
+  <td class="num">${c.lot[i]?fmt.format(c.lot[i]):'–'}</td><td class="num">${c.lot[i]?(c.lot[i]/SQFT_AC).toFixed(2):'–'}</td>
+  <td class="num">${c.sqft[i]?fmt.format(c.sqft[i]):'–'}</td><td class="num">${c.units[i]||'–'}</td><td class="num">${c.yb[i]||'–'}</td>
+  <td class="num">${mv?dollars(mv):'–'}</td><td class="num">${mv?Math.round(c.land[i]/mv*100)+'%':'–'}</td>
+  <td class="num">${dateStr(c.sd1[i])||'–'}</td><td class="num">${c.sale1[i]?dollars(c.sale1[i]):'–'}</td><td>${esc(getStr(p,'owner',i))}</td></tr>`;
+}
+const ROWH=40; let lastRange='';
+function renderTable(reset){
+  const sc=$('scroller'); if(reset){ sc.scrollTop=0; lastRange=''; renderHead(); }
+  const total=results.length, vh=sc.clientHeight||600;
+  const first=Math.max(0,Math.floor(sc.scrollTop/ROWH)-10), last=Math.min(total,first+Math.ceil(vh/ROWH)+20);
+  const key=first+':'+last+':'+total; if(!reset && key===lastRange) return; lastRange=key;
+  let h=`<tr class="spacer"><td colspan="${COLS.length}" style="height:${first*ROWH}px"></td></tr>`;
+  for(let j=first;j<last;j++) h+=rowHTML(results[j]);
+  h+=`<tr class="spacer"><td colspan="${COLS.length}" style="height:${(total-last)*ROWH}px"></td></tr>`;
+  $('tbody').innerHTML=h;
+}
+
+/* detail drawer */
+async function openDrawer(id){
+  if(!P(id).det){ toast('Loading details…'); try{ await Promise.all([loadDetail(P(id).idx), loadGeo(P(id).idx).catch(()=>{})]); }catch(e){ toast('Details did not load. Try again.'); return; } }
+  const p=P(id), i=I(id), c=p.c, folio=getStr(p,'folio',i), addr=getStr(p,'addr',i)||'No street address';
+  const city=D.city[c.city[i]], zip=D.zip[c.zip[i]], fl=c.flags[i], mv=c.mkt[i], zn=D.zoning[c.zoning[i]], lu=D.landuse[c.landuse[i]];
+  const rows=pairs=>pairs.filter(x=>x[1]!==''&&x[1]!=null).map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join('');
+  const gq=encodeURIComponent(addr+', '+city+', FL '+zip);
+  const owner=[]; OWNER_ROWS.forEach(([k,l])=>{ if(fl&FLAG[k]) owner.push(l); }); if(fl&32) owner.push('Government owner');
+  const g=p.geo, la=g?g.lat[i]:NaN, lo=g?g.lon[i]:NaN, hasG=isFinite(la)&&la>20;
+  const oname=getStr(p,'owner',i).split(' | ')[0], pf=ownerPortfolio(oname);
+  const prv=c.prv?c.prv[i]:0, chg=(prv&&mv)?Math.round((mv-prv)/prv*100):null;
+  const dn=deedCount(p,i), multi=dn>1&&c.sale1[i]>1000;
+  const sale3=c.sd3&&c.sd3[i]? dateStr(c.sd3[i])+(c.sale3[i]>100?' for '+dollars(c.sale3[i]):'') : '';
+  $('drawerHost').innerHTML=`<div class="scrim" id="scrim"></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="Property details">
+    <button class="btn" id="closeD" type="button" style="float:right">Close</button>
+    <div class="note" style="font-family:var(--f-mono)">Folio ${folioFmt(folio)}</div>
+    <h2>${esc(addr)}</h2><div class="sub">${esc(city)}, FL ${zip}</div>
+    <div class="links">
+      <a href="https://apps.miamidadepa.gov/propertysearch/#/?folio=${folio}" target="_blank" rel="noopener">Property Appraiser page ↗</a>
+      <a href="https://www.google.com/maps/search/?api=1&query=${hasG&&!getStr(p,'addr',i)?la.toFixed(6)+','+lo.toFixed(6):gq}" target="_blank" rel="noopener">Google Maps ↗</a>
+      ${hasG?`<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${la.toFixed(6)},${lo.toFixed(6)}" target="_blank" rel="noopener">Street View ↗</a>`:''}
+      <button class="btn" type="button" id="copyFolio">Copy folio</button>
+      <button class="btn" type="button" id="onMap">Show on map</button>
+    </div>
+    <h3>The property</h3><div class="dl">${rows([
+      ['What it is', `${TYPE_LABEL[LU_T[c.landuse[i]]]}<small>${esc(lu)}</small>`],
+      ['City zoning', MZ[c.mz[i]] ? `<span class="mzcode">${esc(MZ[c.mz[i]][0])}</span> · ${esc(MZ[c.mz[i]][1])}<small>${esc(mzLabel(c.mz[i]))}${MZ[c.mz[i]][5]?' · min lot '+fmt.format(+MZ[c.mz[i]][5])+' sq ft':''}</small>` : 'Not found on the zoning map'],
+      ['Zoning type (appraiser)', `${ZONE_LABEL[Z_G[c.zoning[i]]]}${nice(zn)?' · '+esc(nice(zn)):''}<small>${esc(zn)}</small>`],
+      ['Lot size', c.lot[i]? fmt.format(c.lot[i])+' sq ft · '+(c.lot[i]/SQFT_AC).toFixed(3)+' acres':'Not listed'],
+      ['Building', c.sqft[i]?fmt.format(c.sqft[i])+' sq ft living area':'No building on record'],
+      ['Beds / baths', (c.beds[i]||c.baths[i])? c.beds[i]+' beds / '+(c.baths[i]/10)+' baths':''],
+      ['Units', c.units[i]||''],['Stories', c.stories[i]||''],['Year built', c.yb[i]||''],
+      ['Buildings on the lot', c.bcount&&c.bcount[i]>1?c.bcount[i]:''],
+      ['Redevelopment area', esc(D.cra[c.cra[i]]||'')],['Legal description', esc(getStr(p,'legal',i))]])}</div>
+    <h3>${META.rollYear||''} values</h3><div class="dl">${rows([
+      ['Market value', dollars(mv)],['Land', dollars(c.land[i])+(mv?`<small>${Math.round(c.land[i]/mv*100)}% of the total</small>`:'')],['Building', dollars(c.bldg[i])],
+      ['Assessed (capped)', dollars(c.assd[i])],['Taxable (county)', dollars(c.taxable[i])],
+      ['Value per lot sq ft', (mv&&c.lot[i])?'$'+(mv/c.lot[i]).toFixed(2):''],['Value per building sq ft', (mv&&c.sqft[i])?'$'+Math.round(mv/c.sqft[i]):''],
+      ['Last year\'s value', prv? dollars(prv)+(chg!==null?`<small class="${chg>=0?'up':'down'}">${chg>=0?'+':''}${chg}% this year</small>`:''):''],
+      ['Last sale vs today', (c.sale1[i]>1000&&mv&&c.sq1[i]===1&&!multi)? `Value is ${(mv/c.sale1[i]).toFixed(1)}× the last market sale price` : '']])}</div>
+    <h3>Sales</h3><div class="dl">${rows([
+      ['Last sale', c.sd1[i]? dateStr(c.sd1[i])+' for '+dollars(c.sale1[i])+(c.sq1[i]===1?'<small>Market sale</small>':c.sq1[i]===2?'<small>Not a market sale (family transfer, deed fix, etc.)</small>':'') : 'None on record'],
+      ['Owned for', c.sd1[i]? ((today-c.sd1[i])/365.25).toFixed(1)+' years':''],
+      ['Sold by', esc(c.sd1[i]&&p.s.grantor?getStr(p,'grantor',i):'')],
+      ['Deed (book-page)', c.sd1[i]&&p.s.book&&getStr(p,'book',i)? esc(getStr(p,'book',i))+(dn>1?`<small>This deed covered ${fmt.format(dn)} parcels${multi?', so the price is likely for all of them':''}</small>`:''):''],
+      ['Sale before that', c.sd2[i]? dateStr(c.sd2[i])+' for '+dollars(c.sale2[i])+(c.sq2&&c.sq2[i]===2?'<small>Not a market sale</small>':'') : ''],
+      ['Earlier sale', sale3]])}</div>
+    <h3>Owner</h3><div class="dl">${rows([
+      ['Name', esc(getStr(p,'owner',i)).replace(/ \| /g,'<br>')],['Mailing address', esc(getStr(p,'mail',i))],['About the owner', owner.join(', ')||'Nothing flagged'],
+      ['Same owner name', pf>1? `${fmt.format(pf)} properties <button type="button" class="lnk" id="ownerAll">Show them all</button><small>Exact match on the first owner name${PACKS[1]?'':' (condo units not loaded)'}.</small>` : (pf===1?'Only this property':'')]])}</div>
+  </aside>`;
+  const close=()=>{ $('drawerHost').innerHTML=''; MAP_SEL=-1; if(mapLayer) mapLayer.redraw(); };
+  $('scrim').onclick=close; $('closeD').onclick=close; $('copyFolio').onclick=()=>copy(folio,'Folio copied'); $('closeD').focus();
+  $('onMap').onclick=()=>{ close(); MAP_SEL=id; MAP_FOCUS=id; S.view='map'; save(); renderResults(true); };
+  if($('ownerAll')) $('ownerAll').onclick=async()=>{ close(); clearIdea(); applyState({...BLANK(), q:oname, types:['condo','vacant','sf','th','mf29','apt10','mixed','com','ind','mobile','inst','gov','other'], hideGov:false, view:S.view}); await ensureCondo(); run(); };
+  if(!hasG && !p.geo) loadGeo(p.idx).catch(()=>{});
+  MAP_SEL=id; if(mapLayer) mapLayer.redraw();
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('drawerHost').innerHTML){ $('drawerHost').innerHTML=''; MAP_SEL=-1; if(mapLayer) mapLayer.redraw(); } });
+
+/* export */
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
+async function copy(text,ok){
+  try{ await navigator.clipboard.writeText(text); toast(ok); }
+  catch(e){ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); toast(ok); }catch(_){ toast('Copying was blocked here.'); } ta.remove(); }
+}
+const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+function buildCSV(){
+  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','LLC/Company','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link'];
+  const parts=[head.join(',')+'\n']; let buf='';
+  for(let j=0;j<results.length;j++){
+    const id=results[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
+    buf+=[getStr(p,'folio',i),csvq(getStr(p,'addr',i)),csvq(D.city[c.city[i]]),D.zip[c.zip[i]],csvq(TYPE_LABEL[LU_T[c.landuse[i]]]),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][0]):''),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][1]):''),csvq(mzLabel(c.mz[i])),csvq(ZONE_LABEL[Z_G[c.zoning[i]]]),csvq(D.zoning[c.zoning[i]]),csvq(D.landuse[c.landuse[i]]),
+      c.lot[i],(c.lot[i]/SQFT_AC).toFixed(3),c.sqft[i],c.beds[i],c.baths[i]/10,c.units[i],c.stories[i],c.yb[i]||'',
+      c.land[i],c.bldg[i],mv,c.assd[i],mv?Math.round(c.land[i]/mv*100):'',dateStr(c.sd1[i]),c.sale1[i]||'',c.sq1[i]===1?'Y':c.sq1[i]===2?'N':'',
+      dateStr(c.sd2[i]),c.sale2[i]||'',csvq(getStr(p,'owner',i)),fl&8?'LLC/Company':fl&16?'Trust':fl&32?'Government':'Individual',csvq(getStr(p,'mail',i)),
+      fl&1?'Y':'',fl&2?'Y':'',fl&4?'Y':'',fl&8?'Y':'',fl&16?'Y':'',fl&64?'Y':'',csvq(D.cra[c.cra[i]]||''),csvq(getStr(p,'legal',i)),
+      fl&128?'Y':'',c.taxable[i],c.prv[i]||'',csvq(getStr(p,'grantor',i)),getStr(p,'book',i),p.geo&&p.geo.lat[i]>20?p.geo.lat[i].toFixed(6):'',p.geo&&p.geo.lat[i]>20?p.geo.lon[i].toFixed(6):'','https://apps.miamidadepa.gov/propertysearch/#/?folio='+getStr(p,'folio',i)].join(',')+'\n';
+    if(buf.length>1e6){ parts.push(buf); buf=''; }
+  }
+  parts.push(buf); return new Blob(parts,{type:'text/csv'});
+}
+$('exportBtn').onclick=async()=>{
+  if(!results.length){ toast('Nothing to export yet.'); return; }
+  const btn=$('exportBtn'); btn.disabled=true; btn.textContent='Preparing…';
+  try{ await ensureDetail(); await ensureGeo(); }catch(e){ toast('Export data did not load. Try again.'); btn.disabled=false; btn.textContent='Export CSV'; return; }
+  btn.textContent='Building CSV…'; await new Promise(r=>setTimeout(r,30));
+  try{
+    const d=new Date(), name=`miami-dade-properties-${results.length}-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`;
+    const url=URL.createObjectURL(buildCSV()), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000); toast(fmt.format(results.length)+' properties exported');
+  }catch(e){ toast('Export failed: '+(e&&e.message||e)); }
+  btn.disabled=false; btn.textContent='Export CSV';
+};
+$('linkBtn').onclick=()=>{ save(); copy(location.href,'Link copied. It reopens this exact search.'); };
+$('copyBtn').onclick=()=>{ const n=Math.min(results.length,50000), a=new Array(n); for(let j=0;j<n;j++){ const id=results[j]; a[j]=getStr(P(id),'folio',I(id)); } copy(a.join('\n'),(n<results.length?'First ':'')+fmt.format(n)+' folios copied'); };
+
+/* shareable URL hash */
+const HASH_NUM=NUM_IDS.concat(['mvMin','mvMax']);
+function writeHash(st){
+  try{
+    const h=new URLSearchParams();
+    if(st.q) h.set('q',st.q); if(st.qScope&&st.qScope!=='ao') h.set('in',st.qScope);
+    if(st.city) h.set('city',st.city); if(st.zips&&st.zips.trim()) h.set('zip',st.zips.trim()); if(st.cra) h.set('cra',st.cra); if(st.mzq) h.set('code',st.mzq);
+    if(st.types.length) h.set('type',st.types.join(',')); if(st.zones.length) h.set('zone',st.zones.join(','));
+    if(st.exZ.length) h.set('pz',st.exZ.map(v=>v.split(' - ')[0]).join(','));
+    if(st.exL.length) h.set('lu',st.exL.map(v=>v.split(' - ')[0]).join(','));
+    if(st.owner&&st.owner!=='all') h.set('owner',st.owner);
+    OWNER_ROWS.forEach(([k])=>{ const v=st.flags[k]; if(v==='yes'||v==='no') h.set('o_'+k,v); });
+    HASH_NUM.forEach(id=>{ if(st[id]!=null && st[id]!=='' && !(id.startsWith('mv')&&!st[id])) h.set(id,st[id]); });
+    if(!st.hideGov) h.set('gov','1'); if(st.noBldg) h.set('land','1'); if(st.qualOnly) h.set('mkt','1');
+    if(st.sort&&st.sort!=='lot_d') h.set('sort',st.sort); if(st.view&&st.view!=='cards') h.set('view',st.view);
+    if(st.bbox) h.set('area',st.bbox.join(','));
+    const str=h.toString(), want=str?'#'+str:'';
+    if(location.hash!==want) history.replaceState(null,'',want||(location.pathname+location.search));
+  }catch(e){}
+}
+function parseHash(){
+  const raw=location.hash.replace(/^#/,''); if(!raw) return null;
+  const h=new URLSearchParams(raw); if(![...h.keys()].length) return null;
+  const list=k=>(h.get(k)||'').split(',').map(x=>x.trim()).filter(Boolean);
+  const byCode=(dict,codes)=>codes.map(code=>dict.find(v=>v.split(' - ')[0]===code)).filter(Boolean);
+  const st={...BLANK()};
+  st.q=h.get('q')||''; st.qScope=h.get('in')||'ao'; st.city=h.get('city')||''; st.zips=h.get('zip')||''; st.cra=h.get('cra')||''; st.mzq=h.get('code')||'';
+  st.types=list('type'); st.zones=list('zone'); st.exZ=byCode(D.zoning,list('pz')); st.exL=byCode(D.landuse,list('lu'));
+  st.owner=h.get('owner')||'all'; st.flags={}; OWNER_ROWS.forEach(([k])=>{ const v=h.get('o_'+k); if(v==='yes'||v==='no') st.flags[k]=v; });
+  HASH_NUM.forEach(id=>{ const v=h.get(id); st[id]=(v==null||v==='')?null:(isFinite(+v)?+v:null); });
+  st.hideGov=h.get('gov')!=='1'; st.noBldg=h.get('land')==='1'; st.qualOnly=h.get('mkt')==='1';
+  st.sort=h.get('sort')||'lot_d'; st.view=h.get('view')||'cards';
+  const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null;
+  return st;
+}
+
+/* owner portfolio (same first owner name) */
+/* how many loaded parcels share this parcel's last deed (same book-page and sale date): flags bulk sales */
+function deedCount(p0,i0){
+  if(!p0.s.book||!p0.c.sd1[i0]) return 0; const bk=getStr(p0,'book',i0), d=p0.c.sd1[i0]; if(!bk) return 0; let n=0;
+  for(const p of PACKS){ if(!p||!p.det||!p.s.book) continue; const a=strCol(p,'book'), sd=p.c.sd1;
+    for(let i=0;i<a.length;i++) if(sd[i]===d && a[i]===bk) n++; }
+  return n;
+}
+function ownerPortfolio(name){
+  if(!name) return 0; let n=0; const L0=name.length, c0=name.charCodeAt(0);
+  for(const p of PACKS){ if(!p) continue; const a=strCol(p,'owner');
+    for(let i=0;i<a.length;i++){ const s=a[i]; if(s.charCodeAt(0)===c0 && s.startsWith(name) && (s.length===L0 || s.startsWith(' | ',L0))) n++; } }
+  return n;
+}
+
+/* map view */
+let LMAP=null, mapLayer=null, MAP_SEL=-1, MAP_FOCUS=-1, MAP_NOFIT=false, lastFitKey='', leafletP=null, SX=null, SY=null, SN=0, tipEl=null;
+const loadLeaflet=()=>leafletP||(leafletP=new Promise((res,rej)=>{
+  if(window.L) return res();
+  const l=document.createElement('link'); l.rel='stylesheet'; l.href='vendor/leaflet/leaflet.css'; document.head.appendChild(l);
+  const s=document.createElement('script'); s.src='vendor/leaflet/leaflet.js'; s.onload=()=>res(); s.onerror=()=>{ leafletP=null; rej(new Error('The map library did not load')); }; document.head.appendChild(s);
+}));
+const GEOP=[];
+function loadGeo(i){
+  if(!PACKS[i]||PACKS[i].geo) return Promise.resolve();
+  if(GEOP[i]) return GEOP[i];
+  const pk=META.packs[i]; if(!pk.geo) return Promise.resolve();
+  GEOP[i]=(async()=>{
+    const d=parsePack(await gunzip(await fetchAll(pk.geo,()=>{})),pk.name,i), n=d.n, la=d.c.lat, lo=d.c.lon;
+    const lat=new Float32Array(n), lon=new Float32Array(n), mx=new Float64Array(n), my=new Float64Array(n);
+    for(let k=0;k<n;k++){
+      if(!la[k]){ lat[k]=NaN; lon[k]=NaN; mx[k]=NaN; my[k]=NaN; continue; }
+      const a=la[k]/1e6+24, b=lo[k]/1e6-81.5, s=Math.sin(a*Math.PI/180);
+      lat[k]=a; lon[k]=b; mx[k]=(b+180)/360; my[k]=0.5-Math.log((1+s)/(1-s))/(4*Math.PI);
+    }
+    PACKS[i].geo={lat,lon,mx,my};
+  })();
+  GEOP[i].catch(()=>{ GEOP[i]=null; });
+  return GEOP[i];
+}
+const ensureGeo=()=>Promise.all(PACKS.map((p,i)=>p&&!p.geo?loadGeo(i):null));
+const TONES=[['vacant','Vacant land'],['res','Homes & condos'],['multi','Multifamily'],['com','Commercial & mixed'],['ind','Industrial & other'],['gov','Civic & government']];
+let TONE_RGB=null, LU_TONE=null;
+function toneSetup(){
+  const cs=getComputedStyle(document.documentElement);
+  TONE_RGB=TONES.map(([t])=>{ const hex=(cs.getPropertyValue('--t-'+t).trim()||'#888888').replace('#',''); const v=parseInt(hex.length===3?hex.split('').map(x=>x+x).join(''):hex,16); return {css:'#'+hex, r:(v>>16)&255, g:(v>>8)&255, b:v&255}; });
+  const ti=Object.fromEntries(TONES.map(([t],k)=>[t,k])); LU_TONE=Uint8Array.from(LU_T,t=>ti[TYPE_TONE[t]]||0);
+  $('mapLegend').innerHTML=TONES.map(([t,l],k)=>`<span><i style="background:${TONE_RGB[k].css}"></i>${l}</span>`).join('');
+}
+function makeDotLayer(){
+  return L.Layer.extend({
+    onAdd(map){ this._map=map; const c=this._c=L.DomUtil.create('canvas','dotlayer leaflet-zoom-animated'); map.getPanes().overlayPane.appendChild(c);
+      map.on('moveend resize',this.redraw,this); map.on('zoomanim',this._anim,this); this.redraw(); },
+    onRemove(map){ L.DomUtil.remove(this._c); map.off('moveend resize',this.redraw,this); map.off('zoomanim',this._anim,this); },
+    _anim(e){ const m=this._map, scale=m.getZoomScale(e.zoom), off=m._latLngBoundsToNewLayerBounds(m.getBounds(),e.zoom,e.center).min; L.DomUtil.setTransform(this._c,off,scale); },
+    redraw(){ if(this._map) drawDots(this); return this; }
+  });
+}
+function drawDots(layer){
+  const map=layer._map, c=layer._c, size=map.getSize(), dpr=Math.min(2,window.devicePixelRatio||1);
+  L.DomUtil.setPosition(c,map.containerPointToLayerPoint([0,0]));
+  const cw=Math.max(1,Math.round(size.x*dpr)), ch=Math.max(1,Math.round(size.y*dpr));
+  if(c.width!==cw||c.height!==ch){ c.width=cw; c.height=ch; } c.style.width=size.x+'px'; c.style.height=size.y+'px';
+  const ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cw,ch);
+  if(!TONE_RGB) toneSetup();
+  const z=map.getZoom(), scale=256*Math.pow(2,z), o=map.project(map.containerPointToLatLng([0,0]),z), ox=o.x, oy=o.y;
+  const n=results.length; if(!SX||SX.length<n){ SX=new Float32Array(Math.max(n,4096)); SY=new Float32Array(Math.max(n,4096)); }
+  let vis=0, nogeo=0;
+  const W=size.x, H=size.y;
+  if(n>25000){
+    const img=ctx.createImageData(cw,ch), d32=new Uint32Array(img.data.buffer), s=Math.max(1,Math.round((z>=15?3.2:z>=13?2.4:z>=11?1.8:1.3)*dpr)), h=s>>1;
+    const col=TONE_RGB.map(t=>(255<<24)|(t.b<<16)|(t.g<<8)|t.r);
+    for(let j=n-1;j>=0;j--){ const id=results[j], p=P(id), g=p.geo; if(!g){ nogeo++; SX[j]=-1e9; continue; } const i=I(id);
+      const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; SX[j]=x; SY[j]=y; if(!(x>=-4&&y>=-4&&x<W+4&&y<H+4)) continue; vis++;
+      const px=Math.round(x*dpr)-h, py=Math.round(y*dpr)-h, cc=col[LU_TONE[p.c.landuse[i]]];
+      for(let yy=py;yy<py+s;yy++){ if(yy<0||yy>=ch) continue; const row=yy*cw; for(let xx=px;xx<px+s;xx++){ if(xx>=0&&xx<cw) d32[row+xx]=cc; } } }
+    ctx.putImageData(img,0,0);
+  } else {
+    ctx.setTransform(dpr,0,0,dpr,0,0); const r=z>=16?6:z>=14?5:z>=12?4:3, stroke=getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()||'#fff';
+    ctx.lineWidth=1; ctx.strokeStyle=stroke;
+    for(let j=n-1;j>=0;j--){ const id=results[j], p=P(id), g=p.geo; if(!g){ nogeo++; SX[j]=-1e9; continue; } const i=I(id);
+      const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; SX[j]=x; SY[j]=y; if(!(x>=-8&&y>=-8&&x<W+8&&y<H+8)) continue; vis++;
+      ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fillStyle=TONE_RGB[LU_TONE[p.c.landuse[i]]].css; ctx.fill(); if(r>=4) ctx.stroke(); }
+  }
+  SN=n;
+  if(MAP_SEL>=0){ const p=P(MAP_SEL), g=p&&p.geo, i=I(MAP_SEL); if(g&&g.lat[i]>20){ const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=3; ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--danger').trim()||'#c00'; ctx.beginPath(); ctx.arc(x,y,11,0,6.2832); ctx.stroke(); } }
+  $('mapHint').textContent = !n ? 'Nothing matches these filters.' : `${fmt.format(n)} on the map${vis<n?' · '+fmt.format(vis)+' in view':''}${nogeo?' · loading points…':''} · click a dot for details`;
+}
+function nearest(pt,rad){
+  let best=-1, bd=rad*rad; for(let j=0;j<SN;j++){ const dx=SX[j]-pt.x, dy=SY[j]-pt.y, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=j; } }
+  return [best,bd];
+}
+function onMapClick(e){
+  const pt=e.containerPoint, z=LMAP.getZoom(), [best,bd]=nearest(pt,z>=14?10:8); if(best<0) return;
+  const stack=[]; const lim=Math.sqrt(bd)+1.5; for(let j=0;j<SN && stack.length<400;j++){ const dx=SX[j]-SX[best], dy=SY[j]-SY[best]; if(dx*dx+dy*dy<=1.5*1.5 || (Math.hypot(SX[j]-pt.x,SY[j]-pt.y)<=lim && Math.hypot(dx,dy)<2)) stack.push(j); }
+  if(stack.length<=1){ openDrawer(results[best]); return; }
+  const items=stack.slice(0,60).map(j=>{ const id=results[j], p=P(id), i=I(id), c=p.c; return `<button type="button" class="stackitem" data-id="${id}"><b>${esc(getStr(p,'addr',i)||'No street address')}</b><small>${TYPE_LABEL[LU_T[c.landuse[i]]]} · ${c.mkt[i]?money(c.mkt[i]):'–'}</small></button>`; }).join('');
+  L.popup({maxWidth:300,className:'stackpop'}).setLatLng(e.latlng).setContent(`<div class="stacklist"><div class="note">${fmt.format(stack.length)}${stack.length>=400?'+':''} properties at this spot${stack.length>60?' (first 60 shown)':''}</div>${items}</div>`).openOn(LMAP);
+}
+let moveRaf=0, lastMove=null;
+function onMapMove(e){
+  lastMove=e.containerPoint; if(moveRaf) return;
+  moveRaf=requestAnimationFrame(()=>{ moveRaf=0; if(!tipEl) return; if(SN>300000||!lastMove){ tipEl.hidden=true; return; }
+    const [best]=nearest(lastMove,8); LMAP.getContainer().style.cursor=best>=0?'pointer':'';
+    if(best<0){ tipEl.hidden=true; return; } const id=results[best], p=P(id), i=I(id);
+    tipEl.textContent=(getStr(p,'addr',i)||'No street address')+' · '+(p.c.mkt[i]?money(p.c.mkt[i]):'–'); tipEl.style.left=SX[best]+'px'; tipEl.style.top=SY[best]+'px'; tipEl.hidden=false; });
+}
+function initMap(){
+  const dark=document.documentElement.dataset.theme==='dark' || (document.documentElement.dataset.theme!=='light' && matchMedia('(prefers-color-scheme: dark)').matches);
+  LMAP=L.map('map',{zoomControl:true,minZoom:8,maxZoom:19}).setView([25.70,-80.35],10);
+  const esri=(svc,opt={})=>L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/${svc}/MapServer/tile/{z}/{y}/{x}`,{maxZoom:20,maxNativeZoom:svc.includes('Imagery')?19:16,
+    attribution:'Tiles &copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',...opt});
+  const gray=dark?'Dark':'Light';
+  const base={
+    'Simple': L.layerGroup([esri(`Canvas/World_${gray}_Gray_Base`), esri(`Canvas/World_${gray}_Gray_Reference`,{zIndex:5})]),
+    'Streets': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}),
+    'Satellite': L.layerGroup([esri('World_Imagery'), esri('Reference/World_Transportation',{opacity:.7}), esri('Reference/World_Boundaries_and_Places')])
+  };
+  base['Simple'].addTo(LMAP); L.control.layers(base,null,{position:'bottomright',collapsed:true}).addTo(LMAP);
+  const Dot=makeDotLayer(); mapLayer=new Dot(); mapLayer.addTo(LMAP);
+  tipEl=document.createElement('div'); tipEl.className='maptip'; tipEl.hidden=true; $('mapbox').appendChild(tipEl);
+  LMAP.on('click',onMapClick); LMAP.on('mousemove',onMapMove); LMAP.on('mouseout movestart zoomstart',()=>{ tipEl.hidden=true; });
+  $('map').addEventListener('click',e=>{ const b=e.target.closest('.stackitem'); if(b){ LMAP.closePopup(); openDrawer(+b.dataset.id); } });
+  toneSetup();
+}
+function fitResults(force){
+  if(!LMAP) return; const n=results.length; if(!n) return;
+  let key=n, x=0; for(let j=0;j<n;j++){ x=(x+results[j])%2147483647; } key=n+':'+x;
+  if(!force && (key===lastFitKey || MAP_NOFIT)){ MAP_NOFIT=false; lastFitKey=key; return; } lastFitKey=key;
+  const step=Math.max(1,Math.floor(n/60000)), la=[], lo=[];
+  for(let j=0;j<n;j+=step){ const id=results[j], g=P(id).geo, i=I(id); if(g&&g.lat[i]>20){ la.push(g.lat[i]); lo.push(g.lon[i]); } }
+  if(!la.length) return; la.sort((a,b)=>a-b); lo.sort((a,b)=>a-b);
+  const q=a=>a.length>40?[a[Math.floor(a.length*0.005)],a[Math.ceil(a.length*0.995)-1]]:[a[0],a[a.length-1]];
+  const [y0,y1]=q(la), [x0,x1]=q(lo);
+  LMAP.fitBounds([[y0,x0],[y1,x1]],{padding:[36,36],maxZoom:17,animate:false});
+}
+async function showMap(reset){
+  $('mapHint').textContent='Loading the map…';
+  try{ await loadLeaflet(); }catch(e){ $('mapHint').textContent=e.message+'. Check the connection and try again.'; return; }
+  if(!LMAP) initMap();
+  LMAP.invalidateSize({animate:false});
+  if(PACKS.some(p=>p&&!p.geo)){ $('mapHint').textContent='Loading map points…'; try{ await ensureGeo(); }catch(e){ $('mapHint').textContent='Map points did not load. Try again.'; return; } }
+  if(S.view!=='map') return;
+  LMAP.invalidateSize({animate:false});
+  if(MAP_FOCUS>=0){ const id=MAP_FOCUS; MAP_FOCUS=-1; const p=P(id), g=p&&p.geo, i=I(id); if(g&&g.lat[i]>20){ lastFitKey=''; LMAP.setView([g.lat[i],g.lon[i]],18,{animate:false}); mapLayer.redraw(); return; } }
+  if(reset) fitResults(false);
+  mapLayer.redraw();
+}
+
+/* ideas */
+const BLANK=()=>({hideGov:true,sort:'lot_d',flags:{},owner:'all'});
+const IDEAS=[
+  ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:5000, lotMax:87120, sort:'lot_a'})],
+  ['Houses on multifamily land', ()=>({...BLANK(), types:['sf'], zones:['mf'], sort:'lot_d'})],
+  ['Teardowns', ()=>({...BLANK(), types:['sf','mf29'], lsMin:80, ybMax:1969, sort:'lp_d'})],
+  ['Out-of-state owners, 15+ years', ()=>({...BLANK(), types:['sf','th','mf29','vacant'], hdMin:15, flags:{oos:'yes',homestead:'no'}, sort:'held_d'})],
+  ['Estates and heirs', ()=>({...BLANK(), flags:{estate:'yes'}, sort:'held_d'})],
+  ['Small multifamily (2–9 units)', ()=>({...BLANK(), types:['mf29'], flags:{homestead:'no'}, sort:'un_d'})],
+  ['Big lots, 1 acre+', ()=>({...BLANK(), types:['sf','vacant'], lotMin:43560, sort:'lot_a'})],
+  ['Tired landlords (absentee, 20+ yrs)', ()=>({...BLANK(), types:['sf','th','mf29'], hdMin:20, flags:{homestead:'no',absz:'yes'}, sort:'held_d'})],
+  ['Lots owned from far away', ()=>({...BLANK(), types:['vacant'], lotMin:4000, flags:{absz:'yes'}, sort:'ppl_a'})],
+];
+const LOT_CHIPS=[[0,'Any'],[5000,'5,000+ sf'],[7500,'7,500+ sf'],[10000,'10,000+ sf'],[21780,'½ acre+'],[43560,'1 acre+'],[217800,'5 acres+']];
+
+/* wiring */
+let timer=null; const schedule=(ms=120)=>{ clearTimeout(timer); const lc=document.getElementById('liveCount'); if(lc) lc.classList.add('busy'); timer=setTimeout(run,ms); };
+async function ensureCondo(){ if(S.types.has('condo') && !PACKS[1]){ try{ await loadPack(1,'Loading condo units…'); }catch(e){ S.types.delete('condo'); toast(e.message); } } }
+const clearIdea=()=>document.querySelectorAll('#ideas .chip').forEach(b=>b.classList.remove('on'));
+function wire(){
+  $('panel').addEventListener('input',e=>{ if(!e.target.closest('#ideas')) clearIdea(); });
+  $('panel').addEventListener('click',e=>{ if(e.target.closest('.chip') && !e.target.closest('#ideas')) clearIdea(); });
+  NUM_IDS.concat(['zips']).forEach(id=>$(id).addEventListener('input',()=>schedule()));
+  ['mvMin','mvMax','city','cra','qScope','hideGov','noBldg','qualOnly'].forEach(id=>$(id).addEventListener('change',()=>{ clearIdea(); schedule(0); }));
+  $('q').addEventListener('input',()=>schedule(250));
+  $('types').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.t; S.types.has(k)?S.types.delete(k):S.types.add(k); await ensureCondo(); run(); });
+  $('zones').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.z; S.zones.has(k)?S.zones.delete(k):S.zones.add(k); run(); });
+  $('clrType').onclick=()=>{ S.types.clear(); S.exL.clear(); clearIdea(); run(); };
+  $('ownerKind').addEventListener('click',e=>{ const b=e.target.closest('button[data-k]'); if(!b) return; S.owner=b.dataset.k; clearIdea(); run(); });
+  $('mzq').addEventListener('input',()=>schedule(150));
+  for(const h of ['mzMiami','mzCounty']) $(h).addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const t=b.dataset.mz; let toks=mzTokens($('mzq').value); toks = toks.includes(t)? toks.filter(x=>x!==t) : toks.concat(t); $('mzq').value=toks.join(', '); run(); });
+  $('clrMz').onclick=()=>{ $('mzq').value=''; clearIdea(); run(); };
+  $('clrZone').onclick=()=>{ S.zones.clear(); S.exZ.clear(); clearIdea(); run(); };
+  $('lotChips').innerHTML=LOT_CHIPS.map(([v,l])=>`<button type="button" class="chip" data-v="${v}">${l}</button>`).join('');
+  $('lotChips').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const v=+b.dataset.v; $('lotMin').value=v||''; $('lotMax').value=''; run(); });
+  ['zoning','landuse'].forEach(f=>{
+    $(f+'Find').addEventListener('input',()=>renderFacet(f));
+    $(f+'List').addEventListener('change',e=>{ const t=e.target; if(!t.dataset.f) return; const set=f==='zoning'?S.exZ:S.exL, i=+t.dataset.i; t.checked?set.add(i):set.delete(i); schedule(100); });
+  });
+  $('ideas').innerHTML=IDEAS.map(([l],i)=>`<button type="button" class="chip" data-i="${i}">${l}</button>`).join('');
+  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureCondo(); run(); clearIdea(); b.classList.add('on'); });
+  $('toResults').onclick=()=>{ const r=$('results'); const y=r.getBoundingClientRect().top+window.scrollY-($('stickybar').offsetHeight+16); window.scrollTo({top:y,behavior:'smooth'}); };
+  $('resetBtn').onclick=()=>{ applyState({...BLANK(), view:S.view}); clearIdea(); run(); };
+  $('sortSel').addEventListener('change',()=>{ S.sort=$('sortSel').value; doSort(); save(); renderResults(true); });
+  $('vCards').onclick=()=>{ S.view='cards'; save(); renderResults(true); };
+  $('vTable').onclick=()=>{ S.view='table'; save(); renderResults(true); };
+  $('vMap').onclick=()=>{ S.view='map'; save(); renderResults(true); };
+  $('clrArea').onclick=()=>{ S.bbox=null; $('areaRow').hidden=true; clearIdea(); run(); };
+  $('mapArea').onclick=()=>{ if(!LMAP) return; const b=LMAP.getBounds(); S.bbox=[+b.getSouth().toFixed(6),+b.getWest().toFixed(6),+b.getNorth().toFixed(6),+b.getEast().toFixed(6)]; $('areaRow').hidden=false; clearIdea(); MAP_NOFIT=true; run(); };
+  $('mapFit').onclick=()=>fitResults(true);
+  window.addEventListener('hashchange',()=>{ const st=parseHash(); if(st){ applyState(st); ensureCondo().then(run); } });
+  $('showMore').onclick=()=>renderResults(false);
+  $('cards').addEventListener('click',e=>{ const c=e.target.closest('.card'); if(c) openDrawer(+c.dataset.id); });
+  $('tbody').addEventListener('click',e=>{ const tr=e.target.closest('tr[data-id]'); if(tr) openDrawer(+tr.dataset.id); });
+  $('thead').addEventListener('click',e=>{ const th=e.target.closest('th'); if(!th||!th.dataset.s) return; S.sort=th.dataset.s; $('sortSel').value=S.sort; doSort(); save(); renderResults(true); });
+  let raf=0; $('scroller').addEventListener('scroll',()=>{ if(raf) return; raf=requestAnimationFrame(()=>{ raf=0; renderTable(false); }); });
+  window.addEventListener('resize',()=>{ if(S.view==='table') renderTable(false); });
+}
+
+async function boot(){
+  try{
+    META=await (await fetch('data/meta.json')).json(); D=META.dicts;
+    MZ=D.mzone||[null]; MZ_UP=MZ.map(e=>e?String(e[0]).toUpperCase():''); LU_T=D.landuse.map(luType); Z_G=D.zoning.map(zGroup);
+    $('srcCount').textContent=fmt.format(META.total); $('srcDate').textContent=META.salesThrough||META.built;
+    $('srcLine').title=`Downloaded from Miami-Dade County GIS on ${META.built}. Newest recorded sale on the roll: ${META.salesThrough}. ${META.rollYear} values.`;
+    $('footData').textContent=`Pulled ${META.built}; ${fmt.format(META.stats.farmland_removed)} farm parcels and ${fmt.format(META.stats.reference_removed)} reference-only folios left out.`;
+    D.city.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('city').appendChild(o); });
+    D.cra.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('cra').appendChild(o); });
+    $('mvMin').innerHTML=MONEY_STEPS.map(v=>`<option value="${v}">${v?money(v):'No min'}</option>`).join('');
+    $('mvMax').innerHTML=MONEY_STEPS.map(v=>`<option value="${v}">${v?money(v):'No max'}</option>`).join('');
+    $('sortSel').innerHTML=SORTS.map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');
+    $('ownerGrid').innerHTML=OWNER_ROWS.map(([k,l])=>`<label for="ow_${k}">${l}</label><select id="ow_${k}"><option value="any">Either</option><option value="yes">Only</option><option value="no">Hide</option></select>`).join('');
+    OWNER_ROWS.forEach(([k])=>$('ow_'+k).addEventListener('change',e=>{ S.flags[k]=e.target.value; clearIdea(); schedule(0); }));
+    wire();
+    let st=parseHash(), fresh=false; if(!st){ try{ st=JSON.parse(localStorage.getItem('mdpf.v2')||'null'); }catch(e){} }
+    if(!st){ st=IDEAS[0][1](); fresh=true; }
+    applyState(st);
+    await loadPack(0,'Loading properties…');
+    await ensureCondo();
+    ['results','foot'].forEach(id=>$(id).hidden=false);
+    run();
+    if(fresh) document.querySelector('#ideas .chip').classList.add('on');
+    IDB.prune(META.ver);
+    setTimeout(()=>{ loadDetail(0).catch(()=>{}); },1500);
+    setTimeout(()=>{ loadGeo(0).catch(()=>{}); },4000);
+  }catch(e){ $('loadMsg').textContent='The property data did not load.'; $('loadSub').textContent=String(e.message||e)+'. Reload the page to try again.'; }
+}
+boot();
+})();

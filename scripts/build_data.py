@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Build the compact data packs the web app reads (data/meta.json + data/*.bin.gz).
+
+Inputs (made by the fetch_* scripts and spatial_join.py, all from public Miami-Dade County sources):
+  raw/pagis.parquet         Property Appraiser roll (PaGis layer), one row per folio, with WGS84 point
+  raw/spatial.parquet       city/county zoning district + CRA polygon per folio (point-in-polygon)
+  raw/zone_desc.json        PA zoning code -> description
+  raw/tinc.json             PA tax-increment district code per OBJECTID
+Pack format (same as the original app): uint32 LE header length, JSON header {n, cols:[{name,type,offset,bytes}]},
+then column blobs (typed arrays, 4-byte aligned; strings joined with '\n'). Whole pack gzipped.
+"""
+import json, os, re, sys, gzip, datetime as dt, numpy as np, pandas as pd
+
+RAW = os.environ.get('RAW', '/workspace/raw')
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), '..', 'data')
+os.makedirs(OUT, exist_ok=True)
+
+df = pd.read_parquet(f'{RAW}/pagis.parquet')
+n_raw = len(df)
+df = df[df.FOLIO.notna()].drop_duplicates('FOLIO').reset_index(drop=True)
+n_roll = len(df)
+sp = pd.read_parquet(f'{RAW}/spatial.parquet')
+df = df.merge(sp, on='FOLIO', how='left')
+tinc = json.load(open(f'{RAW}/tinc.json'))
+df['TINC'] = df.OBJECTID.astype(int).astype(str).map(tinc)
+zdesc = json.load(open(f'{RAW}/zone_desc.json'))
+
+S = lambda c: df[c].fillna('').astype(str).str.strip()
+N = lambda c: pd.to_numeric(df[c], errors='coerce').fillna(0)
+
+dor = S('DOR_CODE_CUR')
+dcode = pd.to_numeric(dor, errors='coerce').fillna(0).astype(int)
+# drop farmland (agricultural DOR codes 5000-6999) and reference-only folios (DOR 0000, no values)
+is_farm = (dcode >= 5000) & (dcode < 7000)
+is_ref = (dor == '0000') | (S('REFERENCE_ONLY_FLAG') == 'Y') & (N('TOTAL_VAL_CUR') == 0)
+keep = ~is_farm & ~is_ref
+stats = {'raw_records': int(n_raw), 'roll_folios': int(n_roll), 'farmland_removed': int(is_farm.sum()), 'reference_removed': int((is_ref & ~is_farm).sum())}
+df = df[keep].reset_index(drop=True)
+S = lambda c: df[c].fillna('').astype(str).str.strip()
+N = lambda c: pd.to_numeric(df[c], errors='coerce').fillna(0)
+n = len(df); print('kept', n, stats)
+
+# ---------- dictionaries ----------
+def dict_index(values, first=''):
+    uniq = sorted(set(values) - {first})
+    lst = [first] + uniq; idx = {v: i for i, v in enumerate(lst)}
+    return lst, np.array([idx[v] for v in values], dtype=np.int64)
+
+landuse_s = (S('DOR_CODE_CUR') + ' - ' + S('DOR_DESC').str.replace(r'\s+', ' ', regex=True)).where(S('DOR_CODE_CUR') != '', '')
+landuse, landuse_i = dict_index(list(landuse_s))
+pz = S('PRIMARY_ZONE').where(lambda x: x.str.match(r'^[0-9A-Z]{2,4}$'), '')
+zoning_s = [f"{z} - {zdesc.get(z, '') or ''}".strip() if z else '' for z in pz]
+zoning_s = [re.sub(r'\s+', ' ', z) for z in zoning_s]
+zoning, zoning_i = dict_index(zoning_s)
+city, city_i = dict_index(list(S('TRUE_SITE_CITY')))
+zip5 = S('TRUE_SITE_ZIP_CODE').str[:5].where(lambda s: s.str.match(r'^\d{5}$'), '')
+zips, zip_i = dict_index(list(zip5))
+
+# CRA: official county CRA polygons; else PA tax-increment district code (named by code + city)
+cra_poly = S('CRA_POLY').str.replace(r'\s+', ' ', regex=True)
+def cra_name(p, t, c):
+    if p: return p.replace('Opa-Locka', 'Opa-locka') + ' CRA'
+    if t and re.match(r'^90\d\d$', t): return f'Tax increment district {t} ({c or "County"})'
+    return ''
+tinc_s = S('TINC'); tinc_city = pd.DataFrame({'t': tinc_s, 'c': S('TRUE_SITE_CITY')}).groupby('t').c.agg(lambda x: x.value_counts().index[0]).to_dict()
+cra_s = [cra_name(p, t, tinc_city.get(t, '')) for p, t in zip(cra_poly, tinc_s)]
+cra, cra_i = dict_index(cra_s)
+
+# Municipal / county zoning districts (mzone): [code, jurisdiction, description, units/acre, stories, min lot sqft]
+JUR = {'MIAMI-DADE COUNTY': 'Miami-Dade County', 'OPA-LOCKA': 'Opa-locka', 'INDIAN CREEK VILLAGE': 'Indian Creek'}
+def jname(j): return JUR.get(j, ' '.join(w.capitalize() for w in j.split()))
+SMALL = {'of', 'and', 'or', 'the', 'to', 'in', 'a'}
+def tcase(s):
+    s = re.sub(r'\s+', ' ', s or '').strip()
+    if not s: return ''
+    if s.upper() != s: return s[0].upper() + s[1:]
+    out = []
+    for i, w in enumerate(s.lower().split(' ')):
+        if re.search(r'\d', w) or re.fullmatch(r'\(?[a-z]{1,3}-?\d*\)?', w) and w.strip('()') in ('ru', 'bu', 'iu', 'eu', 'gu', 'pad', 'pud', 'cra', 'hd', 'ci', 'cs', 'mu', 'tod', 'sf'):
+            out.append(w.upper())
+        elif i and w in SMALL: out.append(w)
+        else: out.append(re.sub(r'[a-z]', lambda m: m.group(0).upper(), w, count=1))
+    return ' '.join(out)
+def m21(code):
+    """Miami 21 transect parameters (Miami 21 Code, Article 4 Table 4 / Article 5): units per acre, max stories, min lot."""
+    m = re.match(r'^T(\d)(?:-(\d+)[AB]?)?-([LOR])$', code)
+    if m:
+        t, h, sub = int(m.group(1)), m.group(2), m.group(3)
+        if t == 3: return ('18' if sub == 'O' else '9'), '2', '5000'
+        if t == 4: return '36', '3', '5000'
+        if t == 5: return '65', '5', '5000'
+        if t == 6: return '150', (h or ''), '5000'
+    if code == 'D1': return '36', '', ''
+    if code == 'CI-HD': return '150', '', ''
+    return '', '', ''
+mz_list = [None]; mz_idx = {}
+mz_i = np.zeros(n, dtype=np.int64)
+for k, (c, j, d) in enumerate(zip(S('MZ_CODE'), S('MZ_JURIS'), S('MZ_DESC'))):
+    if not c: continue
+    key = (c, j, d)
+    if key not in mz_idx:
+        upa, st, ml = m21(c) if j == 'MIAMI' else ('', '', '')
+        mz_idx[key] = len(mz_list); mz_list.append([c, jname(j), tcase(d) or c, upa, st, ml])
+    mz_i[k] = mz_idx[key]
+
+# ---------- owner flags ----------
+o1, o2, o3 = S('TRUE_OWNER1'), S('TRUE_OWNER2'), S('TRUE_OWNER3')
+owner_all = (o1 + ' ' + o2 + ' ' + o3).str.upper().str.replace(r'\s+', ' ', regex=True)
+owner_str = [' | '.join([x for x in t if x]) for t in zip(o1, o2, o3)]
+GOV = re.compile(r"\b(MIAMI[- ]?DADE COUNTY|DADE COUNTY|MIAMI-DADE CNTY|BOARD OF COUNTY COMM|CITY OF|TOWN OF|VILLAGE OF|STATE OF FL|STATE OF FLORIDA|STATE OF FLA|SCHOOL BOARD|BOARD OF PUBLIC INSTRUCTION|UNITED STATES|U ?S ?A\b|USA\b|US GOVT|U S GOVT|FEDERAL GOVT|GSA\b|DEPT OF|DEPARTMENT OF|D O T|FDOT|HOUSING AUTHORITY|INTERNAL IMPROVEMENT|TIITF|SO(UTH)? FL(ORID)?A? WATER MGT|SOUTH FLORIDA WATER MANAGEMENT|WATER MGMT DIST|SFWMD|EXPRESSWAY AUTHORITY|TRANSPORTATION AUTHORITY|AVIATION DEPT|PORT AUTHORITY|COMMUNITY REDEVELOPMENT AGENCY|MDC\b|M-D C\b|PUBLIC HEALTH TRUST)")
+CORP = re.compile(r"\b(LLC|L L C|INC|INCORPORATED|CORP|CORPORATION|COMPANY|LP|L P|LTD|LLP|PLLC|BANK|BANCORP|NATIONAL ASSOCIATION|N A$|ASSN|ASSOCIATION|ASSOC|CHURCH|MINISTRY|MINISTRIES|CONGREGATION|TEMPLE|HOLDINGS?|PROPERTIES|INVESTMENTS?|INVESTORS|PARTNERS|PARTNERSHIP|ENTERPRISES?|GROUP|FUND|CAPITAL|VENTURES?|DEVELOPMENT|DEVELOPERS|REALTY|MANAGEMENT|MGMT|CONDOMINIUM|CONDO ASSN|HOMEOWNERS|FOUNDATION|SOCIETY|UNIVERSITY|COLLEGE|ACADEMY|HOSPITAL|CLUB|MORTGAGE|LENDING|SERVICES|SVCS|INTERNATIONAL|INTL|CO$|& CO\b|P A$|PA$|SA$|S A$|GMBH|LIMITED|COOPERATIVE|FEDERAL NATIONAL|FEDERAL HOME LOAN|SECRETARY OF HOUSING)\b")
+CORP_STRONG = re.compile(r"\b(LLC|L L C|INC|CORP|CORPORATION|LP|L P|LTD|BANK|NATIONAL ASSOCIATION|ASSN|ASSOCIATION|COMPANY)\b")
+TRUST = re.compile(r"\b(TRUST|TR|TRS|TRSTEE|TRUSTEE|TRUSTEES|REVOCABLE|REV TR|LIV TR|LIVING TR|LAND TR)\b")
+EST = re.compile(r"\b(EST|ESTATE|EST OF|ESTATE OF|HEIRS?|DECEASED|DECD|DEC'D)\b")
+GOV_WEAK_ONLY = re.compile(r"^(U ?S ?A|USA|UNITED STATES)$")
+def kind_of(s):
+    g = GOV.search(s)
+    if g and not (CORP_STRONG.search(s) and GOV_WEAK_ONLY.match(g.group(0).strip())): return 'govt'
+    t = bool(TRUST.search(s)); c = bool(CORP.search(s))
+    if c and (CORP_STRONG.search(s) or not t): return 'corp'
+    if t: return 'trust'
+    return 'person'
+kinds = [kind_of(s) for s in owner_all]
+est = [k in ('person', 'trust') and bool(EST.search(re.sub(r'\b(LIFE|REAL|REALTY|RE|RL|R E) EST(ATE)?\b', ' ', s))) for s, k in zip(owner_all, kinds)]
+
+mstate = S('TRUE_MAILING_STATE').str.upper(); mcountry = S('TRUE_MAILING_COUNTRY').str.upper()
+oos = ((mstate != '') & (mstate != 'FL')) | (~mcountry.isin(['', 'USA', 'US', 'U S A', 'UNITED STATES']))
+mzip5 = S('TRUE_MAILING_ZIP_CODE').str[:5]
+absz = (mzip5 != '') & (zip5 != '') & (mzip5 != zip5)
+homestead = N('HSTEAD_EX_VAL_CUR') > 0
+senior = (N('CNTY_SR_EX_VAL_CUR') > 0) | (N('CNTY_LNG_TERM_SR_EX_VAL_CUR') > 0)
+FLAG = {'homestead': 1, 'oos': 2, 'absz': 4, 'corp': 8, 'trust': 16, 'govt': 32, 'estate': 64, 'senior': 128}
+flags = (homestead.values * 1 | oos.values * 2 | absz.values * 4 | np.array([k == 'corp' for k in kinds]) * 8 |
+         np.array([k == 'trust' for k in kinds]) * 16 | np.array([k == 'govt' for k in kinds]) * 32 | np.array(est) * 64 | senior.values * 128).astype(np.uint8)
+
+# ---------- strings ----------
+def clean(s): return re.sub(r'\s+', ' ', s.replace('\n', ' ')).strip()
+mail = []
+for a1, a2, a3, c, st, z, co in zip(S('TRUE_MAILING_ADDR1'), S('TRUE_MAILING_ADDR2'), S('TRUE_MAILING_ADDR3'), S('TRUE_MAILING_CITY'),
+                                   S('TRUE_MAILING_STATE'), S('TRUE_MAILING_ZIP_CODE'), S('TRUE_MAILING_COUNTRY')):
+    z = re.sub(r'-0000$', '', z)
+    parts = [p for p in (a1, a2, a3) if p] + [p for p in (c, (st + ' ' + z).strip()) if p]
+    if co and co.upper() not in ('USA', 'US', 'UNITED STATES'): parts.append(co)
+    mail.append(clean(', '.join(parts)))
+LEGAL_CUT = re.compile(r'\s(LOT SIZE\b|OR \d{3,5}-\d|COC \d|F/A/U\b|FAU\b)')
+def legal_short(s):
+    s = clean(s); m = LEGAL_CUT.search(s)
+    return s[:m.start()].strip() if m and m.start() > 8 else s
+legal = [legal_short(s) for s in S('LEGAL')]
+addr = [clean(a) for a in S('TRUE_SITE_ADDR')]
+
+# ---------- numbers ----------
+DAY0 = dt.date(1900, 1, 1)
+def days(col):
+    out = np.zeros(n, dtype=np.int64)
+    for k, v in enumerate(S(col)):
+        if len(v) >= 8 and v[:8].isdigit():
+            try: out[k] = (dt.date(int(v[:4]), int(v[4:6]), int(v[6:8])) - DAY0).days
+            except ValueError: pass
+    return out
+u32 = lambda a: np.clip(np.round(np.asarray(a, dtype=float)), 0, 4294967295).astype(np.uint32)
+u16 = lambda a: np.clip(np.round(np.asarray(a, dtype=float)), 0, 65535).astype(np.uint16)
+u8 = lambda a: np.clip(np.round(np.asarray(a, dtype=float)), 0, 255).astype(np.uint8)
+heated = N('BUILDING_HEATED_AREA'); actual = N('BUILDING_ACTUAL_AREA')
+sqft = np.where(heated > 0, heated, actual)
+qflag = lambda c: np.select([S(c) == 'Q', S(c) == 'U'], [1, 2], 0)
+yb = N('YEAR_BUILT'); yb = np.where((yb > 1700) & (yb < 2100), yb, 0)
+lat = pd.to_numeric(df.LAT, errors='coerce').fillna(0).values; lon = pd.to_numeric(df.LON, errors='coerce').fillna(0).values
+
+cols_main = {
+    'city': u8(city_i), 'zip': u16(zip_i), 'cra': u8(cra_i), 'landuse': u16(landuse_i), 'zoning': u16(zoning_i), 'mz': u16(mz_i),
+    'lot': u32(N('LOT_SIZE')), 'mkt': u32(N('TOTAL_VAL_CUR')), 'land': u32(N('LAND_VAL_CUR')), 'bldg': u32(N('BUILDING_VAL_CUR')),
+    'sqft': u32(sqft), 'yb': u16(yb), 'units': u16(N('UNIT_COUNT')), 'beds': u8(N('BEDROOM_COUNT')),
+    'baths': u8((N('BATHROOM_COUNT') + 0.5 * N('HALF_BATHROOM_COUNT')) * 10), 'stories': u8(N('FLOOR_COUNT')),
+    'sd1': u16(days('DOS_1')), 'sale1': u32(N('PRICE_1')), 'sq1': u8(qflag('QU_FLG_1')), 'flags': flags,
+    'prv': u32(N('TOTAL_VAL_PRI')),
+}
+str_main = {'folio': list(S('FOLIO')), 'addr': addr, 'owner': [clean(o) for o in owner_str]}
+cols_det = {'assd': u32(N('ASSESSED_VAL_CUR')), 'taxable': u32(N('CNTY_TAXABLE_VAL_CUR')), 'sd2': u16(days('DOS_2')), 'sale2': u32(N('PRICE_2')),
+            'sq2': u8(qflag('QU_FLG_2')), 'sd3': u16(days('DOS_3')), 'sale3': u32(N('PRICE_3')), 'bcount': u16(N('BUILDING_COUNT'))}
+str_det = {'mail': mail, 'legal': legal, 'grantor': [clean(x) for x in S('GRANTOR_1')],
+           'book': [f'{b}-{p}' if b.strip('0') else '' for b, p in zip(S('OR_BK_1'), S('OR_PG_1'))]}
+cols_geo = {'lat': ((lat - 24.0) * 1e6).clip(0, 4e9).astype(np.uint32), 'lon': ((lon + 81.5) * 1e6).clip(0, 4e9).astype(np.uint32)}
+
+def write_pack(path, rows, cols, strs):
+    blobs, hdr_cols, off = [], [], 0
+    def add(name, typ, b):
+        nonlocal off
+        hdr_cols.append({'name': name, 'type': typ, 'offset': off, 'bytes': len(b)}); blobs.append(b); off += len(b)
+        pad = (-off) % 4
+        if pad: blobs.append(b'\0' * pad); off += pad
+    for name, arr in cols.items():
+        a = arr[rows]; add(name, {np.dtype('uint8'): 'uint8', np.dtype('uint16'): 'uint16', np.dtype('uint32'): 'uint32'}[a.dtype], a.tobytes())
+    for name, lst in strs.items():
+        add(name, 'str', '\n'.join(lst[k].replace('\n', ' ') for k in rows).encode('utf-8'))
+    hdr = json.dumps({'n': int(len(rows)), 'cols': hdr_cols}, separators=(',', ':')).encode()
+    hdr += b' ' * ((-(4 + len(hdr))) % 4)
+    raw = len(hdr).to_bytes(4, 'little') + hdr + b''.join(blobs)
+    gz = gzip.compress(raw, 9, mtime=0)
+    open(path, 'wb').write(gz)
+    return len(gz), len(raw)
+
+# condo pack = land-use descriptions with CONDOMINIUM / COOPERATIVE (same rule as the app's luType)
+is_condo = np.array(['CONDOMINIUM' in s.upper() or 'COOPERATIVE' in s.upper() for s in landuse_s])
+order_main = np.where(~is_condo)[0]; order_condo = np.where(is_condo)[0]
+ver = dt.datetime.now().strftime('%Y%m%d%H%M')
+packs = []
+for name, rows in (('main', order_main), ('condo', order_condo)):
+    f1 = f'{name}.bin.gz'; f2 = f'{name}-detail.bin.gz'; f3 = f'{name}-geo.bin.gz'
+    b1, r1 = write_pack(os.path.join(OUT, f1), rows, cols_main, str_main)
+    b2, r2 = write_pack(os.path.join(OUT, f2), rows, cols_det, str_det)
+    b3, r3 = write_pack(os.path.join(OUT, f3), rows, cols_geo, {})
+    packs.append({'name': name, 'n': int(len(rows)), 'files': [f1], 'bytes': b1, 'detail': [f2], 'detailBytes': b2, 'geo': [f3], 'geoBytes': b3})
+    print(name, len(rows), f'main {b1/1e6:.1f}MB (raw {r1/1e6:.1f}) detail {b2/1e6:.1f}MB geo {b3/1e6:.1f}MB')
+
+last_sale = int(max(cols_main['sd1'].max(), 0))
+meta = {
+    'ver': ver, 'total': int(n), 'built': dt.datetime.now().strftime('%m/%d/%Y'),
+    'rollYear': int(pd.to_numeric(df.ASSESSMENT_YEAR_CUR, errors='coerce').max()),
+    'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%d/%Y'),
+    'stats': stats, 'packs': packs,
+    'dicts': {'city': city, 'zip': zips, 'cra': cra, 'landuse': landuse, 'zoning': zoning, 'mzone': mz_list},
+    'sources': {
+        'roll': 'https://gisweb.miamidade.gov/arcgis/rest/services/MD_ComparableSales/MapServer/5',
+        'municipalZoning': 'https://gisweb.miamidade.gov/arcgis/rest/services/MD_LandInformation/MapServer/19',
+        'countyZoning': 'https://gisweb.miamidade.gov/arcgis/rest/services/MD_LandInformation/MapServer/18',
+        'cra': 'https://gisweb.miamidade.gov/arcgis/rest/services/MD_LandInformation/MapServer/20',
+        'zoneDescriptions': 'https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx (GetPropertySearchByFolio)'},
+}
+json.dump(meta, open(os.path.join(OUT, 'meta.json'), 'w'), separators=(',', ':'))
+print('meta written', meta['total'], meta['salesThrough'], 'mz', len(mz_list), 'cra', len(cra), 'landuse', len(landuse), 'zoning', len(zoning))
+pd.Series(kinds).value_counts().pipe(print); print('estate', sum(est), 'oos', int(oos.sum()), 'homestead', int(homestead.sum()), 'senior', int(senior.sum()))

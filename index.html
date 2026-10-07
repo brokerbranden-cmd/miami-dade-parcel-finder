@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Miami-Dade Parcel Finder</title>
+<meta name="description" content="Search every property on the Miami-Dade Property Appraiser roll: vacant lots, teardowns, out-of-state owners, estates, small multifamily, city zoning codes and more.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="preload" href="data/meta.json" as="fetch" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Miami-Dade <span>Parcel Finder</span></h1>
+    <div class="src" id="srcLine">Every property on the Miami-Dade Property Appraiser roll, <b>updated <span id="srcDate">…</span></b>. <b id="srcCount">…</b> properties, farmland removed.</div>
+  </header>
+
+  <div class="stickybar" id="stickybar">
+    <div class="sb-count"><span class="sb-num" id="liveCount">–</span><span class="sb-lab">properties match</span><span class="on-count" id="onCount" hidden>0 filters on</span></div>
+    <div class="sb-act">
+      <button class="btn reset" type="button" id="resetBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>Clear all filters
+      </button>
+      <button class="btn primary" type="button" id="toResults">See results ↓</button>
+    </div>
+  </div>
+
+  <section class="panel" id="panel">
+    <div class="grp ideas">
+      <div class="grp-h"><h2>Start with an idea</h2><span class="hint">One tap sets the filters for you. Adjust anything after.</span></div>
+      <div class="chips" id="ideas"></div>
+    </div>
+
+    <div class="searchrow">
+      <div class="big">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+        <input type="search" id="q" placeholder="Search an address, owner name or folio number" autocomplete="off" aria-label="Search">
+      </div>
+      <select id="city" aria-label="City"><option value="">All cities</option></select>
+      <input type="text" id="zips" placeholder="ZIP codes" inputmode="numeric" aria-label="ZIP codes">
+    </div>
+    <div class="areachip" id="areaRow" hidden><span>Limited to an area you picked on the map</span><button class="clr" type="button" id="clrArea">Remove area</button></div>
+
+    <div class="grp">
+      <div class="grp-h"><h2>What's on the property</h2><span class="hint">Pick one or more. Condo units are only searched when you pick Condo units.</span><button class="clr" type="button" id="clrType">Clear</button></div>
+      <div class="chips" id="types"></div>
+    </div>
+
+    <div class="grp">
+      <div class="grp-h"><h2>City zoning code</h2><span class="hint">The actual code from the city or county zoning map. Type one or more codes; "T6" also finds T6-8-O, T6-36A-L and so on.</span><button class="clr" type="button" id="clrMz">Clear</button></div>
+      <input type="search" id="mzq" placeholder="e.g. T4, T5-O, RU-2, BU-1A" autocomplete="off" aria-label="City zoning codes" style="max-width: 420px;">
+      <div class="mzrow"><span class="mzlab">Miami 21</span><div class="chips" id="mzMiami"></div></div>
+      <div class="mzrow"><span class="mzlab">County</span><div class="chips" id="mzCounty"></div></div>
+    </div>
+
+    <div class="grp">
+      <div class="grp-h"><h2>Zoning type</h2><span class="hint">Plain-language groups that work the same in every city.</span><button class="clr" type="button" id="clrZone">Clear</button></div>
+      <div class="chips" id="zones"></div>
+    </div>
+
+    <div class="grp">
+      <div class="grp-h"><h2>Who owns it</h2><span class="hint">Sorted by the owner's name. Companies include LLCs, corporations, LPs, banks, churches and other organizations. Government owners are left out when they're hidden.</span></div>
+      <div class="seg owners" role="group" aria-label="Owner type" id="ownerKind"></div>
+    </div>
+
+    <div class="row2">
+      <div class="grp">
+        <div class="grp-h"><h2>Lot size</h2><span class="hint">1 acre = 43,560 sq ft</span></div>
+        <div class="chips" id="lotChips"></div>
+        <div class="range"><input type="number" id="lotMin" placeholder="Min sq ft" min="0" aria-label="Minimum lot sq ft"><span>to</span><input type="number" id="lotMax" placeholder="Max sq ft" min="0" aria-label="Maximum lot sq ft"></div>
+      </div>
+      <div class="grp">
+        <div class="grp-h"><h2>Market value</h2><span class="hint">Property Appraiser's 2026 value</span></div>
+        <div class="range"><select id="mvMin" aria-label="Minimum value"></select><span>to</span><select id="mvMax" aria-label="Maximum value"></select></div>
+        <label class="check"><input type="checkbox" id="hideGov" checked=""> Hide government-owned property</label>
+      </div>
+    </div>
+
+    <details class="more" id="moreBox" open="">
+      <summary>More filters <span class="badge-n" id="advCount" hidden="">0 on</span></summary>
+      <div class="adv">
+        <div class="field"><span class="lab">Owner</span>
+          <div class="owner-grid" id="ownerGrid"></div>
+          <span class="note">Owner types are guessed from names and mailing addresses.</span>
+        </div>
+        <div class="grp" style="gap:14px">
+          <div class="field"><label for="hdMin">Years since last sale</label>
+            <div class="range"><input type="number" id="hdMin" placeholder="Min" min="0"><span>to</span><input type="number" id="hdMax" placeholder="Max" min="0"></div>
+            <span class="note">Properties with no sale on record count as owned 50+ years.</span></div>
+          <div class="field"><label for="spMin">Last sale price ($)</label>
+            <div class="range"><input type="number" id="spMin" placeholder="Min" min="0"><span>to</span><input type="number" id="spMax" placeholder="Max" min="0"></div></div>
+          <label class="check"><input type="checkbox" id="qualOnly"> Only real market sales (skip $100 transfers)</label>
+        </div>
+        <div class="grp" style="gap:14px">
+          <div class="field"><label for="ybMin">Year built</label>
+            <div class="range"><input type="number" id="ybMin" placeholder="From" min="1800"><span>to</span><input type="number" id="ybMax" placeholder="To" min="1800"></div></div>
+          <div class="field"><label for="sfMin">Building size (living sq ft)</label>
+            <div class="range"><input type="number" id="sfMin" placeholder="Min" min="0"><span>to</span><input type="number" id="sfMax" placeholder="Max" min="0"></div></div>
+          <label class="check"><input type="checkbox" id="noBldg"> Only land with no building</label>
+        </div>
+        <div class="grp" style="gap:14px">
+          <div class="field"><label for="unMin">Number of units</label>
+            <div class="range"><input type="number" id="unMin" placeholder="Min" min="0"><span>to</span><input type="number" id="unMax" placeholder="Max" min="0"></div></div>
+          <div class="range" style="grid-template-columns:1fr 1fr">
+            <div class="field"><label for="bdMin">Bedrooms, at least</label><input type="number" id="bdMin" min="0"></div>
+            <div class="field"><label for="stMax">Stories, at most</label><input type="number" id="stMax" min="0"></div>
+          </div>
+          <div class="field"><label for="lsMin">Land as % of total value</label>
+            <div class="range"><input type="number" id="lsMin" placeholder="Min %" min="0" max="100"><span>to</span><input type="number" id="lsMax" placeholder="Max %" min="0" max="100"></div>
+            <span class="note">80% or more usually means the building adds little value (teardown).</span></div>
+        </div>
+        <div class="grp" style="gap:14px">
+          <div class="field"><label for="cra">Redevelopment area (CRA)</label><select id="cra"><option value="">Any</option></select></div>
+          <div class="field"><label for="qScope">Search box looks in</label>
+            <select id="qScope"><option value="ao">Address and owner name</option><option value="mail">Owner mailing address</option><option value="legal">Legal description</option></select></div>
+        </div>
+        <div class="field"><span class="lab">Exact zoning codes</span>
+          <input type="search" id="zoningFind" placeholder="Find a code, e.g. 3800" autocomplete="off">
+          <div class="facet-list" id="zoningList"></div></div>
+        <div class="field"><span class="lab">Exact land use codes</span>
+          <input type="search" id="landuseFind" placeholder="Find a code or word" autocomplete="off">
+          <div class="facet-list" id="landuseList"></div></div>
+      </div>
+    </details>
+  </section>
+
+  <div class="loadbox" id="loadbox">
+    <strong id="loadMsg">Loading properties…</strong>
+    <div class="note" id="loadSub">Starting…</div>
+    <div class="bar"><i id="loadBar"></i></div>
+  </div>
+
+  <section id="results" hidden>
+    <div class="resbar">
+      <div>
+        <div class="count"><span id="sCount">–</span><small>properties match</small></div>
+        <div class="summary" id="summary"></div>
+      </div>
+      <div class="actions">
+        <select id="sortSel" aria-label="Sort by"></select>
+        <div class="seg" role="group" aria-label="View"><button type="button" id="vCards" class="on">Cards</button><button type="button" id="vTable">Table</button><button type="button" id="vMap">Map</button></div>
+        <button class="btn" id="copyBtn" type="button">Copy folios</button>
+        <button class="btn" id="linkBtn" type="button" title="Copy a link that reopens this exact search">Copy link</button>
+        <button class="btn primary" id="exportBtn" type="button">Export CSV</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="cards" id="cards"></div>
+  <div class="more-row" id="moreRow"><button class="btn" type="button" id="showMore">Show more (15,095 left)</button></div>
+  <div class="tablebox" id="tablebox" hidden="">
+    <div class="scroller" id="scroller"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
+  </div>
+  <div class="mapbox" id="mapbox" hidden>
+    <div id="map" aria-label="Map of matching properties"></div>
+    <div class="maptools">
+      <button class="btn" type="button" id="mapArea">Search this map area</button>
+      <button class="btn" type="button" id="mapFit">Zoom to results</button>
+    </div>
+    <div class="maplegend" id="mapLegend"></div>
+    <div class="maphint" id="mapHint"></div>
+  </div>
+  <div class="empty" id="empty" hidden="">Nothing matches all of these filters. Try removing one, or tap <b>Start over</b>.</div>
+  <p class="foot" id="foot" hidden>Tap any property for the full record, a link to its Property Appraiser page and Google Maps. <b>City zoning</b> is the code from the county's municipal and unincorporated zoning maps at the parcel's location point; <b>zoning type</b> comes from the Property Appraiser's zoning category. Both can lag recent rezonings, so confirm with the city before you plan around it. Data: Miami-Dade County GIS and Property Appraiser public records. <span id="footData"></span></p>
+</div>
+<div id="drawerHost"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

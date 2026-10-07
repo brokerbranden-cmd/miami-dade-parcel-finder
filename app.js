@@ -15,6 +15,14 @@ const monYr = d => { const t=dt(d); return MON[t.getUTCMonth()]+' '+t.getUTCFull
 const folioFmt = f => f.length===13 ? f.slice(0,2)+'-'+f.slice(2,6)+'-'+f.slice(6,9)+'-'+f.slice(9) : f;
 const acres = sf => sf>=SQFT_AC*10 ? fmt.format(Math.round(sf/SQFT_AC))+' acres' : (sf/SQFT_AC).toFixed(2)+' acres';
 const esc = s => String(s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+/* distress signals: bit order matches scripts/build_distress.py SIG (0-11) + soft owner/property bits set in build_data.py (12-15) */
+const DSIG=[['FC','Foreclosure sale','hot'],['LP','Lis pendens','hot'],['TD','Tax deed','hot'],['TC','Tax certificates','warm'],['TX','Delinquent taxes','warm'],['US','Unsafe structure','hot'],['BV','Building violation','warm'],['CC','Code case','warm'],['LN','Lien','warm'],['RC','Recert overdue','warm'],['PR','Probate / estate','hot'],['DC','Owner deceased','hot']];
+const DSOFT=[[12,'Absentee / out of state'],[13,'Owned 20+ years'],[14,'Low building value'],[15,'No homestead']];
+const DBIT=Object.fromEntries(DSIG.map((d,i)=>[d[0],i]));
+const DS_STEPS=[[0,'Any score'],[20,'20+'],[35,'35+'],[50,'50+ (hot)'],[70,'70+']];
+const dsTone=v=>v>=50?'s4':v>=35?'s3':v>=20?'s2':v>0?'s1':'s0';
+let DIST=null, distP=null;
+const loadDistress=()=>distP||(distP=(async()=>{ if(!META.distressFile) return null; const r=await fetch('data/'+META.distressFile+'?v='+META.ver); if(!r.ok) throw new Error('Distress data did not load'); DIST=JSON.parse(dec.decode(await gunzip(new Uint8Array(await r.arrayBuffer())))); return DIST; })().catch(e=>{ distP=null; throw e; }));
 const FLAG = {homestead:1, oos:2, absz:4, corp:8, trust:16, govt:32, estate:64, senior:128};
 const MZ_MIAMI=[['T3','Sub-urban (single family, duplex)'],['T4','General urban (small apartments)'],['T5','Urban center (up to 5 stories)'],['T6','Urban core (8+ stories)'],['CI','Civic institution'],['CS','Civic space'],['D1','Work place'],['D2','Industrial'],['D3','Waterfront industrial']];
 const MZ_COUNTY=[['RU-1','Single family'],['RU-2','Duplex'],['RU-TH','Townhouse'],['RU-3','Small multifamily'],['RU-4','Apartments'],['RU-5','Residential / office'],['EU','Estates'],['BU','Business'],['IU','Industrial'],['GU','Interim'],['PAD','Planned area development']];
@@ -80,8 +88,8 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
-let facet = {lc:null, zc:null, mc:null, kc:null};
+const S = { dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
 function mzAllow(q){ const toks=mzTokens(q); if(!toks.length) return null; const a=new Uint8Array(MZ.length); for(let i=1;i<MZ.length;i++){ const c=MZ_UP[i]; for(const t of toks){ if(c===t || c.startsWith(t)){ a[i]=1; break; } } } return a; }
@@ -154,7 +162,7 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; return st;
+  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
@@ -162,7 +170,7 @@ function applyState(st){
   $('mvMin').value=st.mvMin||0; $('mvMax').value=st.mvMax||0;
   $('mzq').value=st.mzq||''; $('q').value=st.q||''; $('qScope').value=st.qScope||'ao'; $('city').value=st.city||''; $('zips').value=st.zips||''; $('cra').value=st.cra||'';
   $('hideGov').checked=st.hideGov!==false; $('noBldg').checked=!!st.noBldg; $('qualOnly').checked=!!st.qualOnly;
-  S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]);
+  S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]); S.dsig=new Set((st.dsig||[]).filter(k=>k in DBIT)); $('dsMin').value=DS_STEPS.some(x=>x[0]===+st.dsMin)?String(+st.dsMin):'0';
   S.exZ=new Set((st.exZ||[]).map(v=>D.zoning.indexOf(v)).filter(i=>i>=0)); S.exL=new Set((st.exL||[]).map(v=>D.landuse.indexOf(v)).filter(i=>i>=0));
   S.owner=OWNER_KINDS.some(o=>o[0]===st.owner)?st.owner:'all'; S.flags={}; OWNER_ROWS.forEach(([k])=>{ S.flags[k]=(st.flags&&st.flags[k])||'any'; $('ow_'+k).value=S.flags[k]; });
   S.sort=SORT_MAP[st.sort]?st.sort:'lot_d'; $('sortSel').value=S.sort; S.view=['cards','table','map'].includes(st.view)?st.view:(S.view||'cards');
@@ -196,6 +204,7 @@ function run(){
   const incCondo=S.types.has('condo');
   const wantK = {all:-1,person:0,corp:1,trust:2}[S.owner]; const kc=new Uint32Array(4);
   const mA = mzAllow(st.mzq||''); const mc=new Uint32Array(MZ.length);
+  let sigMask=0; for(const k of S.dsig) sigMask|=1<<DBIT[k]; const dsMin=st.dsMin||0, dc=new Uint32Array(DSIG.length+1);
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
@@ -220,23 +229,27 @@ function run(){
       if(st.spMin!=null && c.sale1[i]<st.spMin) continue; if(st.spMax!=null && c.sale1[i]>st.spMax) continue;
       if(st.qualOnly && c.sq1[i]!==1) continue;
       const fl=c.flags[i]; if((fl&fMust)!==fMust || (fl&fNot)) continue;
+      if(dsMin && c.dscore[i]<dsMin) continue;
+      const sg=c.dsig[i], fsg=sigMask&&!(sg&sigMask)?1:0;
       const li=c.landuse[i], zi=c.zoning[i];
       if(govLU && govLU[li]) continue;
       const mi=c.mz[i];
       const fu=lA&&!lA[li]?1:0, fz=zA&&!zA[zi]?1:0, fm=mA&&!mA[mi]?1:0;
       const kind = fl&8 ? 1 : fl&16 ? 2 : fl&32 ? 3 : 0, fk = wantK>=0 && kind!==wantK ? 1:0;
       const nf=fu+fz+fm+fk;
+      if(nf===0 && sg&4095){ for(let b=0;b<12;b++) if(sg&(1<<b)) dc[b]++; if(!fsg) dc[12]++; }
+      if(fsg) continue;
       if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
       else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else kc[kind]++; }
     }
   }
-  results=out.subarray(0,m); facet={lc,zc,kc,mc};
+  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc};
   doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true);
 }
 
 /* sorting */
 const SORTS=[
-  ['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
+  ['ds_d','Highest distress score','dscore',-1],['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
   ['mv_a','Lowest value first','mkt',1],['mv_d','Highest value first','mkt',-1],
   ['held_d','Owned the longest','sd1',1],['sold_d','Sold most recently','sd1',-1],
   ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
@@ -254,7 +267,8 @@ function doSort(){
   for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id);
     key[j] = k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
   const idx=new Uint32Array(n); for(let i=0;i<n;i++) idx[i]=i;
-  idx.sort((a,b)=>(key[a]-key[b])*dir || a-b);
+  const k2=k==='dscore'?(j=>{ const id=results[j]; return P(id).c.mkt[I(id)]; }):null;
+  idx.sort((a,b)=>(key[a]-key[b])*dir || (k2?k2(b)-k2(a):0) || a-b);
   const r2=new Uint32Array(n); for(let i=0;i<n;i++) r2[i]=results[idx[i]]; results=r2;
 }
 
@@ -280,6 +294,7 @@ function renderChips(){
   const kc=facet.kc, kAll=kc[0]+kc[1]+kc[2]+kc[3], kN={all:kAll,person:kc[0],corp:kc[1],trust:kc[2]};
   $('ownerKind').innerHTML=OWNER_KINDS.map(([k,l])=>`<button type="button" data-k="${k}" class="${S.owner===k?'on':''}" aria-pressed="${S.owner===k}">${l}<span class="n">${short(kN[k])}</span></button>`).join('');
   renderFacet('zoning'); renderFacet('landuse');
+  const dcn=facet.dc||[]; $('dsigs').innerHTML=DSIG.map(([k,l],b)=>{ const on=S.dsig.has(k), n=dcn[b]||0; return `<button type="button" class="chip dchip ${on?'on':''} ${!n&&!on?'zero':''}" data-sig="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
 }
 function median(a){ if(!a.length) return 0; a.sort(); return a[a.length>>1]; }
 function renderSummary(){
@@ -293,12 +308,13 @@ function renderSummary(){
   if(mm) bits.push(`typical value <b>${money(mm)}</b>`);
   if(n) bits.push(`<b>${fmt.format(oos)}</b> out-of-state owners`);
   if(corp) bits.push(`<b>${fmt.format(corp)}</b> owned by companies`);
+  let hot=0; for(let j=0;j<n;j++){ const id=results[j]; if(P(id).c.dscore[I(id)]>=50) hot++; } if(hot) bits.push(`<b>${fmt.format(hot)}</b> with a distress score of 50+`);
   $('summary').innerHTML=bits.join(' · ');
 }
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0);
+  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0);
   const tot=k+main; $('onCount').hidden=!tot; $('onCount').textContent=tot+(tot===1?' filter on':' filters on'); $('resetBtn').disabled=!tot;
 }
 function renderFacet(f){
@@ -316,6 +332,8 @@ function ownerBadges(fl){
 }
 function mzLabel(mi){ const e=MZ[mi]; if(!e) return ''; const bits=[]; if(e[4]) bits.push(e[4]+' stories'); if(e[3]&&+e[3]>0) bits.push(e[3]+' units/acre'); return e[2]+(bits.length?' ('+bits.join(', ')+')':''); }
 function mzHTML(mi){ const e=MZ[mi]; if(!e) return ''; return `<span class="mzcode">${esc(e[0])}</span> · ${esc(mzLabel(mi))}`; }
+function sigBadges(sg){ let h=''; for(let b=0;b<12;b++) if(sg&(1<<b)) h+=`<span class="${DSIG[b][2]}">${DSIG[b][1]}</span>`; return h; }
+const scoreBadge=(v,big)=>`<span class="dscore ${dsTone(v)}${big?' big':''}" title="Distress score ${v} of 100">${v}</span>`;
 function cardHTML(id){
   const p=P(id), i=I(id), c=p.c;
   const addr=getStr(p,'addr',i)||'No street address', lu=D.landuse[c.landuse[i]], zn=D.zoning[c.zoning[i]], t=LU_T[c.landuse[i]], zg=Z_G[c.zoning[i]];
@@ -323,7 +341,7 @@ function cardHTML(id){
   const bldgS = sf? [yb?'Built '+yb:'', un>1?un+' units':bd?bd+' bd / '+(c.baths[i]/10)+' ba':''].filter(Boolean).join(' · ') : 'Land only';
   const sale = c.sd1[i]? `${monYr(c.sd1[i])}${c.sale1[i]>100?' for '+money(c.sale1[i]):''} · owned ${Math.max(0,Math.floor((today-c.sd1[i])/365.25))} yrs` : 'No sale on record';
   return `<button type="button" class="card" data-id="${id}">
-    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span><span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span></div>
+    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span><span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span>${c.dscore[i]?scoreBadge(c.dscore[i]):''}</div>
     <div><h3>${esc(addr)}</h3><div class="city">${esc(D.city[c.city[i]])}, FL ${D.zip[c.zip[i]]}</div></div>
     <div class="facts">
       <div><div class="k">Lot</div><div class="v">${!lot?'–':lot>=100000?acres(lot):fmt.format(lot)+' sf'}</div><div class="s">${!lot?'Shared lot':lot>=100000?short(lot)+' sq ft':acres(lot)}</div></div>
@@ -334,7 +352,7 @@ function cardHTML(id){
     <div class="line"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
-    <div class="ob">${ownerBadges(c.flags[i])}</div>
+    <div class="ob">${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </button>`;
 }
 function renderResults(reset){
@@ -353,13 +371,16 @@ function renderResults(reset){
 
 /* table */
 const COLS=[
-  {h:'Address',s:'addr_a'},{h:'Property'},{h:'City zoning'},{h:'Zoning type'},{h:'Lot sq ft',num:true,s:'lot_d'},{h:'Acres',num:true,s:'lot_d'},
+  {h:'Address',s:'addr_a'},{h:'Score',num:true,s:'ds_d'},{h:'Signals'},{h:'Property'},{h:'City zoning'},{h:'Zoning type'},{h:'Lot sq ft',num:true,s:'lot_d'},{h:'Acres',num:true,s:'lot_d'},
   {h:'Building sq ft',num:true},{h:'Units',num:true,s:'un_d'},{h:'Built',num:true,s:'yb_a'},{h:'Value',num:true,s:'mv_d'},
   {h:'Land %',num:true,s:'lp_d'},{h:'Last sale',num:true,s:'sold_d'},{h:'Sale price',num:true},{h:'Owner'}];
 function renderHead(){ $('thead').innerHTML=COLS.map(c=>`<th data-s="${c.s||''}" class="${c.num?'num':''} ${c.s&&S.sort===c.s?'sorted':''}" scope="col">${c.h}</th>`).join(''); }
+const sigCodes=sg=>{ const a=[]; for(let b=0;b<12;b++) if(sg&(1<<b)) a.push(DSIG[b][0]); return a.join(' '); };
+const sigText=sg=>{ const a=[]; for(let b=0;b<12;b++) if(sg&(1<<b)) a.push(DSIG[b][1]); for(const [b,l] of DSOFT) if(sg&(1<<b)) a.push(l); return a.join(', '); };
 function rowHTML(id){
   const p=P(id), i=I(id), c=p.c, mv=c.mkt[i];
   return `<tr data-id="${id}"><td class="addr">${esc(getStr(p,'addr',i)||'No street address')}<small>${esc(D.city[c.city[i]])} ${D.zip[c.zip[i]]}</small></td>
+  <td class="num">${c.dscore[i]?scoreBadge(c.dscore[i]):'–'}</td><td class="sigs" title="${esc(sigText(c.dsig[i]))}">${esc(sigCodes(c.dsig[i]))||'–'}</td>
   <td>${TYPE_LABEL[LU_T[c.landuse[i]]]}</td><td title="${esc(mzLabel(c.mz[i]))}"><span class="mzcode">${MZ[c.mz[i]]?esc(MZ[c.mz[i]][0]):'–'}</span></td><td title="${esc(D.zoning[c.zoning[i]])}">${esc(nice(D.zoning[c.zoning[i]])||'–')}</td>
   <td class="num">${c.lot[i]?fmt.format(c.lot[i]):'–'}</td><td class="num">${c.lot[i]?(c.lot[i]/SQFT_AC).toFixed(2):'–'}</td>
   <td class="num">${c.sqft[i]?fmt.format(c.sqft[i]):'–'}</td><td class="num">${c.units[i]||'–'}</td><td class="num">${c.yb[i]||'–'}</td>
@@ -378,9 +399,38 @@ function renderTable(reset){
   $('tbody').innerHTML=h;
 }
 
+/* distress score breakdown (mirrors build_distress.py points() + build_data.py soft signals; see README) */
+function scoreParts(p,i,folio){
+  const c=p.c, fl=c.flags[i], sg=c.dsig[i], parts=[];
+  const hp=(DIST&&DIST.pts&&DIST.pts[folio])||{};
+  for(const [k,v] of Object.entries(hp)) parts.push([DSIG[DBIT[k]][1],v]);
+  if((fl&64) && !hp.PR) parts.push(['Estate / heirs in the owner name', hp.DC?7:15]);
+  const soft=[]; const gov=fl&32, corp=fl&8;
+  if(fl&2) soft.push(['Out-of-state owner',6]); else if(fl&4) soft.push(['Absentee owner (mails to another ZIP)',4]);
+  const yrs=c.sd1[i]?(today-c.sd1[i])/365.25:0; if(yrs>=20) soft.push(['Owned 20+ years',5]); else if(yrs>=10) soft.push(['Owned 10+ years',2]);
+  const bv=c.bldg[i], mv=c.mkt[i]; if(bv>0&&mv>0&&bv/mv<0.2) soft.push(['Building under 20% of value (teardown)',6]); else if(!bv&&c.lot[i]>0&&!corp&&!gov) soft.push(['Vacant lot',3]);
+  if(!(fl&1)&&!corp&&!gov) soft.push(['No homestead exemption',3]);
+  let st=soft.reduce((a,b)=>a+b[1],0); if(st>20) soft.push(['Owner/property signals capped at 20',20-st]);
+  return parts.concat(soft);
+}
+function distressHTML(p,i,folio){
+  const c=p.c, v=c.dscore[i], sg=c.dsig[i];
+  const recs=(DIST&&DIST.recs[folio])||[];
+  const parts=scoreParts(p,i,folio), tot=parts.reduce((a,b)=>a+b[1],0);
+  if(!v && !recs.length) return `<h3>Distress signals</h3><div class="note">No foreclosure, tax, code, lien or probate records matched this folio${DIST?' (data built '+esc(DIST.built)+')':''}.</div>`;
+  const order=Object.fromEntries(DSIG.map((d,k)=>[d[0],k]));
+  const items=recs.slice().sort((a,b)=>order[a[0]]-order[b[0]]||(b[1]>a[1]?1:-1)).map(r=>{ const [code,date,title,amt,ref,url,extra]=r;
+    return `<li><span class="dtag ${DSIG[order[code]][2]}">${esc(DSIG[order[code]][1])}</span> <b>${esc(title)}</b>${date?' · '+esc(date):''}${amt?' · '+dollars(Math.round(amt)):''}${ref?`<br><span class="mono">${esc(ref)}</span>`:''}${extra?`<small>${esc(extra)}</small>`:''}${url?` <a href="${esc(url)}" target="_blank" rel="noopener">source ↗</a>`:''}</li>`; }).join('');
+  return `<h3>Distress signals ${scoreBadge(v,true)}</h3>
+    <div class="dbreak">${parts.map(([l,n])=>`<div><span>${esc(l)}</span><b>${n>0?'+':''}${n}</b></div>`).join('')}<div class="tot"><span>Distress score${tot>100?' (capped at 100)':''}</span><b>${v}</b></div></div>
+    ${items?`<ul class="dlist">${items}</ul>`:''}
+    <div class="note">Records matched to this folio from public sources. Confirm status at the source before acting: cases close and liens get released.</div>`;
+}
+
 /* detail drawer */
 async function openDrawer(id){
   if(!P(id).det){ toast('Loading details…'); try{ await Promise.all([loadDetail(P(id).idx), loadGeo(P(id).idx).catch(()=>{})]); }catch(e){ toast('Details did not load. Try again.'); return; } }
+  if(P(id).c.dsig[I(id)] && !DIST){ try{ await loadDistress(); }catch(e){ toast('Distress details did not load.'); } }
   const p=P(id), i=I(id), c=p.c, folio=getStr(p,'folio',i), addr=getStr(p,'addr',i)||'No street address';
   const city=D.city[c.city[i]], zip=D.zip[c.zip[i]], fl=c.flags[i], mv=c.mkt[i], zn=D.zoning[c.zoning[i]], lu=D.landuse[c.landuse[i]];
   const rows=pairs=>pairs.filter(x=>x[1]!==''&&x[1]!=null).map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join('');
@@ -402,6 +452,7 @@ async function openDrawer(id){
       <button class="btn" type="button" id="copyFolio">Copy folio</button>
       <button class="btn" type="button" id="onMap">Show on map</button>
     </div>
+    ${distressHTML(p,i,folio)}
     <h3>The property</h3><div class="dl">${rows([
       ['What it is', `${TYPE_LABEL[LU_T[c.landuse[i]]]}<small>${esc(lu)}</small>`],
       ['City zoning', MZ[c.mz[i]] ? `<span class="mzcode">${esc(MZ[c.mz[i]][0])}</span> · ${esc(MZ[c.mz[i]][1])}<small>${esc(mzLabel(c.mz[i]))}${MZ[c.mz[i]][5]?' · min lot '+fmt.format(+MZ[c.mz[i]][5])+' sq ft':''}</small>` : 'Not found on the zoning map'],
@@ -445,8 +496,9 @@ async function copy(text,ok){
   catch(e){ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); toast(ok); }catch(_){ toast('Copying was blocked here.'); } ta.remove(); }
 }
 const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
 function buildCSV(){
-  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','LLC/Company','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link'];
+  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','LLC/Company','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources'];
   const parts=[head.join(',')+'\n']; let buf='';
   for(let j=0;j<results.length;j++){
     const id=results[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
@@ -455,7 +507,8 @@ function buildCSV(){
       c.land[i],c.bldg[i],mv,c.assd[i],mv?Math.round(c.land[i]/mv*100):'',dateStr(c.sd1[i]),c.sale1[i]||'',c.sq1[i]===1?'Y':c.sq1[i]===2?'N':'',
       dateStr(c.sd2[i]),c.sale2[i]||'',csvq(getStr(p,'owner',i)),fl&8?'LLC/Company':fl&16?'Trust':fl&32?'Government':'Individual',csvq(getStr(p,'mail',i)),
       fl&1?'Y':'',fl&2?'Y':'',fl&4?'Y':'',fl&8?'Y':'',fl&16?'Y':'',fl&64?'Y':'',csvq(D.cra[c.cra[i]]||''),csvq(getStr(p,'legal',i)),
-      fl&128?'Y':'',c.taxable[i],c.prv[i]||'',csvq(getStr(p,'grantor',i)),getStr(p,'book',i),p.geo&&p.geo.lat[i]>20?p.geo.lat[i].toFixed(6):'',p.geo&&p.geo.lat[i]>20?p.geo.lon[i].toFixed(6):'','https://apps.miamidadepa.gov/propertysearch/#/?folio='+getStr(p,'folio',i)].join(',')+'\n';
+      fl&128?'Y':'',c.taxable[i],c.prv[i]||'',csvq(getStr(p,'grantor',i)),getStr(p,'book',i),p.geo&&p.geo.lat[i]>20?p.geo.lat[i].toFixed(6):'',p.geo&&p.geo.lat[i]>20?p.geo.lon[i].toFixed(6):'','https://apps.miamidadepa.gov/propertysearch/#/?folio='+getStr(p,'folio',i),
+      c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i))].join(',')+'\n';
     if(buf.length>1e6){ parts.push(buf); buf=''; }
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
@@ -463,7 +516,7 @@ function buildCSV(){
 $('exportBtn').onclick=async()=>{
   if(!results.length){ toast('Nothing to export yet.'); return; }
   const btn=$('exportBtn'); btn.disabled=true; btn.textContent='Preparing…';
-  try{ await ensureDetail(); await ensureGeo(); }catch(e){ toast('Export data did not load. Try again.'); btn.disabled=false; btn.textContent='Export CSV'; return; }
+  try{ await ensureDetail(); await ensureGeo(); await loadDistress(); }catch(e){ toast('Export data did not load. Try again.'); btn.disabled=false; btn.textContent='Export CSV'; return; }
   btn.textContent='Building CSV…'; await new Promise(r=>setTimeout(r,30));
   try{
     const d=new Date(), name=`miami-dade-properties-${results.length}-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`;
@@ -486,6 +539,7 @@ function writeHash(st){
     if(st.exZ.length) h.set('pz',st.exZ.map(v=>v.split(' - ')[0]).join(','));
     if(st.exL.length) h.set('lu',st.exL.map(v=>v.split(' - ')[0]).join(','));
     if(st.owner&&st.owner!=='all') h.set('owner',st.owner);
+    if(st.dsig&&st.dsig.length) h.set('sig',st.dsig.join(',')); if(st.dsMin) h.set('ds',st.dsMin);
     OWNER_ROWS.forEach(([k])=>{ const v=st.flags[k]; if(v==='yes'||v==='no') h.set('o_'+k,v); });
     HASH_NUM.forEach(id=>{ if(st[id]!=null && st[id]!=='' && !(id.startsWith('mv')&&!st[id])) h.set(id,st[id]); });
     if(!st.hideGov) h.set('gov','1'); if(st.noBldg) h.set('land','1'); if(st.qualOnly) h.set('mkt','1');
@@ -503,6 +557,7 @@ function parseHash(){
   const st={...BLANK()};
   st.q=h.get('q')||''; st.qScope=h.get('in')||'ao'; st.city=h.get('city')||''; st.zips=h.get('zip')||''; st.cra=h.get('cra')||''; st.mzq=h.get('code')||'';
   st.types=list('type'); st.zones=list('zone'); st.exZ=byCode(D.zoning,list('pz')); st.exL=byCode(D.landuse,list('lu'));
+  st.dsig=list('sig'); st.dsMin=+h.get('ds')||0;
   st.owner=h.get('owner')||'all'; st.flags={}; OWNER_ROWS.forEach(([k])=>{ const v=h.get('o_'+k); if(v==='yes'||v==='no') st.flags[k]=v; });
   HASH_NUM.forEach(id=>{ const v=h.get(id); st[id]=(v==null||v==='')?null:(isFinite(+v)?+v:null); });
   st.hideGov=h.get('gov')!=='1'; st.noBldg=h.get('land')==='1'; st.qualOnly=h.get('mkt')==='1';
@@ -553,12 +608,16 @@ function loadGeo(i){
 }
 const ensureGeo=()=>Promise.all(PACKS.map((p,i)=>p&&!p.geo?loadGeo(i):null));
 const TONES=[['vacant','Vacant land'],['res','Homes & condos'],['multi','Multifamily'],['com','Commercial & mixed'],['ind','Industrial & other'],['gov','Civic & government']];
-let TONE_RGB=null, LU_TONE=null;
+let TONE_RGB=null, LU_TONE=null, MAP_COLOR='type', SC_RGB=null;
+const SC_TONES=[['s0','No signals'],['s1','1–19'],['s2','20–34'],['s3','35–49'],['s4','50+']];
+const scIdx=v=>v>=50?4:v>=35?3:v>=20?2:v>0?1:0;
+function legendSetup(){ if(!TONE_RGB) return; $('mapLegend').innerHTML = MAP_COLOR==='score' ? '<span class="lt">Distress score</span>'+SC_TONES.map(([t,l],k)=>`<span><i style="background:${SC_RGB[k].css}"></i>${l}</span>`).join('') : TONES.map(([t,l],k)=>`<span><i style="background:${TONE_RGB[k].css}"></i>${l}</span>`).join(''); }
 function toneSetup(){
   const cs=getComputedStyle(document.documentElement);
   TONE_RGB=TONES.map(([t])=>{ const hex=(cs.getPropertyValue('--t-'+t).trim()||'#888888').replace('#',''); const v=parseInt(hex.length===3?hex.split('').map(x=>x+x).join(''):hex,16); return {css:'#'+hex, r:(v>>16)&255, g:(v>>8)&255, b:v&255}; });
   const ti=Object.fromEntries(TONES.map(([t],k)=>[t,k])); LU_TONE=Uint8Array.from(LU_T,t=>ti[TYPE_TONE[t]]||0);
-  $('mapLegend').innerHTML=TONES.map(([t,l],k)=>`<span><i style="background:${TONE_RGB[k].css}"></i>${l}</span>`).join('');
+  SC_RGB=SC_TONES.map(([t])=>{ const hex=(cs.getPropertyValue('--'+t).trim()||'#888888').replace('#',''); const v=parseInt(hex,16); return {css:'#'+hex, r:(v>>16)&255, g:(v>>8)&255, b:v&255}; });
+  legendSetup();
 }
 function makeDotLayer(){
   return L.Layer.extend({
@@ -582,18 +641,18 @@ function drawDots(layer){
   const W=size.x, H=size.y;
   if(n>25000){
     const img=ctx.createImageData(cw,ch), d32=new Uint32Array(img.data.buffer), s=Math.max(1,Math.round((z>=15?3.2:z>=13?2.4:z>=11?1.8:1.3)*dpr)), h=s>>1;
-    const col=TONE_RGB.map(t=>(255<<24)|(t.b<<16)|(t.g<<8)|t.r);
+    const byS=MAP_COLOR==='score', col=(byS?SC_RGB:TONE_RGB).map(t=>(255<<24)|(t.b<<16)|(t.g<<8)|t.r);
     for(let j=n-1;j>=0;j--){ const id=results[j], p=P(id), g=p.geo; if(!g){ nogeo++; SX[j]=-1e9; continue; } const i=I(id);
       const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; SX[j]=x; SY[j]=y; if(!(x>=-4&&y>=-4&&x<W+4&&y<H+4)) continue; vis++;
-      const px=Math.round(x*dpr)-h, py=Math.round(y*dpr)-h, cc=col[LU_TONE[p.c.landuse[i]]];
+      const px=Math.round(x*dpr)-h, py=Math.round(y*dpr)-h, cc=col[byS?scIdx(p.c.dscore[i]):LU_TONE[p.c.landuse[i]]];
       for(let yy=py;yy<py+s;yy++){ if(yy<0||yy>=ch) continue; const row=yy*cw; for(let xx=px;xx<px+s;xx++){ if(xx>=0&&xx<cw) d32[row+xx]=cc; } } }
     ctx.putImageData(img,0,0);
   } else {
     ctx.setTransform(dpr,0,0,dpr,0,0); const r=z>=16?6:z>=14?5:z>=12?4:3, stroke=getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()||'#fff';
-    ctx.lineWidth=1; ctx.strokeStyle=stroke;
+    ctx.lineWidth=1; ctx.strokeStyle=stroke; const byS=MAP_COLOR==='score';
     for(let j=n-1;j>=0;j--){ const id=results[j], p=P(id), g=p.geo; if(!g){ nogeo++; SX[j]=-1e9; continue; } const i=I(id);
       const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; SX[j]=x; SY[j]=y; if(!(x>=-8&&y>=-8&&x<W+8&&y<H+8)) continue; vis++;
-      ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fillStyle=TONE_RGB[LU_TONE[p.c.landuse[i]]].css; ctx.fill(); if(r>=4) ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fillStyle=byS?SC_RGB[scIdx(p.c.dscore[i])].css:TONE_RGB[LU_TONE[p.c.landuse[i]]].css; ctx.fill(); if(r>=4) ctx.stroke(); }
   }
   SN=n;
   if(MAP_SEL>=0){ const p=P(MAP_SEL), g=p&&p.geo, i=I(MAP_SEL); if(g&&g.lat[i]>20){ const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=3; ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--danger').trim()||'#c00'; ctx.beginPath(); ctx.arc(x,y,11,0,6.2832); ctx.stroke(); } }
@@ -663,6 +722,10 @@ async function showMap(reset){
 /* ideas */
 const BLANK=()=>({hideGov:true,sort:'lot_d',flags:{},owner:'all'});
 const IDEAS=[
+  ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
+  ['Pre-foreclosure & auctions', ()=>({...BLANK(), dsig:['LP','FC'], sort:'ds_d'})],
+  ['Tax deeds & delinquent', ()=>({...BLANK(), dsig:['TD','TC'], dsMin:35, sort:'ds_d'})],
+  ['Unsafe structures', ()=>({...BLANK(), dsig:['US'], sort:'ds_d'})],
   ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:5000, lotMax:87120, sort:'lot_a'})],
   ['Houses on multifamily land', ()=>({...BLANK(), types:['sf'], zones:['mf'], sort:'lot_d'})],
   ['Teardowns', ()=>({...BLANK(), types:['sf','mf29'], lsMin:80, ybMax:1969, sort:'lp_d'})],
@@ -686,6 +749,10 @@ function wire(){
   ['mvMin','mvMax','city','cra','qScope','hideGov','noBldg','qualOnly'].forEach(id=>$(id).addEventListener('change',()=>{ clearIdea(); schedule(0); }));
   $('q').addEventListener('input',()=>schedule(250));
   $('types').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.t; S.types.has(k)?S.types.delete(k):S.types.add(k); await ensureCondo(); run(); });
+  $('dsigs').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.sig; S.dsig.has(k)?S.dsig.delete(k):S.dsig.add(k); run(); });
+  $('dsMin').addEventListener('change',()=>{ clearIdea(); schedule(0); });
+  $('clrDs').onclick=()=>{ S.dsig.clear(); $('dsMin').value='0'; clearIdea(); run(); };
+  $('mapColor').addEventListener('change',()=>{ MAP_COLOR=$('mapColor').value; try{ localStorage.setItem('mdpf.mapColor',MAP_COLOR); }catch(e){} legendSetup(); if(mapLayer) mapLayer.redraw(); });
   $('zones').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.z; S.zones.has(k)?S.zones.delete(k):S.zones.add(k); run(); });
   $('clrType').onclick=()=>{ S.types.clear(); S.exL.clear(); clearIdea(); run(); };
   $('ownerKind').addEventListener('click',e=>{ const b=e.target.closest('button[data-k]'); if(!b) return; S.owner=b.dataset.k; clearIdea(); run(); });
@@ -730,6 +797,9 @@ async function boot(){
     D.cra.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('cra').appendChild(o); });
     $('mvMin').innerHTML=MONEY_STEPS.map(v=>`<option value="${v}">${v?money(v):'No min'}</option>`).join('');
     $('mvMax').innerHTML=MONEY_STEPS.map(v=>`<option value="${v}">${v?money(v):'No max'}</option>`).join('');
+    $('dsMin').innerHTML=DS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+    try{ MAP_COLOR=localStorage.getItem('mdpf.mapColor')==='score'?'score':'type'; }catch(e){} $('mapColor').value=MAP_COLOR;
+    if(META.distress){ const d=META.distress; $('dsSrc').textContent=`Built ${META.built}. ${fmt.format(d.parcels_with_signals||0)} parcels have at least one record.`; }
     $('sortSel').innerHTML=SORTS.map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');
     $('ownerGrid').innerHTML=OWNER_ROWS.map(([k,l])=>`<label for="ow_${k}">${l}</label><select id="ow_${k}"><option value="any">Either</option><option value="yes">Only</option><option value="no">Hide</option></select>`).join('');
     OWNER_ROWS.forEach(([k])=>$('ow_'+k).addEventListener('change',e=>{ S.flags[k]=e.target.value; clearIdea(); schedule(0); }));

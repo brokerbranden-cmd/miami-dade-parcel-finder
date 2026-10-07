@@ -86,6 +86,40 @@ Order: `fetch_pagis` → `fetch_layers` → `load_raw` → `fetch_zone_desc` →
   - "Same owner name" portfolio count with a one-click "Show them all"
 - Lazy-loaded detail, geo and condo packs. The first load is about 19 MB. Later visits read from the browser cache.
 
+## Distress layers & Distress Score
+
+Every signal is a real public record matched to a folio; nothing is inferred except the small "soft" factors.
+
+| Code | Signal | Source | Access | Pts |
+|---|---|---|---|---|
+| FC | Foreclosure sale scheduled | miamidade.realforeclose.com auction calendar (`fetch_auctions.py`) | scraped, ~1 req/s | 35 |
+| TD | Tax deed application / sale | TaxSys "Public-Open Deeds" report + realforeclose TAXDEED sales | scraped (headless browser) | 30 |
+| LP | Lis pendens | Clerk Official Records (`fetch_clerk.py`) | scraped; **blocked by reCAPTCHA** without a Clerk login, cached data used | 25 (15 if >12 mo) |
+| US | Unsafe structure case | County Open_Building_Violations (ArcGIS) | official API | 22 |
+| TC | Unpaid tax certificates | TaxSys "Public-Open Certificates wAddr" | scraped report | 10 +4/extra yr (max 18) |
+| PR | Probate / estate / unknown heirs | owner name "EST OF"/heirs + No-Heir Probates output | derived/local | 15 |
+| DC | Owner deceased | Obituary Scraper matches | local | 15 (7 with PR) |
+| LN | Code / building lien | County BuildingViolationLien, CodeCompliance Lien + ReferredtoFinance (ArcGIS) | official API | 12 |
+| BV | Open building violation | County Open_Building_Violations | official API | 8 |
+| CC | Open code compliance case | County CodeComplianceViolation_Open_View | official API | 8 (4 with BV) |
+| RC | 40/50-yr recert overdue | City of Miami 40_Year_Recertification (ArcGIS) | official API | 8 |
+| TX | Delinquent taxes, no cert yet | TaxSys "Public-unpaid accts non-cert" | scraped report | 6 |
+
+Soft factors (capped at 20 total): out-of-state owner 6 / absentee 4; owned 20+ yrs 5 / 10+ yrs 2; teardown (bldg < 20% of value) 6 or vacant lot 3; no homestead 3.
+**Score = min(100, hard points + soft points)**; government-owned parcels score 0. The drawer shows the breakdown.
+
+Blocked / not covered: Clerk Official Records search (reCAPTCHA; needs a free registered Clerk login session or paid units),
+City of Miami code cases/liens (not published; CityView per-case lookup only), miamidade.realtaxdeed.com (403; tax deeds sell on realforeclose).
+
+UI: "Distress signals" filter (chips with counts, min score), presets 🔥 Hottest leads / Pre-foreclosure / Tax deeds / Unsafe,
+sort by score, score badge on cards + table column, signal records with source links in the drawer, CSV columns
+Distress Score/Signals/Signal Details/Signal Sources, map "Color by score".
+
+Weekly refresh: `scripts/build_all.sh` (or just the four `fetch_*` + `build_distress.py` + `build_data.py`).
+
+New-lead digest: `python3 scripts/top_leads.py --since 2026-10-01 [--min 40 --limit 50 --out out/top_leads]`
+writes `out/top_leads.csv` and `out/top_leads.html` (email body). It sends nothing.
+
 ## Testing
 
 ```bash

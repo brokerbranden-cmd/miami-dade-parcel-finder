@@ -5,6 +5,7 @@
   --accent:#0a6f6a; --accent-ink:#ffffff; --accent-soft:#dcefed; --amber:#9a5c08; --amber-soft:#fbefd9;
   --danger:#a63a2a; --danger-soft:#f8e3df;
   --t-vacant:#7a5a12; --t-res:#0a6f6a; --t-multi:#2f5ea8; --t-com:#8a3f8f; --t-ind:#5d6670; --t-gov:#6b7b2a;
+  --s0:#b9c4ca; --s1:#e6c46a; --s2:#e89a3c; --s3:#d9632b; --s4:#b3261e;
   --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
   --f-body:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -12,11 +13,11 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0d1519; --surface:#142027; --sunk:#101a20; --ink:#e2ebee; --muted:#93a5b0; --line:#26353e;
   --accent:#3dbdb3; --accent-ink:#06201e; --accent-soft:#163538; --amber:#e9a644; --amber-soft:#3a2b14; --danger:#ef8270; --danger-soft:#3b1f1a;
-  --t-vacant:#e0b55a; --t-res:#4fc7bd; --t-multi:#7ea7ef; --t-com:#d18ad6; --t-ind:#a8b3bd; --t-gov:#b5c86a; color-scheme:dark}}
+  --t-vacant:#e0b55a; --t-res:#4fc7bd; --t-multi:#7ea7ef; --t-com:#d18ad6; --t-ind:#a8b3bd; --t-gov:#b5c86a; --s0:#4a5862; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0d1519; --surface:#142027; --sunk:#101a20; --ink:#e2ebee; --muted:#93a5b0; --line:#26353e;
   --accent:#3dbdb3; --accent-ink:#06201e; --accent-soft:#163538; --amber:#e9a644; --amber-soft:#3a2b14; --danger:#ef8270; --danger-soft:#3b1f1a;
-  --t-vacant:#e0b55a; --t-res:#4fc7bd; --t-multi:#7ea7ef; --t-com:#d18ad6; --t-ind:#a8b3bd; --t-gov:#b5c86a; color-scheme:dark}
+  --t-vacant:#e0b55a; --t-res:#4fc7bd; --t-multi:#7ea7ef; --t-com:#d18ad6; --t-ind:#a8b3bd; --t-gov:#b5c86a; --s0:#4a5862; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
 .wrap{padding-inline:16px;padding-block:18px 40px;max-width:1380px;margin:0 auto;display:grid;gap:16px}
@@ -199,3 +200,29 @@ img{max-width:100%}
 .stackitem{display:grid;text-align:left;font:inherit;font-size:13px;background:none;border:0;border-bottom:1px solid #e3e8ea;padding:6px 2px;cursor:pointer;color:#13222b}
 .stackitem:hover b{color:#0a6f6a}
 .stackitem small{color:#56687a}
+
+/* distress score */
+.dsrow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.dsmin{display:inline-flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.dsmin select{width:auto}
+.dchip{background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 30%,transparent)}
+.dchip.on{background:var(--danger);border-color:var(--danger);color:#fff}
+.dscore{margin-left:auto;font-family:var(--f-mono);font-weight:700;font-size:12.5px;min-width:30px;text-align:center;border-radius:6px;padding:2px 6px;color:#fff;line-height:1.3}
+td .dscore{margin:0;display:inline-block}
+h3 .dscore{margin-left:8px;vertical-align:2px}
+.dscore.big{font-size:14px;padding:3px 8px}
+.dscore.s0{background:var(--s0);color:var(--ink)} .dscore.s1{background:var(--s1);color:#3a2b05} .dscore.s2{background:var(--s2);color:#2b1503} .dscore.s3{background:var(--s3)} .dscore.s4{background:var(--s4)}
+td.sigs{font-family:var(--f-mono);font-size:12px;white-space:nowrap;color:var(--danger)}
+.dbreak{display:grid;gap:2px;font-size:13.5px;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:10px}
+.dbreak div{display:flex;justify-content:space-between;gap:12px}
+.dbreak b{font-family:var(--f-mono);font-weight:600}
+.dbreak .tot{border-top:1px solid var(--line);margin-top:4px;padding-top:4px;font-weight:700}
+.dlist{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:8px;font-size:13.5px}
+.dlist li{border-left:3px solid var(--line);padding:2px 0 2px 10px;overflow-wrap:anywhere}
+.dlist small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.dlist a{font-size:12.5px}
+.dtag{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;border:1px solid currentColor}
+.dtag.hot{color:var(--danger)} .dtag.warm{color:var(--amber)}
+.mono{font-family:var(--f-mono);font-size:12px}
+.maplegend .lt{font-weight:700}
+#mapColor{width:auto;font-size:13px}

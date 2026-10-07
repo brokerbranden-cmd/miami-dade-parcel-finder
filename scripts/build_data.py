@@ -167,13 +167,43 @@ qflag = lambda c: np.select([S(c) == 'Q', S(c) == 'U'], [1, 2], 0)
 yb = N('YEAR_BUILT'); yb = np.where((yb > 1700) & (yb < 2100), yb, 0)
 lat = pd.to_numeric(df.LAT, errors='coerce').fillna(0).values; lon = pd.to_numeric(df.LON, errors='coerce').fillna(0).values
 
+# ---------- distress score (see README "Distress Score") ----------
+# hard signals come from build_distress.py (RAW/distress.parquet); soft owner/property signals are added here.
+dfile = f'{RAW}/distress.parquet'
+if os.path.exists(dfile):
+    dd = pd.read_parquet(dfile)
+    dmap = df[['FOLIO']].merge(dd, on='FOLIO', how='left')
+    dsig = dmap.dsig.fillna(0).astype(np.int64).values; dhard = dmap.dhard.fillna(0).values
+else:
+    dsig = np.zeros(n, dtype=np.int64); dhard = np.zeros(n)
+est_a = np.array(est); corp_gov = np.array([k in ('corp', 'govt') for k in kinds])
+dsig = dsig | (est_a * (1 << 10))                     # PR bit also set by estate/heirs owner names
+dpts = dmap.dpts.fillna('').values if os.path.exists(dfile) else np.array([''] * n)
+has_pr = np.array(['"PR"' in x for x in dpts]); has_dc = np.array(['"DC"' in x for x in dpts])
+dhard = dhard + np.where(est_a & ~has_pr, np.where(has_dc, 7, 15), 0)   # estate/heirs owner name = PR (PR+DC capped at 22)
+bv, mk, landv = N('BUILDING_VAL_CUR').values, N('TOTAL_VAL_CUR').values, N('LAND_VAL_CUR').values
+sd1d = days('DOS_1'); today_d = (dt.date.today() - DAY0).days
+yrs_owned = np.where(sd1d > 0, (today_d - sd1d) / 365.25, 0)
+s_abs = np.where(oos.values, 6, np.where(absz.values, 4, 0))
+s_long = np.where(yrs_owned >= 20, 5, np.where(yrs_owned >= 10, 2, 0))
+tear = (bv > 0) & (mk > 0) & (bv / np.maximum(mk, 1) < 0.2)
+s_tear = np.where(tear, 6, np.where((bv == 0) & (N('LOT_SIZE').values > 0) & ~corp_gov, 3, 0))
+s_nohs = np.where(~homestead.values & ~corp_gov, 3, 0)
+soft = np.minimum(20, s_abs + s_long + s_tear + s_nohs)
+dsig = dsig | ((s_abs > 0) << 12) | ((s_long >= 5) << 13) | (tear << 14) | ((s_nohs > 0) << 15)
+govt_a = np.array([k == 'govt' for k in kinds])
+dscore = np.where(govt_a, 0, np.minimum(100, dhard + soft))  # government-owned land never scores
+dsig = np.where(govt_a, 0, dsig)
+pd.DataFrame({'FOLIO': df.FOLIO.values, 'dscore': dscore.astype(int), 'dsig': dsig.astype(int), 'hard': np.minimum(100, dhard).astype(int), 'soft': soft.astype(int)}).to_parquet(f'{RAW}/scores.parquet', index=False)
+print('distress: parcels with any hard signal', int((dhard > 0).sum()), 'score>=50', int((dscore >= 50).sum()), 'score>=70', int((dscore >= 70).sum()))
+
 cols_main = {
     'city': u8(city_i), 'zip': u16(zip_i), 'cra': u8(cra_i), 'landuse': u16(landuse_i), 'zoning': u16(zoning_i), 'mz': u16(mz_i),
     'lot': u32(N('LOT_SIZE')), 'mkt': u32(N('TOTAL_VAL_CUR')), 'land': u32(N('LAND_VAL_CUR')), 'bldg': u32(N('BUILDING_VAL_CUR')),
     'sqft': u32(sqft), 'yb': u16(yb), 'units': u16(N('UNIT_COUNT')), 'beds': u8(N('BEDROOM_COUNT')),
     'baths': u8((N('BATHROOM_COUNT') + 0.5 * N('HALF_BATHROOM_COUNT')) * 10), 'stories': u8(N('FLOOR_COUNT')),
     'sd1': u16(days('DOS_1')), 'sale1': u32(N('PRICE_1')), 'sq1': u8(qflag('QU_FLG_1')), 'flags': flags,
-    'prv': u32(N('TOTAL_VAL_PRI')),
+    'prv': u32(N('TOTAL_VAL_PRI')), 'dscore': u8(dscore), 'dsig': u16(dsig),
 }
 str_main = {'folio': list(S('FOLIO')), 'addr': addr, 'owner': [clean(o) for o in owner_str]}
 cols_det = {'assd': u32(N('ASSESSED_VAL_CUR')), 'taxable': u32(N('CNTY_TAXABLE_VAL_CUR')), 'sd2': u16(days('DOS_2')), 'sale2': u32(N('PRICE_2')),
@@ -219,6 +249,8 @@ meta = {
     'rollYear': int(pd.to_numeric(df.ASSESSMENT_YEAR_CUR, errors='coerce').max()),
     'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%d/%Y'),
     'stats': stats, 'packs': packs,
+    'distress': json.load(open(f'{RAW}/distress_stats.json')) if os.path.exists(f'{RAW}/distress_stats.json') else None,
+    'distressFile': 'distress.json.gz' if os.path.exists(os.path.join(OUT, 'distress.json.gz')) else None,
     'dicts': {'city': city, 'zip': zips, 'cra': cra, 'landuse': landuse, 'zoning': zoning, 'mzone': mz_list},
     'sources': {
         'roll': 'https://gisweb.miamidade.gov/arcgis/rest/services/MD_ComparableSales/MapServer/5',

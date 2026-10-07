@@ -44,6 +44,12 @@
     </div>
     <div class="areachip" id="areaRow" hidden><span>Limited to an area you picked on the map</span><button class="clr" type="button" id="clrArea">Remove area</button></div>
 
+    <div class="grp distress">
+      <div class="grp-h"><h2>Distress signals</h2><span class="hint">Foreclosures, tax deeds, unpaid taxes, code cases, liens and probate matched to each folio. Pick signals to see parcels with any of them. <span id="dsSrc"></span></span><button class="clr" type="button" id="clrDs">Clear</button></div>
+      <div class="dsrow"><div class="chips" id="dsigs"></div>
+        <label class="dsmin">Min score <select id="dsMin" aria-label="Minimum distress score"></select></label></div>
+    </div>
+
     <div class="grp">
       <div class="grp-h"><h2>What's on the property</h2><span class="hint">Pick one or more. Condo units are only searched when you pick Condo units.</span><button class="clr" type="button" id="clrType">Clear</button></div>
       <div class="chips" id="types"></div>
@@ -159,6 +165,7 @@
     <div class="maptools">
       <button class="btn" type="button" id="mapArea">Search this map area</button>
       <button class="btn" type="button" id="mapFit">Zoom to results</button>
+      <select id="mapColor" aria-label="Color dots by"><option value="type">Color: property type</option><option value="score">Color: distress score</option></select>
     </div>
     <div class="maplegend" id="mapLegend"></div>
     <div class="maphint" id="mapHint"></div>

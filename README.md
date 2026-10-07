@@ -1,5 +1,7 @@
 # Miami-Dade Parcel Finder
 
+**Live site:** https://brokerbranden-cmd.github.io/miami-dade-parcel-finder/
+
 A fast, static web app for finding investment properties anywhere in Miami-Dade County. It runs on real public data from Miami-Dade County GIS and the Property Appraiser (PA), with nothing made up. There's no server-side code: the browser downloads compact data packs once, caches them in IndexedDB, and does all the filtering locally.
 
 **Current build:** 922,797 properties from the **2026** PA roll (live roll as of the 10/06/2026 pull; newest recorded sale 09/22/2026). Farmland (7,713 parcels) and reference-only folios (7,610) are left out.

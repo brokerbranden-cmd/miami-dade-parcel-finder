@@ -23,7 +23,7 @@ with sync_playwright() as pw:
         page.click(f'#ideas .chip[data-i="{k}"]'); page.wait_for_timeout(1200)
         print('preset', page.inner_text(f'#ideas .chip[data-i="{k}"]'), '->', page.inner_text('#sCount'), '| first card:', (page.inner_text('#cards .card h3') if page.query_selector('#cards .card h3') else '-'))
     # filters: city + zoning code + owner kind
-    page.click('#ideas .chip[data-i="6"]'); page.wait_for_timeout(800)
+    page.click('#ideas .chip[data-i="7"]'); page.wait_for_timeout(800)
     page.select_option('#city', 'Miami'); page.wait_for_timeout(800); print('vacant infill + Miami', page.inner_text('#sCount'))
     page.click('#mzMiami .chip[data-mz="T6"]'); page.wait_for_timeout(800); print('+ T6', page.inner_text('#sCount'), 'mzq=', page.input_value('#mzq'))
     page.click('#ownerKind button[data-k="corp"]'); page.wait_for_timeout(800); print('+ LLCs', page.inner_text('#sCount'))
@@ -56,7 +56,7 @@ with sync_playwright() as pw:
     box = page.query_selector('#map').bounding_box()
     hit = page.evaluate("""() => { const c=document.querySelector('.dotlayer'); return null; }""")
     # whole county map with all vacant land
-    page.click('#ideas .chip[data-i="6"]'); page.select_option('#city', ''); page.wait_for_timeout(2500)
+    page.click('#ideas .chip[data-i="7"]'); page.select_option('#city', ''); page.wait_for_timeout(2500)
     print('map all vacant:', page.inner_text('#mapHint'))
     page.screenshot(path=SHOTS + '07_map_county.png')
     # hash restore in new page

@@ -19,6 +19,12 @@ const esc = s => String(s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'
 const DSIG=[['FC','Foreclosure sale','hot'],['LP','Lis pendens','hot'],['TD','Tax deed','hot'],['TC','Tax certificates','warm'],['TX','Delinquent taxes','warm'],['US','Unsafe structure','hot'],['BV','Building violation','warm'],['CC','Code case','warm'],['LN','Lien','warm'],['RC','Recert overdue','warm'],['PR','Probate / estate','hot'],['DC','Owner deceased','hot']];
 const DSOFT=[[12,'Absentee / out of state'],[13,'Owned 20+ years'],[14,'Low building value'],[15,'No homestead']];
 const DBIT=Object.fromEntries(DSIG.map((d,i)=>[d[0],i]));
+/* vacancy / neglect hint: bit order matches scripts/vacancy_lib.py VSIG (points shown are the defaults; see README) */
+const VSIG=[['NA','No homestead + absentee',15],['US','Unsafe structure case',25],['NG','Neglect code case',15],['FR','Foreclosure registry',12],['XP','Expired / revoked permit',8],['NP','No permit since 2014',6],['LO','Owned 20+ years',5],['LB','Building < 20% of value',8],['TX','Tax delinquent',10],['ES','Estate / deceased',8],['OV','Other open case',4],['RP','Recent permit',-15]];
+const VBIT=Object.fromEntries(VSIG.map((d,i)=>[d[0],i]));
+const VS_STEPS=[[0,'Any'],[25,'25+ possible'],[40,'40+ likely'],[60,'60+ strong']];
+const vsTone=v=>v>=60?'v3':v>=40?'v2':v>=25?'v1':'v0';
+const vsWord=v=>v>=60?'Strong vacancy hint':v>=40?'Likely vacant / neglected':v>=25?'Possibly vacant':'';
 const DS_STEPS=[[0,'Any score'],[20,'20+'],[35,'35+'],[50,'50+ (hot)'],[70,'70+']];
 const dsTone=v=>v>=50?'s4':v>=35?'s3':v>=20?'s2':v>0?'s1':'s0';
 let DIST=null, distP=null;
@@ -95,7 +101,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { og:0, ogf:'', saved:false, svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { og:0, ogf:'', saved:false, vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
@@ -190,7 +196,7 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; return st;
+  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
@@ -204,6 +210,7 @@ function applyState(st){
   S.sort=SORT_MAP[st.sort]?st.sort:'lot_d'; $('sortSel').value=S.sort; S.view=['cards','table','map'].includes(st.view)?st.view:(S.view||'cards');
   $('ogMin').value=[0,2,3,5,10,25].includes(+st.ogMin)?String(+st.ogMin):'0'; $('ogDist').checked=!!st.ogDist; $('ogInst').checked=!!st.ogInst;
   if((st.ogf||'')!==S.ogf){ S.ogf=st.ogf||''; S.og=0; } $('ogRow').hidden=!S.ogf;
+  S.vsig=new Set((st.vsig||[]).filter(k=>k in VBIT)); $('vsMin').value=VS_STEPS.some(x=>x[0]===+st.vsMin)?String(+st.vsMin):'0'; $('vsMine').checked=!!st.vsMine;
   S.saved=!!st.saved; S.svSt=new Set((st.svSt||[]).filter(x=>SV.STATUSES.includes(x)));
   S.bbox=Array.isArray(st.bbox)&&st.bbox.length===4&&st.bbox.every(Number.isFinite)?st.bbox:null; $('areaRow').hidden=!S.bbox;
 }
@@ -238,15 +245,19 @@ function run(){
   let sigMask=0; for(const k of S.dsig) sigMask|=1<<DBIT[k]; const dsMin=st.dsMin||0, dc=new Uint32Array(DSIG.length+1);
   const ogF=S.ogf?(S.og||-1):0, ogMin=st.ogMin||0, ogDist=st.ogDist?2:0, useOg=!!((ogMin||ogDist)&&OWN), exInst=useOg&&!st.ogInst;
   if((ogMin||ogDist||st.sort==='og_d'||st.sort==='ogd_d') && !OWN) loadOwners().then(()=>schedule(0)).catch(()=>{});
+  let vsMask=0; for(const k of S.vsig) vsMask|=1<<VBIT[k]; const vsMin=st.vsMin||0, vc=new Uint32Array(VSIG.length+1);
+  const mine=st.vsMine?new Set([...savedIdx()].filter(([f])=>{ const x=SV.get(f); return x&&x.vacant; }).map(([,id])=>id)):null;
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
-    if(!p || (p.name==='condo' && !incCondo && !ogF)) continue;
-    const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null;
+    if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
+    const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n);
     if(bb && !gl) continue;
     for(let i=0;i<n;i++){
       if(hits && !hits[i]) continue;
       if(ogF && c.og[i]!==ogF) continue;
+      if(mine && !mine.has(base+i)) continue;
+      if(vsMin && VS[i]<vsMin) continue;
       if(useOg){ const g=c.og[i]; if(!g || (ogMin && OWN.n[g]<ogMin) || (ogDist && OWN.nd[g]<ogDist) || (exInst && OWN.fl[g])) continue; }
       if(gl){ const la=gl.lat[i], lo=gl.lon[i]; if(!(la>=bb[0]&&la<=bb[2]&&lo>=bb[1]&&lo<=bb[3])) continue; }
       if(cityI>=0 && c.city[i]!==cityI) continue;
@@ -272,13 +283,15 @@ function run(){
       const fu=lA&&!lA[li]?1:0, fz=zA&&!zA[zi]?1:0, fm=mA&&!mA[mi]?1:0;
       const kind = fl&8 ? 1 : fl&16 ? 2 : fl&32 ? 3 : 0, fk = wantK>=0 && kind!==wantK ? 1:0;
       const nf=fu+fz+fm+fk;
-      if(nf===0 && sg&4095){ for(let b=0;b<12;b++) if(sg&(1<<b)) dc[b]++; if(!fsg) dc[12]++; }
-      if(fsg) continue;
+      const vg=VG[i], fvs=vsMask&&!(vg&vsMask)?1:0;
+      if(nf===0 && !fvs && sg&4095){ for(let b=0;b<12;b++) if(sg&(1<<b)) dc[b]++; if(!fsg) dc[12]++; }
+      if(nf===0 && !fsg && vg){ for(let b=0;b<VSIG.length;b++) if(vg&(1<<b)) vc[b]++; }
+      if(fsg||fvs) continue;
       if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
       else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else kc[kind]++; }
     }
   }
-  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc};
+  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc};
   if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status))) r.push(id); } results=Uint32Array.from(r); }
   renderSavedUI();
   doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true);
@@ -286,7 +299,7 @@ function run(){
 
 /* sorting */
 const SORTS=[
-  ['ds_d','Highest distress score','dscore',-1],['sv_d','Recently saved','saved',-1],['ogd_d','Owner\'s distressed parcels','ogd',-1],['og_d','Owner\'s portfolio size','ogn',-1],['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
+  ['ds_d','Highest distress score','dscore',-1],['vs_d','Most likely vacant / neglected','vscore',-1],['sv_d','Recently saved','saved',-1],['ogd_d','Owner\'s distressed parcels','ogd',-1],['og_d','Owner\'s portfolio size','ogn',-1],['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
   ['mv_a','Lowest value first','mkt',1],['mv_d','Highest value first','mkt',-1],
   ['held_d','Owned the longest','sd1',1],['sold_d','Sold most recently','sd1',-1],
   ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
@@ -305,9 +318,9 @@ function doSort(){
     for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id), g=c.og[i]; key[j]=(g&&!(OWN.fl[g]&&!inst)?A[g]:(k==='ogn'?1:(c.dsig[i]&4095?1:0)))*256+c.dscore[i]; } }
   else if(k==='saved'){ for(let j=0;j<n;j++){ const id=results[j], it=SV.get(getStr(P(id),'folio',I(id))); key[j]=it?Date.parse(it.savedAt):0; } }
   else for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id);
-    key[j] = k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
+    key[j] = k==='vscore' ? (c.vscore?c.vscore[i]:0) : k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
   const idx=new Uint32Array(n); for(let i=0;i<n;i++) idx[i]=i;
-  const k2=k==='dscore'?(j=>{ const id=results[j]; return P(id).c.mkt[I(id)]; }):null;
+  const k2=k==='dscore'?(j=>{ const id=results[j]; return P(id).c.mkt[I(id)]; }):k==='vscore'?(j=>{ const id=results[j]; return P(id).c.dscore[I(id)]; }):null;
   idx.sort((a,b)=>(key[a]-key[b])*dir || (k2?k2(b)-k2(a):0) || a-b);
   const r2=new Uint32Array(n); for(let i=0;i<n;i++) r2[i]=results[idx[i]]; results=r2;
 }
@@ -335,6 +348,7 @@ function renderChips(){
   $('ownerKind').innerHTML=OWNER_KINDS.map(([k,l])=>`<button type="button" data-k="${k}" class="${S.owner===k?'on':''}" aria-pressed="${S.owner===k}">${l}<span class="n">${short(kN[k])}</span></button>`).join('');
   renderFacet('zoning'); renderFacet('landuse');
   const dcn=facet.dc||[]; $('dsigs').innerHTML=DSIG.map(([k,l],b)=>{ const on=S.dsig.has(k), n=dcn[b]||0; return `<button type="button" class="chip dchip ${on?'on':''} ${!n&&!on?'zero':''}" data-sig="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
+  const vcn=facet.vc||[]; $('vsigs').innerHTML=VSIG.map(([k,l,pt],b)=>{ const on=S.vsig.has(k), n=vcn[b]||0; return `<button type="button" class="chip vchip ${pt<0?'neg':''} ${on?'on':''} ${!n&&!on?'zero':''}" data-vs="${k}" aria-pressed="${on}" title="${pt>0?'+':''}${pt} points">${l}<span class="n">${short(n)}</span></button>`; }).join('');
 }
 function median(a){ if(!a.length) return 0; a.sort(); return a[a.length>>1]; }
 function renderSummary(){
@@ -354,7 +368,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0);
+  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0);
   const tot=k+main; $('onCount').hidden=!tot; $('onCount').textContent=tot+(tot===1?' filter on':' filters on'); $('resetBtn').disabled=!tot;
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
 }
@@ -374,6 +388,8 @@ function ownerBadges(fl){
 function mzLabel(mi){ const e=MZ[mi]; if(!e) return ''; const bits=[]; if(e[4]) bits.push(e[4]+' stories'); if(e[3]&&+e[3]>0) bits.push(e[3]+' units/acre'); return e[2]+(bits.length?' ('+bits.join(', ')+')':''); }
 function mzHTML(mi){ const e=MZ[mi]; if(!e) return ''; return `<span class="mzcode">${esc(e[0])}</span> · ${esc(mzLabel(mi))}`; }
 function sigBadges(sg){ let h=''; for(let b=0;b<12;b++) if(sg&(1<<b)) h+=`<span class="${DSIG[b][2]}">${DSIG[b][1]}</span>`; return h; }
+const vacBadge=(c,i)=>{ const v=c.vscore?c.vscore[i]:0; return v>=25?`<span class="vac ${vsTone(v)}" title="Vacancy / neglect hint ${v} of 100 (public records only)">${v>=40?'Likely vacant':'Possibly vacant'} · ${v}</span>`:''; };
+const vsigText=vg=>{ const a=[]; for(let b=0;b<VSIG.length;b++) if(vg&(1<<b)) a.push(VSIG[b][1]); return a.join(', '); };
 const scoreBadge=(v,big)=>`<span class="dscore ${dsTone(v)}${big?' big':''}" title="Distress score ${v} of 100">${v}</span>`;
 function cardHTML(id){
   const p=P(id), i=I(id), c=p.c;
@@ -384,7 +400,7 @@ function cardHTML(id){
   const folio=getStr(p,'folio',i), sv=SV.get(folio);
   return `<article class="card ${sv?'is-saved':''}" data-id="${id}" data-folio="${folio}" tabindex="0" aria-label="${esc(addr)}. Open details">
     <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span><span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span><span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
-    ${sv?`<div class="svline"><span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span><span class="svd">Saved ${svDate(sv.savedAt)}</span>${sv.note?`<span class="svn" title="${esc(sv.note)}">${esc(sv.note)}</span>`:''}</div>`:''}
+    ${sv?`<div class="svline"><span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span>${sv.vacant?'<span class="spill vmine" title="You marked it as looking vacant / damaged">Looks vacant (you)</span>':''}<span class="svd">Saved ${svDate(sv.savedAt)}</span>${sv.note||sv.cond?`<span class="svn" title="${esc([sv.note,sv.cond].filter(Boolean).join(' · '))}">${esc(sv.note||sv.cond)}</span>`:''}</div>`:''}
     <div><h3>${esc(addr)}</h3><div class="city">${esc(D.city[c.city[i]])}, FL ${D.zip[c.zip[i]]}</div></div>
     <div class="facts">
       <div><div class="k">Lot</div><div class="v">${!lot?'–':lot>=100000?acres(lot):fmt.format(lot)+' sf'}</div><div class="s">${!lot?'Shared lot':lot>=100000?short(lot)+' sq ft':acres(lot)}</div></div>
@@ -395,7 +411,7 @@ function cardHTML(id){
     <div class="line"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
-    <div class="ob">${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
+    <div class="ob">${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
 }
 function renderResults(reset){
@@ -414,7 +430,7 @@ function renderResults(reset){
 
 /* table */
 const COLS=[
-  {h:'<span class="sr">Saved</span>★',cls:'stc'},{h:'Address',s:'addr_a'},{h:'Score',num:true,s:'ds_d'},{h:'Signals'},{h:'Property'},{h:'City zoning'},{h:'Zoning type'},{h:'Lot sq ft',num:true,s:'lot_d'},{h:'Acres',num:true,s:'lot_d'},
+  {h:'<span class="sr">Saved</span>★',cls:'stc'},{h:'Address',s:'addr_a'},{h:'Score',num:true,s:'ds_d'},{h:'Signals'},{h:'Vacancy',num:true,s:'vs_d'},{h:'Property'},{h:'City zoning'},{h:'Zoning type'},{h:'Lot sq ft',num:true,s:'lot_d'},{h:'Acres',num:true,s:'lot_d'},
   {h:'Building sq ft',num:true},{h:'Units',num:true,s:'un_d'},{h:'Built',num:true,s:'yb_a'},{h:'Value',num:true,s:'mv_d'},
   {h:'Land %',num:true,s:'lp_d'},{h:'Last sale',num:true,s:'sold_d'},{h:'Sale price',num:true},{h:'Owner'}];
 function renderHead(){ $('thead').innerHTML=COLS.map(c=>`<th data-s="${c.s||''}" class="${c.num?'num':''} ${c.cls||''} ${c.s&&S.sort===c.s?'sorted':''}" scope="col">${c.h}</th>`).join(''); }
@@ -424,7 +440,7 @@ function rowHTML(id){
   const p=P(id), i=I(id), c=p.c, mv=c.mkt[i];
   const folio=getStr(p,'folio',i), sv=SV.get(folio);
   return `<tr data-id="${id}" class="${sv?'is-saved':''}"><td class="stc">${starHTML(id,folio)}</td><td class="addr">${esc(getStr(p,'addr',i)||'No street address')}<small>${esc(D.city[c.city[i]])} ${D.zip[c.zip[i]]}${sv?` · <span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span>`:''}</small></td>
-  <td class="num">${c.dscore[i]?scoreBadge(c.dscore[i]):'–'}</td><td class="sigs" title="${esc(sigText(c.dsig[i]))}">${esc(sigCodes(c.dsig[i]))||'–'}</td>
+  <td class="num">${c.dscore[i]?scoreBadge(c.dscore[i]):'–'}</td><td class="sigs" title="${esc(sigText(c.dsig[i]))}">${esc(sigCodes(c.dsig[i]))||'–'}</td><td class="num" title="${esc(vsigText(c.vsig?c.vsig[i]:0))}">${c.vscore&&c.vscore[i]?`<span class="vnum ${vsTone(c.vscore[i])}">${c.vscore[i]}</span>`:'–'}${sv&&sv.vacant?' <span class="vmine" title="You marked it vacant / damaged">●</span>':''}</td>
   <td>${TYPE_LABEL[LU_T[c.landuse[i]]]}</td><td title="${esc(mzLabel(c.mz[i]))}"><span class="mzcode">${MZ[c.mz[i]]?esc(MZ[c.mz[i]][0]):'–'}</span></td><td title="${esc(D.zoning[c.zoning[i]])}">${esc(nice(D.zoning[c.zoning[i]])||'–')}</td>
   <td class="num">${c.lot[i]?fmt.format(c.lot[i]):'–'}</td><td class="num">${c.lot[i]?(c.lot[i]/SQFT_AC).toFixed(2):'–'}</td>
   <td class="num">${c.sqft[i]?fmt.format(c.sqft[i]):'–'}</td><td class="num">${c.units[i]||'–'}</td><td class="num">${c.yb[i]||'–'}</td>
@@ -455,6 +471,7 @@ function scoreParts(p,i,folio){
   const bv=c.bldg[i], mv=c.mkt[i]; if(bv>0&&mv>0&&bv/mv<0.2) soft.push(['Building under 20% of value (teardown)',6]); else if(!bv&&c.lot[i]>0&&!corp&&!gov) soft.push(['Vacant lot',3]);
   if(!(fl&1)&&!corp&&!gov) soft.push(['No homestead exemption',3]);
   let st=soft.reduce((a,b)=>a+b[1],0); if(st>20) soft.push(['Owner/property signals capped at 20',20-st]);
+  const vs=c.vscore?c.vscore[i]:0; if(vs>=40) soft.push([`Vacancy / neglect hint ${vs} (capped soft signal)`, vs>=60?8:5]);
   return parts.concat(soft);
 }
 function distressHTML(p,i,folio){
@@ -471,6 +488,35 @@ function distressHTML(p,i,folio){
     <div class="note">Records matched to this folio from public sources. Confirm status at the source before acting: cases close and liens get released.</div>`;
 }
 
+/* vacancy / condition hint (mirrors scripts/vacancy_lib.py) */
+function vacParts(c,i,folio){
+  const vg=c.vsig?c.vsig[i]:0, fl=c.flags[i], yb=c.yb[i], parts=[];
+  for(let b=0;b<VSIG.length;b++){ if(!(vg&(1<<b))) continue; let [k,l,pt]=VSIG[b];
+    if(k==='NA'){ pt=fl&2?18:15; l=fl&2?'No homestead + owner mails from out of state':'No homestead + owner mails elsewhere (absentee)'; }
+    if(k==='NP'){ pt=yb&&yb<=1970?10:6; l=yb&&yb<=1970?`Built ${yb}, no City of Miami permit on record since 2014`:'No City of Miami permit on record since 2014'; }
+    if(k==='US') l='Open unsafe structure case'; if(k==='NG') l='Neglect-type code case (overgrowth / junk / abandoned / upkeep / minimum housing / unsecured pool)';
+    if(k==='FR') l='Foreclosure registry code case (registration required)'; if(k==='XP') l='Expired or revoked permit (no newer permit)'; if(k==='LB') l='Building worth under 20% of the total value';
+    if(k==='TX') l='Tax delinquent (certificate, tax deed or unpaid taxes)'; if(k==='ES') l='Estate / probate / owner deceased'; if(k==='OV') l='Other open code or building case';
+    if(k==='RP') l='Permit issued in the last 24 months (someone is working on it)';
+    parts.push([l,pt]); }
+  if(!(vg&1) && c.bldg[i]>0 && !(fl&1) && !(fl&8) && !(fl&32)) parts.push(['No homestead exemption (owner mail at the property)',5]);
+  return parts;
+}
+function vacancyHTML(p,i,folio){
+  const c=p.c, v=c.vscore?c.vscore[i]:0, g=p.geo, la=g?g.lat[i]:NaN, lo=g?g.lon[i]:NaN, hasG=isFinite(la)&&la>20;
+  const parts=vacParts(c,i,folio), raw=parts.reduce((a,b)=>a+b[1],0), lp=c.lperm?c.lperm[i]:0, cityCov=folio.slice(0,2)==='01';
+  const sv=SV.get(folio), d=0.0011, bbox=hasG?[lo-d*1.25,la-d*0.8,lo+d*1.25,la+d*0.8].map(x=>x.toFixed(6)).join(','):'';
+  const aerial=hasG?`<a class="aerial" href="https://www.google.com/maps/@?api=1&map_action=map&center=${la.toFixed(6)},${lo.toFixed(6)}&zoom=20&basemap=satellite" target="_blank" rel="noopener" title="Open satellite view in Google Maps"><img alt="Aerial photo of the parcel (Esri World Imagery)" loading="lazy" width="400" height="256" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&imageSR=3857&size=400,256&format=jpg&f=image"><span class="pin" aria-hidden="true"></span><small>Aerial: Esri World Imagery (dates vary) · open satellite ↗</small></a>`:'';
+  const links=hasG?`<div class="links vlinks"><a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${la.toFixed(6)},${lo.toFixed(6)}" target="_blank" rel="noopener">Street View ↗</a><a href="https://www.google.com/maps/@?api=1&map_action=map&center=${la.toFixed(6)},${lo.toFixed(6)}&zoom=20&basemap=satellite" target="_blank" rel="noopener">Satellite ↗</a></div>`:'';
+  const permit=lp?`Last permit on record: <b>${dateStr(lp)}</b>`:cityCov?'No City of Miami permit on record (2014–today)':(folio.slice(0,2)==='30'?'No County permit in the last 2 years (older County permits are not published)':'Permit history is not published for this city');
+  if(!c.bldg[i]) return `<h3>Vacancy &amp; condition</h3><div class="note">No building on record, so there is no vacancy hint.</div>${aerial}${links}`;
+  return `<h3>Vacancy &amp; condition ${v?`<span class="vnum big ${vsTone(v)}" title="Vacancy / neglect hint ${v} of 100">${v}</span>`:''}</h3>
+    ${v>=25?`<div class="vword ${vsTone(v)}">${vsWord(v)}</div>`:''}
+    ${parts.length?`<div class="dbreak">${parts.map(([l,n])=>`<div><span>${esc(l)}</span><b>${n>0?'+':''}${n}</b></div>`).join('')}<div class="tot"><span>Vacancy hint${raw>100?' (capped at 100)':raw<0?' (floored at 0)':''}</span><b>${v}</b></div></div>`:'<div class="note">No vacancy or neglect signals in the public records.</div>'}
+    <div class="note">${permit}. ${sv&&sv.vacant?'<b>You marked it as looking vacant / damaged.</b> ':''}A hint from public records only (no utility data is published) — drive by or check Street View before acting.</div>
+    ${aerial}${links}`;
+}
+
 /* detail drawer */
 function savedBoxHTML(id,folio){
   const sv=SV.get(folio);
@@ -478,6 +524,8 @@ function savedBoxHTML(id,folio){
   return `<div class="svbox"><div class="svhead"><button type="button" class="btn svsave on" data-star="${folio}" data-id="${id}" aria-pressed="true" title="Remove from saved">${STAR_SVG}Saved</button><span class="note">Saved ${svDate(sv.savedAt)}${sv.updatedAt!==sv.savedAt?' · edited '+svDate(sv.updatedAt):''}</span></div>
     <label class="svl" for="svStatusSel">Status</label><select id="svStatusSel">${SV.STATUSES.map(s=>`<option ${s===sv.status?'selected':''}>${s}</option>`).join('')}</select>
     <label class="svl" for="svNote">Notes</label><textarea id="svNote" rows="3" placeholder="Called owner, left voicemail…" maxlength="5000">${esc(sv.note)}</textarea>
+    <label class="check svvac"><input type="checkbox" id="svVacant" ${sv.vacant?'checked':''}> Looks vacant / damaged</label>
+    <label class="svl" for="svCond">Condition note</label><textarea id="svCond" rows="2" placeholder="Boarded windows, tall grass, roof tarp…" maxlength="2000">${esc(sv.cond||'')}</textarea>
     <span class="note" id="svNoteMsg">Notes save automatically in this browser.</span></div>`;
 }
 
@@ -509,6 +557,7 @@ async function openDrawer(id,opts){
     </div>
     <div id="savedBox" data-folio="${folio}" data-id="${id}">${savedBoxHTML(id,folio)}</div>
     ${distressHTML(p,i,folio)}
+    ${vacancyHTML(p,i,folio)}
     <h3>The property</h3><div class="dl">${rows([
       ['What it is', `${TYPE_LABEL[LU_T[c.landuse[i]]]}<small>${esc(lu)}</small>`],
       ['City zoning', MZ[c.mz[i]] ? `<span class="mzcode">${esc(MZ[c.mz[i]][0])}</span> · ${esc(MZ[c.mz[i]][1])}<small>${esc(mzLabel(c.mz[i]))}${MZ[c.mz[i]][5]?' · min lot '+fmt.format(+MZ[c.mz[i]][5])+' sq ft':''}</small>` : 'Not found on the zoning map'],
@@ -632,9 +681,9 @@ async function copy(text,ok){
 }
 const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
-function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note)]:['','','','']; }
+function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||'')]:['','','','','',''];}
 function buildCSV(ids=results){
-  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','LLC/Company','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Saved','Saved Status','Saved Date','Saved Note'];
+  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','LLC/Company','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note'];
   const parts=[head.join(',')+'\n']; let buf='';
   for(let j=0;j<ids.length;j++){
     const id=ids[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
@@ -644,7 +693,7 @@ function buildCSV(ids=results){
       dateStr(c.sd2[i]),c.sale2[i]||'',csvq(getStr(p,'owner',i)),fl&8?'LLC/Company':fl&16?'Trust':fl&32?'Government':'Individual',csvq(getStr(p,'mail',i)),
       fl&1?'Y':'',fl&2?'Y':'',fl&4?'Y':'',fl&8?'Y':'',fl&16?'Y':'',fl&64?'Y':'',csvq(D.cra[c.cra[i]]||''),csvq(getStr(p,'legal',i)),
       fl&128?'Y':'',c.taxable[i],c.prv[i]||'',csvq(getStr(p,'grantor',i)),getStr(p,'book',i),p.geo&&p.geo.lat[i]>20?p.geo.lat[i].toFixed(6):'',p.geo&&p.geo.lat[i]>20?p.geo.lon[i].toFixed(6):'','https://apps.miamidadepa.gov/propertysearch/#/?folio='+getStr(p,'folio',i),
-      c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i)),...savedCSV(getStr(p,'folio',i))].join(',')+'\n';
+      c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i)),c.vscore?c.vscore[i]:'',csvq(vsigText(c.vsig?c.vsig[i]:0)),c.lperm?dateStr(c.lperm[i]):'',...savedCSV(getStr(p,'folio',i))].join(',')+'\n';
     if(buf.length>1e6){ parts.push(buf); buf=''; }
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
@@ -676,6 +725,7 @@ function writeHash(st){
     if(st.exL.length) h.set('lu',st.exL.map(v=>v.split(' - ')[0]).join(','));
     if(st.owner&&st.owner!=='all') h.set('owner',st.owner);
     if(st.dsig&&st.dsig.length) h.set('sig',st.dsig.join(',')); if(st.dsMin) h.set('ds',st.dsMin);
+    if(st.vsig&&st.vsig.length) h.set('vsig',st.vsig.join(',')); if(st.vsMin) h.set('vs',st.vsMin); if(st.vsMine) h.set('vme','1');
     OWNER_ROWS.forEach(([k])=>{ const v=st.flags[k]; if(v==='yes'||v==='no') h.set('o_'+k,v); });
     HASH_NUM.forEach(id=>{ if(st[id]!=null && st[id]!=='' && !(id.startsWith('mv')&&!st[id])) h.set(id,st[id]); });
     if(!st.hideGov) h.set('gov','1'); if(st.noBldg) h.set('land','1'); if(st.qualOnly) h.set('mkt','1');
@@ -695,7 +745,7 @@ function parseHash(){
   const st={...BLANK()};
   st.q=h.get('q')||''; st.qScope=h.get('in')||'ao'; st.city=h.get('city')||''; st.zips=h.get('zip')||''; st.cra=h.get('cra')||''; st.mzq=h.get('code')||'';
   st.types=list('type'); st.zones=list('zone'); st.exZ=byCode(D.zoning,list('pz')); st.exL=byCode(D.landuse,list('lu'));
-  st.dsig=list('sig'); st.dsMin=+h.get('ds')||0;
+  st.dsig=list('sig'); st.dsMin=+h.get('ds')||0; st.vsig=list('vsig'); st.vsMin=+h.get('vs')||0; st.vsMine=h.get('vme')==='1';
   st.owner=h.get('owner')||'all'; st.flags={}; OWNER_ROWS.forEach(([k])=>{ const v=h.get('o_'+k); if(v==='yes'||v==='no') st.flags[k]=v; });
   HASH_NUM.forEach(id=>{ const v=h.get(id); st[id]=(v==null||v==='')?null:(isFinite(+v)?+v:null); });
   st.hideGov=h.get('gov')!=='1'; st.noBldg=h.get('land')==='1'; st.qualOnly=h.get('mkt')==='1';
@@ -863,6 +913,7 @@ const IDEAS=[
   ['Pre-foreclosure & auctions', ()=>({...BLANK(), dsig:['LP','FC'], sort:'ds_d'})],
   ['Tax deeds & delinquent', ()=>({...BLANK(), dsig:['TD','TC'], dsMin:35, sort:'ds_d'})],
   ['Unsafe structures', ()=>({...BLANK(), dsig:['US'], sort:'ds_d'})],
+  ['🏚 Likely vacant / neglected', ()=>({...BLANK(), vsMin:40, sort:'vs_d'})],
   ['🏘 Multi-property motivated owners', ()=>({...BLANK(), ogMin:2, ogDist:true, sort:'ogd_d'})],
   ['Owners with 5+ properties', ()=>({...BLANK(), ogMin:5, sort:'og_d'})],
   ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:5000, lotMax:87120, sort:'lot_a'})],
@@ -891,14 +942,14 @@ function refreshFolio(folio){
   document.querySelectorAll(`[data-star="${folio}"]`).forEach(b=>{ const on=SV.has(folio); b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); if(b.classList.contains('star')){ b.setAttribute('aria-label',on?'Remove from saved':'Save property'); b.title=on?'Saved · click to remove':'Save this property'; } });
   if(S.view==='cards'){ const el=document.querySelector(`#cards .card[data-folio="${folio}"]`); if(el){ const foc=document.activeElement&&el.contains(document.activeElement)&&document.activeElement.dataset.star; el.outerHTML=cardHTML(+el.dataset.id); if(foc){ const b=document.querySelector(`#cards .card[data-folio="${folio}"] [data-star]`); if(b) b.focus(); } } }
   if(S.view==='table'){ lastRange=''; renderTable(false); }
-  const box=$('savedBox'); if(box && box.dataset.folio===folio && !(document.activeElement&&document.activeElement.id==='svNote')){ const foc=document.activeElement&&box.contains(document.activeElement)?document.activeElement.id||'star':''; box.innerHTML=savedBoxHTML(+box.dataset.id,folio); if(foc){ const t=foc==='star'?box.querySelector('[data-star]'):$(foc); if(t) t.focus(); } }
+  const box=$('savedBox'); if(box && box.dataset.folio===folio && !(document.activeElement&&['svNote','svCond'].includes(document.activeElement.id))){ const foc=document.activeElement&&box.contains(document.activeElement)?document.activeElement.id||'star':''; box.innerHTML=savedBoxHTML(+box.dataset.id,folio); if(foc){ const t=foc==='star'?box.querySelector('[data-star]'):$(foc); if(t) t.focus(); } }
 }
 function download(name,blob){ const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
 const stamp=()=>{ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); };
 function savedListCSV(){
-  const ids=savedIdx(), head=['Folio','Address','City','ZIP','Status','Note','Date Saved','Last Edited','Distress Score','Market Value','Owner','Property Appraiser Link'];
+  const ids=savedIdx(), head=['Folio','Address','City','ZIP','Status','Note','Marked Vacant/Damaged','Condition Note','Date Saved','Last Edited','Distress Score','Vacancy Hint','Market Value','Owner','Property Appraiser Link'];
   const rows=SV.list().map(x=>{ const id=ids.get(x.folio), p=id!=null?P(id):null, i=id!=null?I(id):0;
-    return [x.folio,csvq(p?getStr(p,'addr',i):x.addr),csvq(p?D.city[p.c.city[i]]:x.city),p?D.zip[p.c.zip[i]]:x.zip,csvq(x.status),csvq(x.note),x.savedAt,x.updatedAt,p?p.c.dscore[i]:'',p?p.c.mkt[i]:'',csvq(p?getStr(p,'owner',i):''),'https://apps.miamidadepa.gov/propertysearch/#/?folio='+x.folio].join(','); });
+    return [x.folio,csvq(p?getStr(p,'addr',i):x.addr),csvq(p?D.city[p.c.city[i]]:x.city),p?D.zip[p.c.zip[i]]:x.zip,csvq(x.status),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||''),x.savedAt,x.updatedAt,p?p.c.dscore[i]:'',p&&p.c.vscore?p.c.vscore[i]:'',p?p.c.mkt[i]:'',csvq(p?getStr(p,'owner',i):''),'https://apps.miamidadepa.gov/propertysearch/#/?folio='+x.folio].join(','); });
   return new Blob([head.join(',')+'\n'+rows.join('\n')+'\n'],{type:'text/csv'});
 }
 function wireSaved(){
@@ -922,8 +973,8 @@ function wireSaved(){
   // any search-filter interaction while the saved list is showing returns to the search
   const leave=e=>{ if(!S.saved) return; if(e.type==='click' && !e.target.closest('button,.chip,input[type=checkbox]')) return; S.saved=false; renderSavedUI(); };
   ['click','input','change'].forEach(t=>$('panel').addEventListener(t,leave,true));
-  $('drawerHost').addEventListener('change',e=>{ if(e.target.id==='svStatusSel'){ const f=$('savedBox').dataset.folio; SV.update(f,{status:e.target.value}); toast('Status: '+e.target.value); } });
-  let nt=null; $('drawerHost').addEventListener('input',e=>{ if(e.target.id!=='svNote') return; const f=$('savedBox').dataset.folio, v=e.target.value; clearTimeout(nt); $('svNoteMsg').textContent='Saving…'; nt=setTimeout(()=>{ SV.update(f,{note:v}); const m=$('svNoteMsg'); if(m) m.textContent=SV.error||'Saved in this browser.'; },400); });
+  $('drawerHost').addEventListener('change',e=>{ if(e.target.id==='svVacant'){ const f=$('savedBox').dataset.folio; SV.update(f,{vacant:e.target.checked}); toast(e.target.checked?'Marked as looking vacant / damaged':'Vacant mark removed'); return; } if(e.target.id==='svStatusSel'){ const f=$('savedBox').dataset.folio; SV.update(f,{status:e.target.value}); toast('Status: '+e.target.value); } });
+  let nt=null; $('drawerHost').addEventListener('input',e=>{ const id=e.target.id; if(id!=='svNote'&&id!=='svCond') return; const f=$('savedBox').dataset.folio, v=e.target.value; clearTimeout(nt); $('svNoteMsg').textContent='Saving…'; nt=setTimeout(()=>{ SV.update(f,id==='svNote'?{note:v}:{cond:v}); const m=$('svNoteMsg'); if(m) m.textContent=SV.error||'Saved in this browser.'; },400); });
 }
 
 /* wiring */
@@ -950,6 +1001,9 @@ function wire(){
   $('dsigs').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.sig; S.dsig.has(k)?S.dsig.delete(k):S.dsig.add(k); run(); });
   $('dsMin').addEventListener('change',()=>{ clearIdea(); schedule(0); });
   $('clrDs').onclick=()=>{ S.dsig.clear(); $('dsMin').value='0'; clearIdea(); run(); };
+  $('vsigs').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.vs; S.vsig.has(k)?S.vsig.delete(k):S.vsig.add(k); run(); });
+  ['vsMin','vsMine'].forEach(id=>$(id).addEventListener('change',async()=>{ clearIdea(); if($('vsMine').checked) await ensureSavedPacks(); schedule(0); }));
+  $('clrVs').onclick=()=>{ S.vsig.clear(); $('vsMin').value='0'; $('vsMine').checked=false; clearIdea(); run(); };
   $('mapColor').addEventListener('change',()=>{ MAP_COLOR=$('mapColor').value; try{ localStorage.setItem('mdpf.mapColor',MAP_COLOR); }catch(e){} legendSetup(); if(mapLayer) mapLayer.redraw(); });
   $('zones').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.z; S.zones.has(k)?S.zones.delete(k):S.zones.add(k); run(); });
   $('clrType').onclick=()=>{ S.types.clear(); S.exL.clear(); clearIdea(); run(); };
@@ -999,9 +1053,11 @@ async function boot(){
     D.cra.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('cra').appendChild(o); });
     $('mvMin').innerHTML=MONEY_STEPS.map(v=>`<option value="${v}">${v?money(v):'No min'}</option>`).join('');
     $('mvMax').innerHTML=MONEY_STEPS.map(v=>`<option value="${v}">${v?money(v):'No max'}</option>`).join('');
+    $('vsMin').innerHTML=VS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
     $('dsMin').innerHTML=DS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
     try{ MAP_COLOR=localStorage.getItem('mdpf.mapColor')==='score'?'score':'type'; }catch(e){} $('mapColor').value=MAP_COLOR;
     if(META.distress){ const d=META.distress; $('dsSrc').textContent=`Built ${META.built}. ${fmt.format(d.parcels_with_signals||0)} parcels have at least one record.`; }
+    if(META.vacancy){ const v=META.vacancy; $('vsSrc').textContent=`${fmt.format(v.ge40)} parcels score 40+ (likely), ${fmt.format(v.ge60)} score 60+. Built ${META.built}.`; }
     if(META.owners){ const o=META.owners; $('ogSrc').textContent=`${fmt.format(o.groups)} owners hold 2+ properties; ${fmt.format(o.groups_2plus_distressed_non_institutional)} (excluding banks, government and big institutions) have 2+ parcels with public-record distress signals.`; }
     $('sortSel').innerHTML=SORTS.map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');
     $('ownerGrid').innerHTML=OWNER_ROWS.map(([k,l])=>`<label for="ow_${k}">${l}</label><select id="ow_${k}"><option value="any">Either</option><option value="yes">Only</option><option value="no">Hide</option></select>`).join('');
@@ -1012,7 +1068,7 @@ async function boot(){
     applyState(st);
     const ownLoad=loadOwners().catch(()=>null);
     await loadPack(0,'Loading properties…');
-    await ensureCondo(); if(S.saved) await ensureSavedPacks(); await ownLoad; await ensureOg();
+    await ensureCondo(); if(S.saved||$('vsMine').checked) await ensureSavedPacks(); await ownLoad; await ensureOg();
     ['results','foot'].forEach(id=>$(id).hidden=false);
     run();
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');

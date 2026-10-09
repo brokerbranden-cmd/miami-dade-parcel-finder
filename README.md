@@ -146,6 +146,48 @@ an "Owner has N · M distressed" badge on cards; and an **owner portfolio panel*
 types, cities, distress signals across the portfolio, avg years held, names and mailing addresses, a map of holdings, the parcel list
 (clickable, with ☆), Show all on map / in table (shareable `#ogf=<folio>` link), Export CSV and Copy folios.
 
+## Vacancy & condition hints
+
+A **"likely vacant / neglected" hint** (0–100, `vscore` + `vsig` bits in the main/condo packs) built in `scripts/vacancy_lib.py`
+(run inside `build_data.py`). It uses public records only. Nothing comes from imagery, and there are **no utility proxies**:
+Miami-Dade publishes no water/electric shut-off or usage data, so none is used.
+No county layer carries a "boarded" or "vacant structure" flag either (searched every violation/lien layer). Only parcels with a building (building value > 0)
+and a non-government owner are scored.
+
+| Code | Signal | Source | Points |
+|---|---|---|---|
+| NA | No homestead **and** absentee owner (mails to another ZIP) | PA roll | 15 (18 if out of state; 5 = no homestead, mail at the property) |
+| US | Open unsafe structure case | County Open_Building_Violations | 25 |
+| NG | Neglect-type code case, open or in lien: junk/trash/overgrowth, abandoned property, structure upkeep, minimum housing, unsecured pool, pool maintenance, bees | County CodeCompliance Open + Lien views | 15 |
+| FR | Foreclosure-registry code case (failure to register/renew a foreclosed property) | same | 12 |
+| XP | Expired or revoked permit with no newer permit: open county "Expired Permit" building case, or City of Miami permit status Expired/Revoked | County building cases; City of Miami permits | 8 |
+| NP | No permit on record since 2014 (**City of Miami parcels only**, built before 2014) | City of Miami Building_Permits_Since_2014 | 6 (10 if built 1970 or earlier: old building, no recorded improvements) |
+| LO | Owned 20+ years | PA last sale | 5 |
+| LB | Building worth < 20% of the total value | PA values | 8 |
+| TX | Tax delinquent (TC / TX / TD distress signals) | TaxSys | 10 |
+| ES | Estate / probate / owner deceased (PR / DC) | distress layer | 8 |
+| OV | Other open code / building case | County violations | 4 |
+| RP | **Recent permit** (issued in the last 24 months, City or County), so someone is working on it | both permit sources | −15 |
+
+**Vacancy hint = clamp(0, 100, sum of points)**. 25+ = "Possibly vacant", 40+ = "Likely vacant / neglected", 60+ = strong.
+It feeds the Distress Score as a capped soft signal: **+5 at 40+, +8 at 60+** (on top of the other soft factors; total score still capped at 100).
+
+Permit coverage is partial, so "no permit" only counts where the data exists: `scripts/fetch_permits.py` pulls per-folio last-permit
+dates (server-side aggregates) from the City of Miami (2014–today, City of Miami parcels) and the County Building Dept
+(`miamidade_permit_data`, rolling last ~2 years, mostly unincorporated). Other municipalities (Miami Beach, Hialeah, Coral Gables, …)
+publish no permit API. The drawer shows the last permit on record or says which coverage applies. County code-case layers cover
+unincorporated Miami-Dade; City of Miami code cases are not published.
+
+Current build: 449,703 parcels scored; 473 at 40+, 27 at 60+. Signal counts: NA 34,674 · US 1,413 · NG 2,074 · FR 367 · XP 4,997 ·
+NP 24,745 · LO 108,915 · LB 41,565 · TX 10,107 · ES 3,056 · OV 9,757 · RP 56,420.
+
+UI: *Vacancy & condition* filter group (signal chips with counts, "Vacancy hint" 25+/40+/60+, "only ones I marked vacant"),
+preset **🏚 Likely vacant / neglected**, sort *Most likely vacant / neglected*, card badge, table column, CSV columns
+(Vacancy Hint, Vacancy Signals, Last Permit On Record, Marked Vacant/Damaged, Condition Note). The drawer shows the point breakdown,
+the last permit, an **aerial thumbnail** (Esri World Imagery export, dates vary) and **Street View / Satellite** links (Google Maps).
+On a saved property you can tick **Looks vacant / damaged** and write a **condition note**. Both are stored with the saved list
+(`vacant`, `cond` in `saved.js`) and included in its JSON/CSV export/import.
+
 ## Saved properties
 
 Star (☆) any property on a card, table row, map popup or in the detail drawer (keyboard: Tab to the star, Enter/Space).
@@ -162,7 +204,7 @@ cloud sync can be plugged in later; `PFSaved.onChange(fn)` reports every edit.
 
 ## Testing
 
-`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
+`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
 
 ```bash
 pip install playwright && playwright install chromium

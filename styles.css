@@ -313,3 +313,23 @@ body.saved-mode #panel{opacity:.55}
 .ogopen small{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ogopen:hover b{color:var(--accent)}
 .btn.back{margin-right:8px}
+
+/* vacancy & condition hint (ochre = --t-vacant) */
+.vchip{background:color-mix(in srgb,var(--t-vacant) 10%,var(--surface));border-color:color-mix(in srgb,var(--t-vacant) 35%,transparent)}
+.vchip.on{background:var(--t-vacant);border-color:var(--t-vacant);color:var(--surface)}
+.vchip.neg{border-style:dashed}
+.ob .vac{font-weight:700;background:color-mix(in srgb,var(--t-vacant) 14%,var(--surface));border-color:color-mix(in srgb,var(--t-vacant) 45%,transparent);color:var(--t-vacant)}
+.ob .vac.v3{background:var(--t-vacant);color:var(--surface);border-color:var(--t-vacant)}
+.vnum{display:inline-block;font-family:var(--f-mono);font-weight:700;font-size:12.5px;min-width:28px;text-align:center;border-radius:6px;padding:2px 6px;line-height:1.3;background:var(--sunk);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.vnum.v1{background:color-mix(in srgb,var(--t-vacant) 18%,var(--surface));color:var(--ink);box-shadow:none}
+.vnum.v2,.vnum.v3{background:var(--t-vacant);color:var(--surface);box-shadow:none}
+.vnum.v3{outline:2px solid color-mix(in srgb,var(--t-vacant) 40%,transparent)}
+h3 .vnum{margin-left:8px;vertical-align:2px}.vnum.big{font-size:14px;padding:3px 8px}
+.vword{font-weight:700;color:var(--t-vacant);margin:-4px 0 6px}
+.vmine{color:var(--t-vacant)}
+.spill.vmine{background:color-mix(in srgb,var(--t-vacant) 16%,var(--surface));color:var(--t-vacant)}
+.aerial{position:relative;display:block;margin:10px 0 4px;border-radius:8px;overflow:hidden;border:1px solid var(--line);max-width:400px;text-decoration:none}
+.aerial img{display:block;width:100%;height:auto;aspect-ratio:400/256;background:var(--sunk);object-fit:cover}
+.aerial .pin{position:absolute;left:50%;top:calc(50% - 12px);width:18px;height:18px;margin:-9px 0 0 -9px;border:3px solid var(--brand);border-radius:50%;box-shadow:0 0 0 2px #fff}
+.aerial small{display:block;font-size:12px;color:var(--muted);padding:5px 8px;background:var(--surface)}
+.svvac{margin-top:6px;font-weight:600}

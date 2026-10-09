@@ -19,7 +19,7 @@ with sync_playwright() as pw:
     pg.goto(URL); pg.wait_for_selector('#results:not([hidden])', timeout=180000); pg.wait_for_timeout(800)
     ok('owners hold 2+ properties' in pg.inner_text('#ogSrc'), 'owner stats line: ' + pg.inner_text('#ogSrc')[:120])
     # preset: multi-property motivated owners
-    chip = pg.query_selector('#ideas .chip[data-i="4"]'); ok('motivated' in chip.inner_text(), 'preset chip present: ' + chip.inner_text())
+    chip = pg.query_selector('#ideas .chip[data-i="5"]'); ok('motivated' in chip.inner_text(), 'preset chip present: ' + chip.inner_text())
     chip.click(); pg.wait_for_timeout(1500)
     n_mot = cnt(pg); ok(n_mot > 1000 and pg.input_value('#sortSel') == 'ogd_d' and pg.is_checked('#ogDist'), f'Multi-property motivated owners -> {n_mot} parcels, sorted by owner distressed count')
     badges = [x.inner_text() for x in pg.query_selector_all('#cards .card .pf')[:6]]
@@ -33,7 +33,7 @@ with sync_playwright() as pw:
     ok(0 < a < bb, f'owners with 25+: {a} parcels without institutions, {bb} with banks/government/large holders')
     pg.uncheck('#ogInst'); pg.select_option('#ogMin', '0'); pg.wait_for_timeout(800)
     # owner panel from a parcel drawer
-    pg.click('#ideas .chip[data-i="4"]'); pg.wait_for_timeout(1500)
+    pg.click('#ideas .chip[data-i="5"]'); pg.wait_for_timeout(1500)
     pg.click('#cards .card'); pg.wait_for_selector('#ownerOpen', timeout=60000)
     pg.click('#ownerOpen'); pg.wait_for_selector('.ogdrawer .ogitem', timeout=120000); pg.wait_for_timeout(2500)
     stats = pg.inner_text('.ogdrawer .ogstats'); n_own = int(stats.split('\n')[1].replace(',', ''))

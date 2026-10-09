@@ -53,6 +53,13 @@
         <label class="dsmin">Min score <select id="dsMin" aria-label="Minimum distress score"></select></label></div>
     </div>
 
+    <div class="grp vacancy">
+      <div class="grp-h"><h2>Vacancy &amp; condition</h2><span class="hint">A "likely vacant / neglected" hint built only from public records: homestead and mailing address, neglect code cases, unsafe structures, expired or missing permits, tax delinquency and values. No utility data is published, so none is used. <span id="vsSrc"></span></span><button class="clr" type="button" id="clrVs">Clear</button></div>
+      <div class="dsrow"><div class="chips" id="vsigs"></div>
+        <label class="dsmin">Vacancy hint <select id="vsMin" aria-label="Minimum vacancy hint score"></select></label></div>
+      <label class="check"><input type="checkbox" id="vsMine"> Only saved properties I marked "looks vacant / damaged"</label>
+    </div>
+
     <div class="grp">
       <div class="grp-h"><h2>What's on the property</h2><span class="hint">Pick one or more. Condo units are only searched when you pick Condo units.</span><button class="clr" type="button" id="clrType">Clear</button></div>
       <div class="chips" id="types"></div>

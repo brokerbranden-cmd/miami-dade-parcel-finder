@@ -21,6 +21,7 @@ fi
 python3 scripts/fetch_auctions.py "$RAW" || echo "WARN: realforeclose fetch failed - using cached auctions.json"
 python3 scripts/fetch_tax.py "$RAW"      || echo "WARN: TaxSys reports failed - using cached raw/tax"
 python3 scripts/fetch_violations.py "$RAW" || echo "WARN: violations fetch failed - using cached raw/viol"
+python3 scripts/fetch_permits.py "$RAW"    || echo "WARN: permit fetch failed - using cached permits.json (vacancy hint)"
 RAW="$RAW" python3 scripts/build_distress.py data  # -> raw/distress.parquet + data/distress.json.gz
 RAW="$RAW" python3 scripts/build_data.py data   # -> data/meta.json + data/*.bin.gz
 echo "Done. Serve with: python3 -m http.server 8080"

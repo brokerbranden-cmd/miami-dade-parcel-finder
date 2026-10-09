@@ -3,7 +3,8 @@
      PFSaved.use({ load(): object|null, save(items): boolean })      // synchronous backend (default: localStorage)
    For an async/remote backend, fetch remote data and call PFSaved.importJSON(data) (newest edit per folio wins),
    and subscribe with PFSaved.onChange(fn) to push local edits upstream.
-   Item shape: {folio, savedAt, updatedAt, status, note, addr, city, zip, pack} (ISO timestamps; pack = 'main' | 'condo'). */
+   Item shape: {folio, savedAt, updatedAt, status, note, vacant, cond, addr, city, zip, pack}
+   (ISO timestamps; vacant = your own 'looks vacant / damaged' mark, cond = condition note; pack = 'main' | 'condo'). */
 (function(){
   "use strict";
   const KEY = 'mdpf.saved.v1';
@@ -23,6 +24,7 @@
     const savedAt = t(x.savedAt) || now();
     return { folio, savedAt, updatedAt: t(x.updatedAt) || savedAt,
       status: STATUSES.includes(x.status) ? x.status : 'New', note: typeof x.note === 'string' ? x.note.slice(0, 5000) : '',
+      vacant: x.vacant === true, cond: typeof x.cond === 'string' ? x.cond.slice(0, 2000) : '',
       addr: String(x.addr || '').slice(0, 200), city: String(x.city || '').slice(0, 80), zip: String(x.zip || '').slice(0, 10),
       pack: x.pack === 'condo' ? 'condo' : 'main' };
   }
@@ -37,7 +39,7 @@
     get rev(){ return rev; }, get error(){ return lastError; },
     has: f => !!items[f], get: f => items[f] || null, count: () => Object.keys(items).length,
     list: () => Object.values(items).sort((a, b) => b.savedAt < a.savedAt ? -1 : 1),
-    add(f, info){ if(items[f]) return items[f]; const t = now(); items[f] = cleanItem({ ...info, folio: f, savedAt: t, updatedAt: t, status: 'New', note: '' }); persist('add', f); return items[f]; },
+    add(f, info){ if(items[f]) return items[f]; const t = now(); items[f] = cleanItem({ ...info, folio: f, savedAt: t, updatedAt: t, status: 'New', note: '', vacant: false, cond: '' }); persist('add', f); return items[f]; },
     update(f, patch){ if(!items[f]) return null; const c = cleanItem({ ...items[f], ...patch, folio: f, savedAt: items[f].savedAt, updatedAt: now() }); if(c){ items[f] = c; persist('update', f); } return items[f]; },
     remove(f){ if(!items[f]) return; delete items[f]; persist('remove', f); },
     toggle(f, info){ if(items[f]){ api.remove(f); return false; } api.add(f, info); return true; },

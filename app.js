@@ -518,6 +518,13 @@ function vacancyHTML(p,i,folio){
 }
 
 /* detail drawer */
+function finHTML(folio){
+  const LS=window.PFLenders; if(!LS) return '';
+  const ds=LS.dealsFor(folio); if(!ds.length && !SV.has(folio)) return '';
+  const need=ds.reduce((a,d)=>Math.max(a,d.requested),0), com=ds.reduce((a,d)=>a+d.committed,0);
+  return `<h3>Financing</h3>${ds.length?`<div class="note">Needed ${dollars(need)} · committed ${dollars(com)}</div><ul class="finlist">${ds.map(d=>{ const l=LS.lender(d.lenderId); return `<li><button type="button" class="lnk" data-findeal="${d.id}">${esc(l?LS.lenderLabel(l):'No lender yet')}</button> <span class="spill st-${stKey(d.stage)}">${esc(d.stage)}</span><small>requested ${dollars(d.requested)} · committed ${dollars(d.committed)}${d.note?' · '+esc(d.note):''}</small></li>`; }).join('')}</ul>`:'<div class="note">No lender linked yet.</div>'}
+    <button type="button" class="btn" data-finadd="${folio}">+ Add lender / deal</button>`;
+}
 function savedBoxHTML(id,folio){
   const sv=SV.get(folio);
   if(!sv) return `<div class="svbox off"><button type="button" class="btn svsave" data-star="${folio}" data-id="${id}" aria-pressed="false">${STAR_SVG}Save this property</button><span class="note">Keep it on your saved list with a status and notes.</span></div>`;
@@ -556,6 +563,7 @@ async function openDrawer(id,opts){
       <button class="btn" type="button" id="onMap">Show on map</button>
     </div>
     <div id="savedBox" data-folio="${folio}" data-id="${id}">${savedBoxHTML(id,folio)}</div>
+    <div id="finBox">${finHTML(folio)}</div>
     ${distressHTML(p,i,folio)}
     ${vacancyHTML(p,i,folio)}
     <h3>The property</h3><div class="dl">${rows([
@@ -939,6 +947,7 @@ function renderSavedUI(){
   $('svInfo').textContent=!n?'Nothing saved yet. Tap the ☆ on any property to save it.':`${fmt.format(n)} saved${missing?` · ${missing} not in the current data (still kept and exported)`:''}`;
 }
 function refreshFolio(folio){
+  { const fb=$('finBox'), sb=$('savedBox'); if(fb&&sb&&sb.dataset.folio===folio) fb.innerHTML=finHTML(folio); }
   document.querySelectorAll(`[data-star="${folio}"]`).forEach(b=>{ const on=SV.has(folio); b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); if(b.classList.contains('star')){ b.setAttribute('aria-label',on?'Remove from saved':'Save property'); b.title=on?'Saved · click to remove':'Save this property'; } });
   if(S.view==='cards'){ const el=document.querySelector(`#cards .card[data-folio="${folio}"]`); if(el){ const foc=document.activeElement&&el.contains(document.activeElement)&&document.activeElement.dataset.star; el.outerHTML=cardHTML(+el.dataset.id); if(foc){ const b=document.querySelector(`#cards .card[data-folio="${folio}"] [data-star]`); if(b) b.focus(); } } }
   if(S.view==='table'){ lastRange=''; renderTable(false); }
@@ -973,6 +982,8 @@ function wireSaved(){
   // any search-filter interaction while the saved list is showing returns to the search
   const leave=e=>{ if(!S.saved) return; if(e.type==='click' && !e.target.closest('button,.chip,input[type=checkbox]')) return; S.saved=false; renderSavedUI(); };
   ['click','input','change'].forEach(t=>$('panel').addEventListener(t,leave,true));
+  $('drawerHost').addEventListener('click',e=>{ const a=e.target.closest('[data-finadd]'), d=e.target.closest('[data-findeal]'); if(!a&&!d) return; const UI=window.PFLendersUI; if(!UI) return; $('drawerHost').innerHTML=''; MAP_SEL=-1; if(a) UI.addDeal(a.dataset.finadd); else UI.editDeal(d.dataset.findeal); });
+  if(window.PFLenders) window.PFLenders.onChange(()=>{ const box=$('finBox'), sb=$('savedBox'); if(box&&sb) box.innerHTML=finHTML(sb.dataset.folio); });
   $('drawerHost').addEventListener('change',e=>{ if(e.target.id==='svVacant'){ const f=$('savedBox').dataset.folio; SV.update(f,{vacant:e.target.checked}); toast(e.target.checked?'Marked as looking vacant / damaged':'Vacant mark removed'); return; } if(e.target.id==='svStatusSel'){ const f=$('savedBox').dataset.folio; SV.update(f,{status:e.target.value}); toast('Status: '+e.target.value); } });
   let nt=null; $('drawerHost').addEventListener('input',e=>{ const id=e.target.id; if(id!=='svNote'&&id!=='svCond') return; const f=$('savedBox').dataset.folio, v=e.target.value; clearTimeout(nt); $('svNoteMsg').textContent='Saving…'; nt=setTimeout(()=>{ SV.update(f,id==='svNote'?{note:v}:{cond:v}); const m=$('svNoteMsg'); if(m) m.textContent=SV.error||'Saved in this browser.'; },400); });
 }

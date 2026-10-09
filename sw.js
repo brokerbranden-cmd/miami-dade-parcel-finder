@@ -4,8 +4,8 @@
    - data packs (data/*.gz?v=<build>): cache-first; when a new build arrives, older versions of the same file are deleted
    - map tiles (Esri / OSM, CORS only): stale-while-revalidate, capped at ~1,500 tiles
    Nothing is sent anywhere: this only caches GET requests the page already makes. */
-const SHELL = 'pf-shell-v1', DATA = 'pf-data', TILES = 'pf-tiles', MAX_TILES = 1500;
-const SHELL_FILES = ['./', 'index.html', 'styles.css', 'app.js', 'saved.js', 'drive.js', 'manifest.webmanifest',
+const SHELL = 'pf-shell-v2', DATA = 'pf-data', TILES = 'pf-tiles', MAX_TILES = 1500;
+const SHELL_FILES = ['./', 'index.html', 'styles.css', 'app.js', 'saved.js', 'drive.js', 'lenders.js', 'lenders-page.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(SHELL).then(c => Promise.all(SHELL_FILES.map(u => c.add(new Request(u, { cache: 'reload' })).catch(() => null)))).then(() => self.skipWaiting()));

@@ -223,9 +223,27 @@ Storage: `saved.js` (`window.PFSaved`) keeps the list in localStorage (`mdpf.sav
 the most recently edited copy. The storage backend is a small `{load(), save(items)}` interface (`PFSaved.use(backend)`), so a
 cloud sync can be plugged in later; `PFSaved.onChange(fn)` reports every edit.
 
+## Lender tracking
+
+The **Lenders** button in the sticky bar opens a Lenders & funding page (`lenders-page.js`; also `?page=lenders`):
+* **Lenders**: name, company, phone (tap to call), email, rate/points, terms, max loan size, geography, status (Prospect / Active /
+  Paused / Not a fit), notes, last contacted (with a one-tap "Contacted today"); search and status filter.
+* **Deals**: link a saved property to a lender with amount requested, amount committed, pipeline stage
+  (Prospect → Contacted → Interested → Term sheet → Funded) and a note; change the stage inline. A property can be pitched to several lenders.
+  Add deals from the page or from the property drawer's **Financing** section, which lists every lender/deal for that property.
+* **Dashboard**: needed vs committed (progress bar), still to raise, funded, pipeline counts per stage, a by-lender table (deals,
+  requested, committed, funded, max loan, last contact) and a by-property table (needed, committed, % covered, furthest stage).
+  "Needed" counts each property once (its largest request), and committed is capped at that amount per property. The total offered
+  across lenders is shown separately.
+* Export **JSON** (lenders + deals) and **CSV** (lenders, deals); **Import** JSON (merge by id, newest edit wins) or either CSV.
+
+Privacy: everything stays in this browser (`localStorage` key `mdpf.lenders.v1`); nothing is uploaded. `lenders.js`
+(`window.PFLenders`) keeps storage behind the same small `{load(), save(data)}` adapter as saved properties (`PFLenders.use(backend)`,
+`PFLenders.onChange(fn)`), so login and cloud sync (planned: Supabase) can be added later without changing the UI.
+
 ## Testing
 
-`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_mobile.py` covers drive mode at a phone viewport with mocked GPS (sheet, save/status/note, Save where I am, manifest, service worker, offline reload). `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
+`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_lenders.py` covers lender tracking (forms, deals, dashboard math, drawer Financing, JSON/CSV export + import, phone layout). `tests/e2e_mobile.py` covers drive mode at a phone viewport with mocked GPS (sheet, save/status/note, Save where I am, manifest, service worker, offline reload). `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
 
 ```bash
 pip install playwright && playwright install chromium

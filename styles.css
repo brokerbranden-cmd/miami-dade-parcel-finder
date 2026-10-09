@@ -286,3 +286,30 @@ body.saved-mode #panel{opacity:.55}
 .stackitem .star{color:#5A6168} .stackitem .star.on{color:#FC4C02}
 .maplegend i.svring{background:transparent!important;border:2.5px solid var(--brand);box-sizing:border-box}
 @media (max-width:520px){.sb-act{flex-wrap:nowrap}.savedbtn .lbl{display:none}.savedbtn{padding:7px 10px}.sv-h .hint{display:none}}
+
+/* owner portfolios */
+.ogrow{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin-top:4px}
+.ogsel{display:inline-flex;align-items:center;gap:8px;font-size:14px}
+.ogsel select{width:auto;padding:6px 9px}
+.ob .pf{background:var(--amber-soft);color:var(--amber);border-color:color-mix(in srgb,var(--amber) 35%,transparent);font-weight:600}
+.ogdrawer .eyebrow{font-family:var(--f-display);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand)}
+.ogdrawer .flagged{color:var(--danger);font-weight:600}
+.ogstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+@media (max-width:520px){.ogstats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ogstats>div{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.ogstats .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ogstats .v{font-family:var(--f-display);font-weight:800;font-size:24px;line-height:1.1}
+.ogstats small{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ogmap{height:260px;border:1px solid var(--line);border-radius:8px;margin:10px 0;background:var(--sunk)}
+.ogchips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+.ogchips span{font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface)}
+.ogchips span b{font-family:var(--f-mono);font-size:12px;margin-left:3px}
+.ogchips.muted span{color:var(--muted)}
+.ogchips span.hot{border-color:color-mix(in srgb,var(--danger) 45%,var(--line));color:var(--danger)}
+.ogchips span.warm{border-color:color-mix(in srgb,var(--amber) 45%,var(--line));color:var(--amber)}
+.oglist{display:grid;border-top:1px solid var(--line)}
+.ogitem{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.ogopen{flex:1;display:grid;text-align:left;font:inherit;font-size:14px;background:none;border:0;padding:8px 2px;cursor:pointer;color:var(--ink);min-width:0}
+.ogopen small{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ogopen:hover b{color:var(--accent)}
+.btn.back{margin-right:8px}

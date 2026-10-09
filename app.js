@@ -22,6 +22,13 @@ const DBIT=Object.fromEntries(DSIG.map((d,i)=>[d[0],i]));
 const DS_STEPS=[[0,'Any score'],[20,'20+'],[35,'35+'],[50,'50+ (hot)'],[70,'70+']];
 const dsTone=v=>v>=50?'s4':v>=35?'s3':v>=20?'s2':v>0?'s1':'s0';
 let DIST=null, distP=null;
+/* owner portfolios (data/owners.json.gz from scripts/owners_lib.py; parcel -> group id in the 'og' column) */
+let OWN=null, ownP=null;
+const loadOwners=()=>OWN?Promise.resolve(OWN):(ownP||(ownP=(async()=>{ if(!META.ownersFile) return null; const r=await fetch('data/'+META.ownersFile+'?v='+META.ver); if(!r.ok) throw new Error('Owner data did not load');
+  const j=JSON.parse(dec.decode(await gunzip(new Uint8Array(await r.arrayBuffer()))));
+  OWN={n:Uint32Array.from(j.n), nd:Uint32Array.from(j.nd), nc:Uint32Array.from(j.nc), mv:Float64Array.from(j.mv), fl:Uint8Array.from(j.fl), name:j.name, nv:j.nv}; return OWN; })().catch(e=>{ ownP=null; throw e; })));
+const OGFL=[[1,'Government'],[2,'Bank / lender'],[4,'Association, church or non-profit'],[8,'Large holder (200+ parcels)']];
+const ogFlags=f=>OGFL.filter(([b])=>f&b).map(x=>x[1]);
 const loadDistress=()=>distP||(distP=(async()=>{ if(!META.distressFile) return null; const r=await fetch('data/'+META.distressFile+'?v='+META.ver); if(!r.ok) throw new Error('Distress data did not load'); DIST=JSON.parse(dec.decode(await gunzip(new Uint8Array(await r.arrayBuffer())))); return DIST; })().catch(e=>{ distP=null; throw e; }));
 const FLAG = {homestead:1, oos:2, absz:4, corp:8, trust:16, govt:32, estate:64, senior:128};
 const MZ_MIAMI=[['T3','Sub-urban (single family, duplex)'],['T4','General urban (small apartments)'],['T5','Urban center (up to 5 stories)'],['T6','Urban core (8+ stories)'],['CI','Civic institution'],['CS','Civic space'],['D1','Work place'],['D2','Industrial'],['D3','Waterfront industrial']];
@@ -88,7 +95,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { saved:false, svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { og:0, ogf:'', saved:false, svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
@@ -183,7 +190,7 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; return st;
+  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
@@ -195,6 +202,8 @@ function applyState(st){
   S.exZ=new Set((st.exZ||[]).map(v=>D.zoning.indexOf(v)).filter(i=>i>=0)); S.exL=new Set((st.exL||[]).map(v=>D.landuse.indexOf(v)).filter(i=>i>=0));
   S.owner=OWNER_KINDS.some(o=>o[0]===st.owner)?st.owner:'all'; S.flags={}; OWNER_ROWS.forEach(([k])=>{ S.flags[k]=(st.flags&&st.flags[k])||'any'; $('ow_'+k).value=S.flags[k]; });
   S.sort=SORT_MAP[st.sort]?st.sort:'lot_d'; $('sortSel').value=S.sort; S.view=['cards','table','map'].includes(st.view)?st.view:(S.view||'cards');
+  $('ogMin').value=[0,2,3,5,10,25].includes(+st.ogMin)?String(+st.ogMin):'0'; $('ogDist').checked=!!st.ogDist; $('ogInst').checked=!!st.ogInst;
+  if((st.ogf||'')!==S.ogf){ S.ogf=st.ogf||''; S.og=0; } $('ogRow').hidden=!S.ogf;
   S.saved=!!st.saved; S.svSt=new Set((st.svSt||[]).filter(x=>SV.STATUSES.includes(x)));
   S.bbox=Array.isArray(st.bbox)&&st.bbox.length===4&&st.bbox.every(Number.isFinite)?st.bbox:null; $('areaRow').hidden=!S.bbox;
 }
@@ -227,14 +236,18 @@ function run(){
   const wantK = {all:-1,person:0,corp:1,trust:2}[S.owner]; const kc=new Uint32Array(4);
   const mA = mzAllow(st.mzq||''); const mc=new Uint32Array(MZ.length);
   let sigMask=0; for(const k of S.dsig) sigMask|=1<<DBIT[k]; const dsMin=st.dsMin||0, dc=new Uint32Array(DSIG.length+1);
+  const ogF=S.ogf?(S.og||-1):0, ogMin=st.ogMin||0, ogDist=st.ogDist?2:0, useOg=!!((ogMin||ogDist)&&OWN), exInst=useOg&&!st.ogInst;
+  if((ogMin||ogDist||st.sort==='og_d'||st.sort==='ogd_d') && !OWN) loadOwners().then(()=>schedule(0)).catch(()=>{});
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
-    if(!p || (p.name==='condo' && !incCondo)) continue;
+    if(!p || (p.name==='condo' && !incCondo && !ogF)) continue;
     const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null;
     if(bb && !gl) continue;
     for(let i=0;i<n;i++){
       if(hits && !hits[i]) continue;
+      if(ogF && c.og[i]!==ogF) continue;
+      if(useOg){ const g=c.og[i]; if(!g || (ogMin && OWN.n[g]<ogMin) || (ogDist && OWN.nd[g]<ogDist) || (exInst && OWN.fl[g])) continue; }
       if(gl){ const la=gl.lat[i], lo=gl.lon[i]; if(!(la>=bb[0]&&la<=bb[2]&&lo>=bb[1]&&lo<=bb[3])) continue; }
       if(cityI>=0 && c.city[i]!==cityI) continue;
       if(zipSet.size && !zipSet.has(c.zip[i])) continue;
@@ -273,7 +286,7 @@ function run(){
 
 /* sorting */
 const SORTS=[
-  ['ds_d','Highest distress score','dscore',-1],['sv_d','Recently saved','saved',-1],['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
+  ['ds_d','Highest distress score','dscore',-1],['sv_d','Recently saved','saved',-1],['ogd_d','Owner\'s distressed parcels','ogd',-1],['og_d','Owner\'s portfolio size','ogn',-1],['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
   ['mv_a','Lowest value first','mkt',1],['mv_d','Highest value first','mkt',-1],
   ['held_d','Owned the longest','sd1',1],['sold_d','Sold most recently','sd1',-1],
   ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
@@ -288,7 +301,9 @@ function doSort(){
     arr.sort((a,b)=>{const x=g(a),y=g(b); return x<y?-dir:x>y?dir:0;}); results=Uint32Array.from(arr); return;
   }
   const n=results.length, key=new Float64Array(n);
-  if(k==='saved'){ for(let j=0;j<n;j++){ const id=results[j], it=SV.get(getStr(P(id),'folio',I(id))); key[j]=it?Date.parse(it.savedAt):0; } }
+  if(k==='ogn'||k==='ogd'){ if(!OWN){ loadOwners().then(()=>{ doSort(); renderResults(true); }).catch(()=>{}); return; } const A=k==='ogn'?OWN.n:OWN.nd, inst=$('ogInst').checked;   // banks / government / big institutions rank last unless included
+    for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id), g=c.og[i]; key[j]=(g&&!(OWN.fl[g]&&!inst)?A[g]:(k==='ogn'?1:(c.dsig[i]&4095?1:0)))*256+c.dscore[i]; } }
+  else if(k==='saved'){ for(let j=0;j<n;j++){ const id=results[j], it=SV.get(getStr(P(id),'folio',I(id))); key[j]=it?Date.parse(it.savedAt):0; } }
   else for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id);
     key[j] = k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
   const idx=new Uint32Array(n); for(let i=0;i<n;i++) idx[i]=i;
@@ -339,7 +354,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0);
+  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0);
   const tot=k+main; $('onCount').hidden=!tot; $('onCount').textContent=tot+(tot===1?' filter on':' filters on'); $('resetBtn').disabled=!tot;
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
 }
@@ -380,7 +395,7 @@ function cardHTML(id){
     <div class="line"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
-    <div class="ob">${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
+    <div class="ob">${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
 }
 function renderResults(reset){
@@ -466,7 +481,8 @@ function savedBoxHTML(id,folio){
     <span class="note" id="svNoteMsg">Notes save automatically in this browser.</span></div>`;
 }
 
-async function openDrawer(id){
+async function openDrawer(id,opts){
+  if(OGMAP){ OGMAP.remove(); OGMAP=null; }
   if(!P(id).det){ toast('Loading details…'); try{ await Promise.all([loadDetail(P(id).idx), loadGeo(P(id).idx).catch(()=>{})]); }catch(e){ toast('Details did not load. Try again.'); return; } }
   if(P(id).c.dsig[I(id)] && !DIST){ try{ await loadDistress(); }catch(e){ toast('Distress details did not load.'); } }
   const p=P(id), i=I(id), c=p.c, folio=getStr(p,'folio',i), addr=getStr(p,'addr',i)||'No street address';
@@ -475,7 +491,8 @@ async function openDrawer(id){
   const gq=encodeURIComponent(addr+', '+city+', FL '+zip);
   const owner=[]; OWNER_ROWS.forEach(([k,l])=>{ if(fl&FLAG[k]) owner.push(l); }); if(fl&32) owner.push('Government owner');
   const g=p.geo, la=g?g.lat[i]:NaN, lo=g?g.lon[i]:NaN, hasG=isFinite(la)&&la>20;
-  const oname=getStr(p,'owner',i).split(' | ')[0], pf=ownerPortfolio(oname);
+  const oname=getStr(p,'owner',i).split(' | ')[0], og=c.og[i];
+  if(og && !OWN){ try{ await loadOwners(); }catch(e){} }
   const prv=c.prv?c.prv[i]:0, chg=(prv&&mv)?Math.round((mv-prv)/prv*100):null;
   const dn=deedCount(p,i), multi=dn>1&&c.sale1[i]>1000;
   const sale3=c.sd3&&c.sd3[i]? dateStr(c.sd3[i])+(c.sale3[i]>100?' for '+dollars(c.sale3[i]):'') : '';
@@ -517,16 +534,95 @@ async function openDrawer(id){
       ['Earlier sale', sale3]])}</div>
     <h3>Owner</h3><div class="dl">${rows([
       ['Name', esc(getStr(p,'owner',i)).replace(/ \| /g,'<br>')],['Mailing address', esc(getStr(p,'mail',i))],['About the owner', owner.join(', ')||'Nothing flagged'],
-      ['Same owner name', pf>1? `${fmt.format(pf)} properties <button type="button" class="lnk" id="ownerAll">Show them all</button><small>Exact match on the first owner name${PACKS[1]?'':' (condo units not loaded)'}.</small>` : (pf===1?'Only this property':'')]])}</div>
+      ['Portfolio', og&&OWN? `<b>${fmt.format(OWN.n[og])} properties</b> · ${money(OWN.mv[og]*1000)} total · ${fmt.format(OWN.nd[og])} with distress records <button type="button" class="lnk" id="ownerOpen">Open owner portfolio</button>${ogFlags(OWN.fl[og]).length?`<small>Flagged: ${ogFlags(OWN.fl[og]).join(', ')} (left out of portfolio filters unless included)</small>`:''}<small>Grouped by owner name${OWN.nv[og]>1?' ('+OWN.nv[og]+' spellings/entities)':''} and shared mailing address.</small>` : 'Only property under this owner']])}</div>
   </aside>`;
   const close=()=>{ $('drawerHost').innerHTML=''; MAP_SEL=-1; if(mapLayer) mapLayer.redraw(); };
   $('scrim').onclick=close; $('closeD').onclick=close; $('copyFolio').onclick=()=>copy(folio,'Folio copied'); $('closeD').focus();
   $('onMap').onclick=()=>{ close(); MAP_SEL=id; MAP_FOCUS=id; S.view='map'; save(); renderResults(true); };
-  if($('ownerAll')) $('ownerAll').onclick=async()=>{ close(); clearIdea(); applyState({...BLANK(), q:oname, types:['condo','vacant','sf','th','mf29','apt10','mixed','com','ind','mobile','inst','gov','other'], hideGov:false, view:S.view}); await ensureCondo(); run(); };
+  if($('ownerOpen')) $('ownerOpen').onclick=()=>openOwner(og,id);
+  if(opts&&opts.backOwner){ const b=document.createElement('button'); b.type='button'; b.className='btn back'; b.textContent='← Owner portfolio'; b.style.float='right'; b.onclick=()=>openOwner(opts.backOwner); $('closeD').after(b); }
   if(!hasG && !p.geo) loadGeo(p.idx).catch(()=>{});
   MAP_SEL=id; if(mapLayer) mapLayer.redraw();
 }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('drawerHost').innerHTML){ $('drawerHost').innerHTML=''; MAP_SEL=-1; if(mapLayer) mapLayer.redraw(); } });
+
+/* owner portfolio panel */
+let OGMAP=null;
+async function ownerIds(g){
+  await loadOwners(); if(OWN.nc[g] && !PACKS[1]) await loadPack(1,'Loading condo units…');
+  const ids=[]; for(const p of PACKS){ if(!p) continue; const a=p.c.og, base=p.idx*16777216; for(let i=0;i<p.n;i++) if(a[i]===g) ids.push(base+i); }
+  ids.sort((x,y)=>P(y).c.dscore[I(y)]-P(x).c.dscore[I(x)] || P(y).c.mkt[I(y)]-P(x).c.mkt[I(x)]); return ids;
+}
+const exportName=(kind,n)=>{ const d=new Date(); return `miami-dade-${kind}-${n}-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`; };
+async function exportIds(ids,kind,btn){
+  const lab=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
+  try{ await ensureDetail(); await ensureGeo(); await loadDistress(); await new Promise(r=>setTimeout(r,30));
+    const url=URL.createObjectURL(buildCSV(ids)), a=document.createElement('a'); a.href=url; a.download=exportName(kind,ids.length); document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000); toast(fmt.format(ids.length)+' properties exported'); }
+  catch(e){ toast('Export failed: '+(e&&e.message||e)); }
+  if(btn){ btn.disabled=false; btn.textContent=lab; }
+}
+async function showOwnerAs(g,view){
+  const ids=await ownerIds(g); if(!ids.length) return;
+  $('drawerHost').innerHTML=''; if(OGMAP){ OGMAP.remove(); OGMAP=null; }
+  clearIdea(); applyState({...BLANK(), hideGov:false, sort:'ds_d', view, ogf:getStr(P(ids[0]),'folio',I(ids[0]))}); S.og=g; renderOgRow(); run();
+  $('results').scrollIntoView({block:'start'});
+}
+async function openOwner(g,backId){
+  toast('Loading owner portfolio…');
+  let ids; try{ ids=await ownerIds(g); }catch(e){ toast('Owner data did not load: '+e.message); return; }
+  await Promise.all([...new Set(ids.map(id=>id>>>24))].map(k=>Promise.all([loadDetail(k).catch(()=>{}),loadGeo(k).catch(()=>{})])));
+  if(OGMAP){ OGMAP.remove(); OGMAP=null; }
+  let mv=0, held=0, nh=0, oos=0, dist=0, hs=0; const types=new Map(), sig=new Array(12).fill(0), names=new Map(), mails=new Map(), cities=new Map();
+  for(const id of ids){ const p=P(id), i=I(id), c=p.c; mv+=c.mkt[i]; if(c.sd1[i]){ held+=(today-c.sd1[i])/365.25; nh++; } if(c.flags[i]&2) oos++; if(c.flags[i]&1) hs++;
+    const t=TYPE_LABEL[LU_T[c.landuse[i]]]; types.set(t,(types.get(t)||0)+1); const sg=c.dsig[i]; if(sg&4095) dist++; for(let b=0;b<12;b++) if(sg&(1<<b)) sig[b]++;
+    const on=getStr(p,'owner',i).split(' | ')[0]; names.set(on,(names.get(on)||0)+1); const ct=D.city[c.city[i]]; cities.set(ct,(cities.get(ct)||0)+1);
+    if(p.s.mail){ const m=getStr(p,'mail',i); if(m) mails.set(m,(mails.get(m)||0)+1); } }
+  const top=(m,k)=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,k);
+  const fl=ogFlags(OWN.fl[g]), LIM=400;
+  const rowsH=ids.slice(0,LIM).map(id=>{ const p=P(id), i=I(id), c=p.c; return `<div class="ogitem"><button type="button" class="ogopen" data-id="${id}"><b>${esc(getStr(p,'addr',i)||'No street address')}</b><small>${TYPE_LABEL[LU_T[c.landuse[i]]]} · ${esc(D.city[c.city[i]])} · ${c.mkt[i]?money(c.mkt[i]):'–'}${c.dsig[i]&4095?' · '+esc(sigCodes(c.dsig[i]&4095)):''}</small></button>${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,getStr(p,'folio',i))}</div>`; }).join('');
+  $('drawerHost').innerHTML=`<div class="scrim" id="scrim"></div><aside class="drawer ogdrawer" role="dialog" aria-modal="true" aria-label="Owner portfolio">
+    <button class="btn" id="closeD" type="button" style="float:right">Close</button>${backId!=null?'<button class="btn back" id="ogBack" type="button" style="float:right;margin-right:8px">← Property</button>':''}
+    <div class="note eyebrow">Owner portfolio</div>
+    <h2>${esc(OWN.name[g])}</h2>
+    <div class="sub">${fmt.format(ids.length)} properties in Miami-Dade${fl.length?` · <span class="flagged">${esc(fl.join(', '))}</span>`:''}</div>
+    <div class="ogstats">
+      <div><div class="k">Properties</div><div class="v">${fmt.format(ids.length)}</div><small>${OWN.nc[g]?fmt.format(OWN.nc[g])+' condo units':'&nbsp;'}</small></div>
+      <div><div class="k">Market value</div><div class="v">${money(mv)}</div><small>${dollars(mv)}</small></div>
+      <div><div class="k">Distressed</div><div class="v">${fmt.format(dist)}</div><small>with public-record signals</small></div>
+      <div><div class="k">Avg years held</div><div class="v">${nh?(held/nh).toFixed(1):'–'}</div><small>${fmt.format(oos)} mailed out of state · ${fmt.format(hs)} homestead</small></div>
+    </div>
+    <div class="links">
+      <button class="btn" type="button" id="ogMapBtn">Show all on map</button><button class="btn" type="button" id="ogTblBtn">Show all in table</button>
+      <button class="btn primary" type="button" id="ogCsv">Export CSV</button><button class="btn" type="button" id="ogCopy">Copy folios</button>
+    </div>
+    <div id="ogMap" class="ogmap" aria-label="Map of this owner's properties"></div>
+    <h3>What they own</h3><div class="ogchips">${top(types,20).map(([t,n])=>`<span>${esc(t)} <b>${fmt.format(n)}</b></span>`).join('')}</div>
+    <div class="ogchips muted">${top(cities,8).map(([t,n])=>`<span>${esc(t)} <b>${fmt.format(n)}</b></span>`).join('')}</div>
+    <h3>Distress across the portfolio</h3>${sig.some(Boolean)?`<div class="ogchips">${DSIG.map(([k,l,t],b)=>sig[b]?`<span class="${t}">${esc(l)} <b>${fmt.format(sig[b])}</b></span>`:'').join('')}</div>`:'<div class="note">No public-record distress signals on any of these parcels.</div>'}
+    <h3>Names and mailing addresses</h3><div class="dl">
+      <div class="k">Owner names</div><div class="v">${top(names,8).map(([t,n])=>`${esc(t)} <small style="display:inline">(${n})</small>`).join('<br>')}${names.size>8?`<small>+${names.size-8} more names</small>`:''}</div>
+      <div class="k">Mails to</div><div class="v">${mails.size?top(mails,4).map(([t,n])=>`${esc(t)} <small style="display:inline">(${n})</small>`).join('<br>'):'–'}</div></div>
+    <div class="note">Grouped by normalized owner name (companies and trusts) or name + mailing address (individuals), plus names that share a specific mailing address (up to 12 names per group, so registered-agent and law-firm addresses don't chain unrelated owners). Check the Sunbiz record before treating entities as one owner.</div>
+    <h3>Their properties ${ids.length>LIM?`<small class="note">(top ${LIM} by distress score; use Show all in table for the rest)</small>`:''}</h3>
+    <div class="oglist">${rowsH}</div>
+  </aside>`;
+  const close=()=>{ if(OGMAP){ OGMAP.remove(); OGMAP=null; } $('drawerHost').innerHTML=''; };
+  $('scrim').onclick=close; $('closeD').onclick=close; $('closeD').focus();
+  if($('ogBack')) $('ogBack').onclick=()=>openDrawer(backId);
+  $('ogMapBtn').onclick=()=>showOwnerAs(g,'map'); $('ogTblBtn').onclick=()=>showOwnerAs(g,'table');
+  $('ogCsv').onclick=e=>exportIds(ids,'owner',e.currentTarget);
+  $('ogCopy').onclick=()=>copy(ids.map(id=>getStr(P(id),'folio',I(id))).join('\n'),fmt.format(ids.length)+' folios copied');
+  $('drawerHost').querySelector('.oglist').addEventListener('click',e=>{ if(e.target.closest('[data-star]')) return; const b=e.target.closest('.ogopen'); if(b) openDrawer(+b.dataset.id,{backOwner:g}); });
+  try{ await loadLeaflet(); if(!$('ogMap')) return; if(!TONE_RGB) toneSetup();
+    const dark=matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme!=='light';
+    OGMAP=L.map('ogMap',{zoomControl:true,attributionControl:true,preferCanvas:true});
+    L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${dark?'Dark':'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,{maxZoom:20,maxNativeZoom:16,attribution:'Esri'}).addTo(OGMAP);
+    const pts=[]; for(const id of ids.slice(0,5000)){ const p=P(id), g2=p.geo, i=I(id); if(!g2||!(g2.lat[i]>20)) continue; const ll=[g2.lat[i],g2.lon[i]]; pts.push(ll);
+      L.circleMarker(ll,{radius:5,weight:1,color:'#0C0E10',fillColor:SC_RGB[scIdx(p.c.dscore[i])].css,fillOpacity:.9}).bindTooltip(esc(getStr(p,'addr',i)||'No street address')).on('click',()=>openDrawer(id,{backOwner:g})).addTo(OGMAP); }
+    if(pts.length) OGMAP.fitBounds(pts,{padding:[18,18],maxZoom:16}); else OGMAP.setView([25.7,-80.35],10);
+  }catch(e){ const m=$('ogMap'); if(m) m.textContent='The map did not load.'; }
+}
 
 /* export */
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
@@ -537,11 +633,11 @@ async function copy(text,ok){
 const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
 function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note)]:['','','','']; }
-function buildCSV(){
+function buildCSV(ids=results){
   const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','LLC/Company','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Saved','Saved Status','Saved Date','Saved Note'];
   const parts=[head.join(',')+'\n']; let buf='';
-  for(let j=0;j<results.length;j++){
-    const id=results[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
+  for(let j=0;j<ids.length;j++){
+    const id=ids[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
     buf+=[getStr(p,'folio',i),csvq(getStr(p,'addr',i)),csvq(D.city[c.city[i]]),D.zip[c.zip[i]],csvq(TYPE_LABEL[LU_T[c.landuse[i]]]),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][0]):''),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][1]):''),csvq(mzLabel(c.mz[i])),csvq(ZONE_LABEL[Z_G[c.zoning[i]]]),csvq(D.zoning[c.zoning[i]]),csvq(D.landuse[c.landuse[i]]),
       c.lot[i],(c.lot[i]/SQFT_AC).toFixed(3),c.sqft[i],c.beds[i],c.baths[i]/10,c.units[i],c.stories[i],c.yb[i]||'',
       c.land[i],c.bldg[i],mv,c.assd[i],mv?Math.round(c.land[i]/mv*100):'',dateStr(c.sd1[i]),c.sale1[i]||'',c.sq1[i]===1?'Y':c.sq1[i]===2?'N':'',
@@ -553,7 +649,7 @@ function buildCSV(){
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
 }
-$('exportBtn').onclick=async()=>{
+$('exportBtn').onclick=async()=>{ if(results.length) return exportIds(results,S.saved?'saved':S.ogf?'owner':'properties',$('exportBtn'));
   if(!results.length){ toast('Nothing to export yet.'); return; }
   const btn=$('exportBtn'); btn.disabled=true; btn.textContent='Preparing…';
   try{ await ensureDetail(); await ensureGeo(); await loadDistress(); }catch(e){ toast('Export data did not load. Try again.'); btn.disabled=false; btn.textContent='Export CSV'; return; }
@@ -585,6 +681,7 @@ function writeHash(st){
     if(!st.hideGov) h.set('gov','1'); if(st.noBldg) h.set('land','1'); if(st.qualOnly) h.set('mkt','1');
     if(st.sort&&st.sort!=='lot_d') h.set('sort',st.sort); if(st.view&&st.view!=='cards') h.set('view',st.view);
     if(st.bbox) h.set('area',st.bbox.join(','));
+    if(st.ogf) h.set('ogf',st.ogf); if(st.ogMin) h.set('ogn',st.ogMin); if(st.ogDist) h.set('ogd','1'); if(st.ogInst) h.set('ogi','1');
     if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
     const str=h.toString(), want=str?'#'+str:'';
     if(location.hash!==want) history.replaceState(null,'',want||(location.pathname+location.search));
@@ -603,6 +700,7 @@ function parseHash(){
   HASH_NUM.forEach(id=>{ const v=h.get(id); st[id]=(v==null||v==='')?null:(isFinite(+v)?+v:null); });
   st.hideGov=h.get('gov')!=='1'; st.noBldg=h.get('land')==='1'; st.qualOnly=h.get('mkt')==='1';
   st.sort=h.get('sort')||'lot_d'; st.view=h.get('view')||'cards';
+  st.ogf=(h.get('ogf')||'').replace(/\D/g,''); st.ogMin=+h.get('ogn')||0; st.ogDist=h.get('ogd')==='1'; st.ogInst=h.get('ogi')==='1';
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
   const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null;
   return st;
@@ -614,12 +712,6 @@ function deedCount(p0,i0){
   if(!p0.s.book||!p0.c.sd1[i0]) return 0; const bk=getStr(p0,'book',i0), d=p0.c.sd1[i0]; if(!bk) return 0; let n=0;
   for(const p of PACKS){ if(!p||!p.det||!p.s.book) continue; const a=strCol(p,'book'), sd=p.c.sd1;
     for(let i=0;i<a.length;i++) if(sd[i]===d && a[i]===bk) n++; }
-  return n;
-}
-function ownerPortfolio(name){
-  if(!name) return 0; let n=0; const L0=name.length, c0=name.charCodeAt(0);
-  for(const p of PACKS){ if(!p) continue; const a=strCol(p,'owner');
-    for(let i=0;i<a.length;i++){ const s=a[i]; if(s.charCodeAt(0)===c0 && s.startsWith(name) && (s.length===L0 || s.startsWith(' | ',L0))) n++; } }
   return n;
 }
 
@@ -771,6 +863,8 @@ const IDEAS=[
   ['Pre-foreclosure & auctions', ()=>({...BLANK(), dsig:['LP','FC'], sort:'ds_d'})],
   ['Tax deeds & delinquent', ()=>({...BLANK(), dsig:['TD','TC'], dsMin:35, sort:'ds_d'})],
   ['Unsafe structures', ()=>({...BLANK(), dsig:['US'], sort:'ds_d'})],
+  ['🏘 Multi-property motivated owners', ()=>({...BLANK(), ogMin:2, ogDist:true, sort:'ogd_d'})],
+  ['Owners with 5+ properties', ()=>({...BLANK(), ogMin:5, sort:'og_d'})],
   ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:5000, lotMax:87120, sort:'lot_a'})],
   ['Houses on multifamily land', ()=>({...BLANK(), types:['sf'], zones:['mf'], sort:'lot_d'})],
   ['Teardowns', ()=>({...BLANK(), types:['sf','mf29'], lsMin:80, ybMax:1969, sort:'lp_d'})],
@@ -834,6 +928,16 @@ function wireSaved(){
 
 /* wiring */
 let timer=null; const schedule=(ms=120)=>{ clearTimeout(timer); const lc=document.getElementById('liveCount'); if(lc) lc.classList.add('busy'); timer=setTimeout(run,ms); };
+async function ensureOg(){
+  const st={ogMin:+$('ogMin').value, ogDist:$('ogDist').checked};
+  if(S.ogf || st.ogMin || st.ogDist || S.sort==='og_d' || S.sort==='ogd_d'){ try{ await loadOwners(); }catch(e){ toast(e.message); return; } }
+  if(!S.ogf || S.og) return renderOgRow();
+  const find=()=>{ for(const p of PACKS){ if(!p) continue; const a=strCol(p,'folio'); const i=a.indexOf(S.ogf); if(i>=0) return p.c.og[i]||-1; } return 0; };
+  let g=find(); if(!g && !PACKS[1]){ try{ await loadPack(1,'Loading condo units…'); }catch(e){} g=find(); }
+  if(g>0 && OWN.nc[g] && !PACKS[1]){ try{ await loadPack(1,'Loading condo units…'); }catch(e){} }
+  S.og=g||-1; renderOgRow();
+}
+function renderOgRow(){ $('ogRow').hidden=!S.ogf; if(S.ogf) $('ogLabel').textContent=S.og>0&&OWN?`Only properties of ${OWN.name[S.og]} (${fmt.format(OWN.n[S.og])})`:'Only one owner\'s properties'; }
 async function ensureCondo(){ if(S.types.has('condo') && !PACKS[1]){ try{ await loadPack(1,'Loading condo units…'); }catch(e){ S.types.delete('condo'); toast(e.message); } } }
 const clearIdea=()=>document.querySelectorAll('#ideas .chip').forEach(b=>b.classList.remove('on'));
 function wire(){
@@ -861,17 +965,19 @@ function wire(){
     $(f+'List').addEventListener('change',e=>{ const t=e.target; if(!t.dataset.f) return; const set=f==='zoning'?S.exZ:S.exL, i=+t.dataset.i; t.checked?set.add(i):set.delete(i); schedule(100); });
   });
   $('ideas').innerHTML=IDEAS.map(([l],i)=>`<button type="button" class="chip" data-i="${i}">${l}</button>`).join('');
-  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureCondo(); run(); clearIdea(); b.classList.add('on'); });
+  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureCondo(); await ensureOg(); run(); clearIdea(); b.classList.add('on'); });
   $('toResults').onclick=()=>{ const r=$('results'); const y=r.getBoundingClientRect().top+window.scrollY-($('stickybar').offsetHeight+16); window.scrollTo({top:y,behavior:'smooth'}); };
   $('resetBtn').onclick=()=>{ applyState({...BLANK(), view:S.view}); clearIdea(); run(); };
-  $('sortSel').addEventListener('change',()=>{ S.sort=$('sortSel').value; doSort(); save(); renderResults(true); });
+  $('sortSel').addEventListener('change',async()=>{ S.sort=$('sortSel').value; if(S.sort.startsWith('og')) await ensureOg(); doSort(); save(); renderResults(true); });
   $('vCards').onclick=()=>{ S.view='cards'; save(); renderResults(true); };
   $('vTable').onclick=()=>{ S.view='table'; save(); renderResults(true); };
   $('vMap').onclick=()=>{ S.view='map'; save(); renderResults(true); };
   $('clrArea').onclick=()=>{ S.bbox=null; $('areaRow').hidden=true; clearIdea(); run(); };
   $('mapArea').onclick=()=>{ if(!LMAP) return; const b=LMAP.getBounds(); S.bbox=[+b.getSouth().toFixed(6),+b.getWest().toFixed(6),+b.getNorth().toFixed(6),+b.getEast().toFixed(6)]; $('areaRow').hidden=false; clearIdea(); MAP_NOFIT=true; run(); };
   $('mapFit').onclick=()=>fitResults(true);
-  window.addEventListener('hashchange',()=>{ const st=parseHash(); if(st){ applyState(st); ensureCondo().then(run); } });
+  window.addEventListener('hashchange',()=>{ const st=parseHash(); if(st){ applyState(st); ensureCondo().then(ensureOg).then(run); } });
+  ['ogMin','ogDist','ogInst'].forEach(id=>$(id).addEventListener('change',async()=>{ clearIdea(); await ensureOg(); run(); }));
+  $('clrOg').onclick=()=>{ S.ogf=''; S.og=0; renderOgRow(); clearIdea(); run(); };
   $('showMore').onclick=()=>renderResults(false);
   $('cards').addEventListener('click',e=>{ if(e.target.closest('[data-star]')) return; const c=e.target.closest('.card'); if(c) openDrawer(+c.dataset.id); });
   $('cards').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && e.target.classList.contains('card')){ e.preventDefault(); openDrawer(+e.target.dataset.id); } });
@@ -896,6 +1002,7 @@ async function boot(){
     $('dsMin').innerHTML=DS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
     try{ MAP_COLOR=localStorage.getItem('mdpf.mapColor')==='score'?'score':'type'; }catch(e){} $('mapColor').value=MAP_COLOR;
     if(META.distress){ const d=META.distress; $('dsSrc').textContent=`Built ${META.built}. ${fmt.format(d.parcels_with_signals||0)} parcels have at least one record.`; }
+    if(META.owners){ const o=META.owners; $('ogSrc').textContent=`${fmt.format(o.groups)} owners hold 2+ properties; ${fmt.format(o.groups_2plus_distressed_non_institutional)} (excluding banks, government and big institutions) have 2+ parcels with public-record distress signals.`; }
     $('sortSel').innerHTML=SORTS.map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');
     $('ownerGrid').innerHTML=OWNER_ROWS.map(([k,l])=>`<label for="ow_${k}">${l}</label><select id="ow_${k}"><option value="any">Either</option><option value="yes">Only</option><option value="no">Hide</option></select>`).join('');
     OWNER_ROWS.forEach(([k])=>$('ow_'+k).addEventListener('change',e=>{ S.flags[k]=e.target.value; clearIdea(); schedule(0); }));
@@ -903,8 +1010,9 @@ async function boot(){
     let st=parseHash(), fresh=false; if(!st){ try{ st=JSON.parse(localStorage.getItem('mdpf.v2')||'null'); }catch(e){} }
     if(!st){ st=IDEAS[0][1](); fresh=true; }
     applyState(st);
+    const ownLoad=loadOwners().catch(()=>null);
     await loadPack(0,'Loading properties…');
-    await ensureCondo(); if(S.saved) await ensureSavedPacks();
+    await ensureCondo(); if(S.saved) await ensureSavedPacks(); await ownLoad; await ensureOg();
     ['results','foot'].forEach(id=>$(id).hidden=false);
     run();
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');

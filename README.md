@@ -120,6 +120,32 @@ Weekly refresh: `scripts/build_all.sh` (or just the four `fetch_*` + `build_dist
 New-lead digest: `python3 scripts/top_leads.py --since 2026-10-01 [--min 40 --limit 50 --out out/top_leads]`
 writes `out/top_leads.csv` and `out/top_leads.html` (email body). It sends nothing.
 
+## Owner portfolios
+
+`scripts/owners_lib.py` (run inside `build_data.py`) groups every parcel in the county by owner and writes an `og` group id
+into the main/condo packs plus `data/owners.json.gz` (per group: parcels, condo units, parcels with public-record distress,
+total market value, display name, number of name variants, flags).
+
+* Companies, trusts and government: grouped by normalized first-owner name (punctuation, `L L C`/`LLC`/`INC`/`CORP`/`TR`/`TRS`/`&W`/
+  `JTRS`, trust dates and "revocable/living trust" words are stripped, so spelling variants of one entity land together).
+* Individuals: normalized name **plus** normalized mailing address (common names would otherwise merge unrelated people).
+* Second link: names that share one specific mailing address (street + unit + ZIP; `STE 403`/`#403`/`403`, `2 FL`/`2ND FLOOR` unify)
+  are merged when the address isn't the owner's own home, no government / bank / association uses it, and the merged group stays
+  at **12 names or fewer** (registered-agent and law-firm addresses can't chain unrelated LLCs).
+* Flags: government, bank / lender / GSE, association / church / non-profit / utility, large holder (200+ parcels). Flagged groups are
+  left out of the portfolio filters and rank last in the portfolio sorts unless "Include banks, government & big institutions" is checked.
+* "Distressed parcel" = has at least one public-record distress signal (foreclosure, lis pendens, tax deed/certificate/delinquency,
+  unsafe structure, violation, code case, lien, recert, probate/deceased owner).
+
+Current build: 63,513 owner groups with 2+ parcels (282,908 parcels), 31,090 mailing-address links, 2,945 non-institutional owners
+with 2+ distressed parcels.
+
+UI: "Owner holds N+ properties", "Owner has 2+ distressed parcels" and "Include institutions" in *Who owns it*; presets
+**🏘 Multi-property motivated owners** and **Owners with 5+ properties**; sorts *Owner's distressed parcels* / *Owner's portfolio size*;
+an "Owner has N · M distressed" badge on cards; and an **owner portfolio panel** (from the drawer's Portfolio row): totals, market value,
+types, cities, distress signals across the portfolio, avg years held, names and mailing addresses, a map of holdings, the parcel list
+(clickable, with ☆), Show all on map / in table (shareable `#ogf=<folio>` link), Export CSV and Copy folios.
+
 ## Saved properties
 
 Star (☆) any property on a card, table row, map popup or in the detail drawer (keyboard: Tab to the star, Enter/Space).
@@ -136,7 +162,7 @@ cloud sync can be plugged in later; `PFSaved.onChange(fn)` reports every edit.
 
 ## Testing
 
-`tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
+`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
 
 ```bash
 pip install playwright && playwright install chromium

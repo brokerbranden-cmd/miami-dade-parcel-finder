@@ -73,6 +73,13 @@
     <div class="grp">
       <div class="grp-h"><h2>Who owns it</h2><span class="hint">Sorted by the owner's name. Companies include LLCs, corporations, LPs, banks, churches and other organizations. Government owners are left out when they're hidden.</span></div>
       <div class="seg owners" role="group" aria-label="Owner type" id="ownerKind"></div>
+      <div class="ogrow">
+        <label class="ogsel" for="ogMin">Owner holds <select id="ogMin"><option value="0">any number of</option><option value="2">2+</option><option value="3">3+</option><option value="5">5+</option><option value="10">10+</option><option value="25">25+</option></select> properties</label>
+        <label class="check"><input type="checkbox" id="ogDist"> Owner has 2+ distressed parcels</label>
+        <label class="check"><input type="checkbox" id="ogInst"> Include banks, government &amp; big institutions</label>
+      </div>
+      <span class="note" id="ogSrc"></span>
+      <div class="areachip" id="ogRow" hidden><span id="ogLabel"></span><button class="clr" type="button" id="clrOg">Remove</button></div>
     </div>
 
     <div class="row2">

@@ -197,13 +197,28 @@ dsig = np.where(govt_a, 0, dsig)
 pd.DataFrame({'FOLIO': df.FOLIO.values, 'dscore': dscore.astype(int), 'dsig': dsig.astype(int), 'hard': np.minimum(100, dhard).astype(int), 'soft': soft.astype(int)}).to_parquet(f'{RAW}/scores.parquet', index=False)
 print('distress: parcels with any hard signal', int((dhard > 0).sum()), 'score>=50', int((dscore >= 50).sum()), 'score>=70', int((dscore >= 70).sum()))
 
+# ---------- owner portfolios (see scripts/owners_lib.py / README "Owner portfolios") ----------
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import owners_lib
+landuse_up = [x.upper() for x in landuse_s]
+is_condo_all = np.array(['CONDOMINIUM' in x or 'COOPERATIVE' in x for x in landuse_up])
+og, owners = owners_lib.group_owners(list(o1), kinds, list(S('TRUE_MAILING_ADDR1')), list(S('TRUE_MAILING_ADDR2')), list(S('TRUE_MAILING_ZIP_CODE')),
+                                     list(S('TRUE_SITE_ADDR')), list(zip5), (dhard > 0) & ~govt_a, is_condo_all, N('TOTAL_VAL_CUR').values)
+owners['built'] = dt.datetime.now().strftime('%m/%d/%Y')
+with gzip.open(os.path.join(OUT, 'owners.json.gz'), 'wt', compresslevel=9) as fh: json.dump(owners, fh, separators=(',', ':'))
+G = np.array(owners['n']); GF = np.array(owners['fl']); GD = np.array(owners['nd'])
+owner_stats = {'groups': int(len(G) - 1), 'parcels_in_groups': int((og > 0).sum()), 'mail_links': owners['linkedMail'],
+               'groups_5plus': int((G[1:] >= 5).sum()), 'groups_2plus_distressed': int((GD[1:] >= 2).sum()),
+               'groups_2plus_distressed_non_institutional': int(((GD[1:] >= 2) & (GF[1:] == 0)).sum())}
+print('owners:', owner_stats)
+
 cols_main = {
     'city': u8(city_i), 'zip': u16(zip_i), 'cra': u8(cra_i), 'landuse': u16(landuse_i), 'zoning': u16(zoning_i), 'mz': u16(mz_i),
     'lot': u32(N('LOT_SIZE')), 'mkt': u32(N('TOTAL_VAL_CUR')), 'land': u32(N('LAND_VAL_CUR')), 'bldg': u32(N('BUILDING_VAL_CUR')),
     'sqft': u32(sqft), 'yb': u16(yb), 'units': u16(N('UNIT_COUNT')), 'beds': u8(N('BEDROOM_COUNT')),
     'baths': u8((N('BATHROOM_COUNT') + 0.5 * N('HALF_BATHROOM_COUNT')) * 10), 'stories': u8(N('FLOOR_COUNT')),
     'sd1': u16(days('DOS_1')), 'sale1': u32(N('PRICE_1')), 'sq1': u8(qflag('QU_FLG_1')), 'flags': flags,
-    'prv': u32(N('TOTAL_VAL_PRI')), 'dscore': u8(dscore), 'dsig': u16(dsig),
+    'prv': u32(N('TOTAL_VAL_PRI')), 'dscore': u8(dscore), 'dsig': u16(dsig), 'og': og.astype(np.uint32),
 }
 str_main = {'folio': list(S('FOLIO')), 'addr': addr, 'owner': [clean(o) for o in owner_str]}
 cols_det = {'assd': u32(N('ASSESSED_VAL_CUR')), 'taxable': u32(N('CNTY_TAXABLE_VAL_CUR')), 'sd2': u16(days('DOS_2')), 'sale2': u32(N('PRICE_2')),
@@ -250,6 +265,7 @@ meta = {
     'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%d/%Y'),
     'stats': stats, 'packs': packs,
     'distress': json.load(open(f'{RAW}/distress_stats.json')) if os.path.exists(f'{RAW}/distress_stats.json') else None,
+    'owners': owner_stats, 'ownersFile': 'owners.json.gz',
     'distressFile': 'distress.json.gz' if os.path.exists(os.path.join(OUT, 'distress.json.gz')) else None,
     'dicts': {'city': city, 'zip': zips, 'cra': cra, 'landuse': landuse, 'zoning': zoning, 'mzone': mz_list},
     'sources': {

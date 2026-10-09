@@ -502,7 +502,7 @@ function covShort(cv,kind){
   if(!cv) return 'Not covered';
   const lv=cv[kind+'_level'], from=cv[kind+'_from'], src=cv[kind+'_src'];
   if(lv==='none'||!from) return cv.status==='none'?'None (no public source)':cv.status==='portal'?'None (portal not machine-readable)':'None';
-  return `${lv==='recent'?'Recent only':'Since '+from.slice(0,7)}${lv==='half'?' (5-8 yrs)':''} - ${src}`;
+  return `Since ${from.slice(0,7)}${lv==='half'?' (5-8 yrs)':lv==='recent'?' (under 5 yrs)':''} - ${src}`;
 }
 function covHTML(cv,folio){
   if(!cv) return '<div class="note">No permit-coverage information for this city.</div>';

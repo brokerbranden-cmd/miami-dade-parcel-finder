@@ -160,26 +160,24 @@ and a non-government owner are scored.
 | US | Open unsafe structure case | County Open_Building_Violations | 25 |
 | NG | Neglect-type code case, open or in lien: junk/trash/overgrowth, abandoned property, structure upkeep, minimum housing, unsecured pool, pool maintenance, bees | County CodeCompliance Open + Lien views | 15 |
 | FR | Foreclosure-registry code case (failure to register/renew a foreclosed property) | same | 12 |
-| XP | Expired or revoked permit with no newer permit: open county "Expired Permit" building case, or City of Miami permit status Expired/Revoked | County building cases; City of Miami permits | 8 |
-| NP | No permit on record since 2014 (**City of Miami parcels only**, built before 2014) | City of Miami Building_Permits_Since_2014 | 6 (10 if built 1970 or earlier: old building, no recorded improvements) |
+| XP | Expired or revoked permit with no newer permit (any covered city), open county "Expired Permit" building case, or an open municipal work-without-permit / expired-permit case | permit index (`merge_permits.py`); County building cases | 8 |
+| NP | No permit on record since the start of the city's **permit-data window** (only cities with 5+ years of public permit history; built before the window starts) | permit index, per-city window | 6 (10 if built 1970 or earlier) when the window is 8+ yrs; half (3 / 5) for 5-8 yrs; never otherwise |
 | LO | Owned 20+ years | PA last sale | 5 |
 | LB | Building worth < 20% of the total value | PA values | 8 |
 | TX | Tax delinquent (TC / TX / TD distress signals) | TaxSys | 10 |
 | ES | Estate / probate / owner deceased (PR / DC) | distress layer | 8 |
 | OV | Other open code / building case | County violations | 4 |
-| RP | **Recent permit** (issued in the last 24 months, City or County), so someone is working on it | both permit sources | −15 |
+| RP | **Recent permit** (issued in the last 24 months, any covered city), so someone is working on it | permit index | −15 |
 
 **Vacancy hint = clamp(0, 100, sum of points)**. 25+ = "Possibly vacant", 40+ = "Likely vacant / neglected", 60+ = strong.
 It feeds the Distress Score as a capped soft signal: **+5 at 40+, +8 at 60+** (on top of the other soft factors; total score still capped at 100).
 
-Permit coverage is partial, so "no permit" only counts where the data exists: `scripts/fetch_permits.py` pulls per-folio last-permit
-dates (server-side aggregates) from the City of Miami (2014–today, City of Miami parcels) and the County Building Dept
-(`miamidade_permit_data`, rolling last ~2 years, mostly unincorporated). Other municipalities (Miami Beach, Hialeah, Coral Gables, …)
-publish no permit API. The drawer shows the last permit on record or says which coverage applies. County code-case layers cover
-unincorporated Miami-Dade; City of Miami code cases are not published.
+Permit coverage is uneven, so "no permit" only counts where a city's permit history is public and long enough (see **Permit history & code cases**
+below): >= 8 years of history scores full points, 5-8 years half, anything shorter or no data scores nothing. The drawer says which coverage applies
+to the parcel's city. Municipal code cases feed NG / FR / OV / XP the same way the county's layers do.
 
-Current build: 449,703 parcels scored; 473 at 40+, 27 at 60+. Signal counts: NA 34,674 · US 1,413 · NG 2,074 · FR 367 · XP 4,997 ·
-NP 24,745 · LO 108,915 · LB 41,565 · TX 10,107 · ES 3,056 · OV 9,757 · RP 56,420.
+Current build: 449,598 parcels scored; 841 at 40+, 53 at 60+ (before municipal permit / code-case data: 473 and 27). Signal counts: NA 33,777 · US 1,762 · NG 8,585 · FR 442 · XP 9,724 ·
+NP 30,479 (only in cities with 5+ yrs of permit history) · LO 108,872 · LB 41,508 · TX 10,100 · ES 3,384 · OV 18,516 · RP 76,357. Signals that went up are from municipal code cases / permits; NA, LO, LB, TX moved by a few hundred or fewer because the roll and owner-type classification were refreshed in the same build.
 
 UI: *Vacancy & condition* filter group (signal chips with counts, "Vacancy hint" 25+/40+/60+, "only ones I marked vacant"),
 preset **🏚 Likely vacant / neglected**, sort *Most likely vacant / neglected*, card badge, table column, CSV columns
@@ -187,6 +185,80 @@ preset **🏚 Likely vacant / neglected**, sort *Most likely vacant / neglected*
 the last permit, an **aerial thumbnail** (Esri World Imagery export, dates vary) and **Street View / Satellite** links (Google Maps).
 On a saved property you can tick **Looks vacant / damaged** and write a **condition note**. Both are stored with the saved list
 (`vacant`, `cond` in `saved.js`) and included in its JSON/CSV export/import.
+
+## Permit history & code cases (all municipalities)
+
+`scripts/fetch_county_permits.py`, `scripts/fetch_energov.py` and `scripts/fetch_violations.py` pull every public machine-readable permit / code-case
+source at ~1 request/second; `scripts/merge_permits.py` normalises them to per-folio records (`RAW/permit_index.json`, `RAW/muni_cases.json`);
+`scripts/permit_lib.py` turns that into pack columns; `scripts/permit_catalog.py` records, for every municipality, where the portal is and why a city
+is not ingested. All steps are non-fatal in `build_all.sh` (a failed source falls back to its cached file; with no index the vacancy hint falls back to the
+old City of Miami / County aggregates).
+
+* **Sources**: City of Miami `Building_Permits_Since_2014` (ArcGIS); County Building Dept permits (`MD_LandInformation/MapServer/1`, ~262K rows, dense 2023-today,
+  ~99% unincorporated) + County certificates of occupancy (2002-today); County Code Compliance `CCVIOL_gdb` (all cases incl. closed) + building violations;
+  and the **Tyler EnerGov Citizen Self-Service public search API** (no login) for Hialeah, Miami Gardens, Miami Beach, Coral Gables, Doral, North Miami Beach,
+  Homestead, Miami Shores, Surfside, North Bay Village (+ Sweetwater, Cutler Bay, North Miami, Opa-locka whose tenants went live in 2026 with almost no history).
+  EnerGov caps a search at 10,000 rows, so each portal is read in year / half-year / quarter windows that split recursively.
+* **Matching**: the record's own 13-digit parcel number when it is a real PA folio, else an exact normalised street address (+ZIP) inside the portal's own
+  municipality, only when exactly one folio carries that address (no fuzzy matching).
+* **Per folio** (`permit_index.json`): last permit date, permits in the last 5 yrs, open / expired / revoked counts (statuses classified from each portal's
+  own wording; voids, cancelled, revisions, signs, licences etc. are ignored), last permit type; code cases: open count (cases older than 2016 that are still "open"
+  are kept in totals but not flagged), cases in the last 5 yrs, last opened / status / type, lien flag, neglect / unsafe / foreclosure-registry / work-without-permit flags.
+* **Coverage window** per city and kind: the first year from which every later year holds at least 40% of the median of the last three full years. That year
+  is stored in `permit_index.json -> coverage`, shipped in `meta.json -> permitCov`, and shown in the filter panel ("Permit & code data coverage by city") and in the drawer.
+* **Distress**: municipal open cases become CC (code case), BV (work without / expired permit) or US (unsafe structure) signals, and cases with a lien / fines running add LN.
+* **UI**: "Permits & code cases" chips (open permit, expired / revoked permit, permit in last 5 yrs, no permit in the city window, open code case, code case in last
+  5 yrs, code lien / fines, city has permit data), a "Permits & cases" table column, a drawer section (last permit, 5-yr count, case summary, per-city coverage), and
+  CSV columns (Permits (5 yrs), Last Permit Detail, Open Code Cases, Code Cases (5 yrs), Code Case Detail, Permit/Code Signals, Permit Data Coverage, Code Data Coverage).
+
+<!-- PERMIT_COVERAGE -->
+Built 2026-10-09. Window = first year from which the source holds >= 40% of its recent yearly volume.
+
+**Ingested**
+
+| City | Permits | Code cases | Records ingested (permits / code) | Folio+address match | Source |
+|---|---|---|---|---|---|
+| Coral Gables | since 2022 (<5 yrs) | since 2022 | 63,975 / 27,034 | 96% / 97% | [Tyler EnerGov CSS](https://coralgablesfl-energovpub.tylerhost.net/apps/selfservice) |
+| Cutler Bay | none usable | none usable | 93 / 47 | 65% / 57% | [Tyler EnerGov CSS](https://townofcutlerbayfl-energovweb.tylerhost.net/apps/selfservice) |
+| Doral | since 2005 (8+ yrs) | since 2009 | 168,964 / 88,489 | 86% / 57% | [Tyler EnerGov CSS](https://doralfl-energovweb.tylerhost.net/apps/selfservice) |
+| Hialeah | since 2023 (<5 yrs) | since 2023 | 38,963 / 17,923 | 99% / 100% | [Tyler EnerGov CSS](https://hialeahfl-energovpub.tylerhost.net/apps/selfservice) |
+| Homestead | none usable | none usable | 1,270 / 6,849 | 97% / 97% | [Tyler EnerGov CSS](https://cityofhomesteadfl-energovweb.tylerhost.net/apps/selfservice) |
+| Miami | since 2014 (8+ yrs) | none usable | 234,315 / 0 | 95% / 0% | [ArcGIS FeatureServer](https://datahub-miamigis.opendata.arcgis.com/datasets/MiamiGIS::building-permits-since-2014) |
+| Miami Beach | since 2015 (8+ yrs) | since 2023 | 407,466 / 311,514 | 92% / 86% | [Tyler EnerGov CSS](https://energovcss.miamibeachfl.gov/EnerGovProd/SelfService/) |
+| Miami Gardens | since 2007 (8+ yrs) | since 2007 | 123,993 / 65,895 | 91% / 98% | [Tyler EnerGov CSS](https://miamigardensfl-energovpub.tylerhost.net/apps/selfservice) |
+| Miami Shores | since 2002 (8+ yrs) | since 2006 | 69,190 / 23,044 | 99% / 98% | [Tyler EnerGov CSS](https://villageofmiamishoresfl-energovweb.tylerhost.net/apps/selfservice) |
+| North Bay Village | since 2009 (8+ yrs) | since 2015 | 11,128 / 2,190 | 73% / 84% | [Tyler EnerGov CSS](https://northbayvillagefl-energovpub.tylerhost.net/apps/selfservice) |
+| North Miami | none usable | none usable | 9 / 3 | 0% / 0% | [Tyler EnerGov CSS](https://cityofnorthmiamifl-energovweb.tylerhost.net/apps/selfservice) |
+| North Miami Beach | since 2004 (8+ yrs) | since 2023 | 101,605 / 9,752 | 94% / 99% | [Tyler EnerGov CSS](https://css.northmiamibeachfl.gov/energovprod/selfservice) |
+| Surfside | since 1989 (8+ yrs) | none usable | 66,575 / 4,838 | 74% / 93% | [Tyler EnerGov CSS](https://surfsidefl-energovpub.tylerhost.net/apps/selfservice) |
+| Sweetwater | none usable | none usable | 27 / 23 | 11% / 70% | [Tyler EnerGov CSS](https://cityofsweetwaterfl-energovweb.tylerhost.net/apps/selfservice) |
+| Unincorporated Miami-Dade | since 2024 (<5 yrs) | since 2021 | 409,006 / 256,654 | 93% / 89% | [County ArcGIS layers](https://gisweb.miamidade.gov/arcgis/rest/services/MD_LandInformation/MapServer/1) |
+
+**No machine-readable public source** (not scored, shown in the drawer and the coverage table)
+
+| City | Why not ingested | Portal |
+|---|---|---|
+| Aventura | eTRAKiT: 50-row cap, no dates/status in results; per-folio only | [CentralSquare eTRAKiT](https://etrakit.cityofaventura.com/etrakit/) |
+| Bal Harbour | public reports need a staff-issued access code | [SmartGov](https://vlg-balharbour-fl.smartgovcommunity.com/Public/Home) |
+| Bay Harbor Islands | per-address / folio lookup only, no bulk listing | [Citizenserve](https://www2.citizenserve.com/bhi) |
+| Biscayne Park | portals are for applications and plan review, no public search | [CAP / GoGov (applications only)](https://biscayneparkfl.gov/?SEC=37D66DF7-212E-40FF-ABB5-9AED4040A0F7) |
+| El Portal | no public search; open-permit search is a $25 request | [CAP plan review + GovPilot](https://elportalvillage.com/code-enforcement-building-department/) |
+| Florida City | eTRAKiT: 50-row cap, no dates/status in results; per-folio only | [CentralSquare eTRAKiT](https://flc.csqrcloud.com/community-etrakit) |
+| Golden Beach | no public permit / code search found | [online application only](https://goldenbeach.us) |
+| Hialeah Gardens | no public permit / code search | [fee-based Lien Library request ($325)](https://www.cityofhialeahgardens.com/city-government/city-clerk-s-office/lien-and-open-permit-search) |
+| Indian Creek | no public permit / code search found | none |
+| Key Biscayne | Accela ACA search needs address/parcel per query (not bulk); not ingested | [Accela Citizen Access](https://aca-prod.accela.com/keybiscayne/Default.aspx) |
+| Medley | no public permit / code search found | [none](https://www.medleyfl.org) |
+| Miami Lakes | eTRAKiT: 50-row cap, no dates/status in results; per-folio only | [CentralSquare eTRAKiT](https://trakit.miamilakes-fl.gov/etrakit/) |
+| Miami Springs | eTRAKiT search returns max 50 rows per query and no dates/status; per-folio only | [CentralSquare eTRAKiT](https://mias-trk.aspgov.com/etrakit/) |
+| Opa-locka | EnerGov tenant exists but holds 0 permits / 1 code case; open-permit search is by mail, $50 per folio | [Tyler EnerGov CSS (empty)](https://cityofopalockafl-energovweb.tylerhost.net/apps/selfservice) |
+| Palmetto Bay | per-permit / per-address search only | [Tyler Eden + CivicGov](https://eden.palmettobay-fl.gov/EdenWebNet/Default.aspx?Build=PM.pmPermit.SearchForm) |
+| Pinecrest | eTRAKiT: 50-row cap, no dates/status in results; per-folio only | [CentralSquare eTRAKiT](https://pine-trk.aspgov.com/eTRAKiT/) |
+| South Miami | eTRAKiT: 50-row cap, no dates/status in results; per-folio only | [CentralSquare eTRAKiT](https://etrakit.southmiamifl.gov/etrakit/) |
+| Sunny Isles Beach | needs a portal account + access code | [SmartGov](https://ci-sunnyislesbeach-fl.smartgovcommunity.com/Public/Home) |
+| Virginia Gardens | no public permit / code search found | none |
+| West Miami | no public permit or code search found; requests go to the Building Department | [none](https://cityofwestmiami.gov/building-department) |
+<!-- /PERMIT_COVERAGE -->
 
 ## Drive for dollars (phone) + installable app
 
@@ -243,7 +315,7 @@ Privacy: everything stays in this browser (`localStorage` key `mdpf.lenders.v1`)
 
 ## Testing
 
-`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_lenders.py` covers lender tracking (forms, deals, dashboard math, drawer Financing, JSON/CSV export + import, phone layout). `tests/e2e_mobile.py` covers drive mode at a phone viewport with mocked GPS (sheet, save/status/note, Save where I am, manifest, service worker, offline reload). `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
+`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_lenders.py` covers lender tracking (forms, deals, dashboard math, drawer Financing, JSON/CSV export + import, phone layout). `tests/e2e_mobile.py` covers drive mode at a phone viewport with mocked GPS (sheet, save/status/note, Save where I am, manifest, service worker, offline reload). `tests/e2e_permits.py` covers the permit / code-case chips, per-city coverage table and drawer, CSV columns. `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
 
 ```bash
 pip install playwright && playwright install chromium

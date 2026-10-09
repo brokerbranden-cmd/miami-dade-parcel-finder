@@ -46,7 +46,7 @@ with sync_playwright() as pw:
     # drawer for a covered parcel
     pg.click('#cards .card:nth-of-type(1)'); pg.wait_for_selector('.drawer'); pg.wait_for_timeout(2500)
     d = pg.inner_text('.drawer')
-    ok('Permits & code cases' in d and 'Permit data coverage' in d, 'drawer has Permits & code cases + coverage box')
+    ok('permits & code cases' in d.lower() and 'permit data coverage' in d.lower(), 'drawer has Permits & code cases + coverage box')
     ok('Hialeah' in d and 'Code cases covered since' in d, 'drawer states Hialeah code coverage')
     ok('open' in d.lower() and 'Last permit' in d or 'Code cases' in d, 'drawer lists the code case')
     pg.screenshot(path=SHOTS + 'permits_03_drawer_hialeah.png'); pg.keyboard.press('Escape'); pg.wait_for_timeout(300)

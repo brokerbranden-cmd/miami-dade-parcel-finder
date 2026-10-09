@@ -39,10 +39,10 @@ const loadDistress=()=>distP||(distP=(async()=>{ if(!META.distressFile) return n
 const FLAG = {homestead:1, oos:2, absz:4, corp:8, trust:16, govt:32, estate:64, senior:128};
 const MZ_MIAMI=[['T3','Sub-urban (single family, duplex)'],['T4','General urban (small apartments)'],['T5','Urban center (up to 5 stories)'],['T6','Urban core (8+ stories)'],['CI','Civic institution'],['CS','Civic space'],['D1','Work place'],['D2','Industrial'],['D3','Waterfront industrial']];
 const MZ_COUNTY=[['RU-1','Single family'],['RU-2','Duplex'],['RU-TH','Townhouse'],['RU-3','Small multifamily'],['RU-4','Apartments'],['RU-5','Residential / office'],['EU','Estates'],['BU','Business'],['IU','Industrial'],['GU','Interim'],['PAD','Planned area development']];
-const OWNER_KINDS = [['all','All owners'],['person','Individuals'],['corp','LLCs & companies'],['trust','Trusts']];
+const OWNER_KINDS = [['all','All owners'],['person','Individuals'],['corp','Companies & organizations'],['trust','Trusts']];
 const OWNER_ROWS = [
   ['homestead','Owner lives there (homestead)'],['oos','Owner mails from out of state'],['absz','Owner mails to a different ZIP'],
-  ['corp','Owned by an LLC or company'],['trust','Owned by a trust'],['estate','Estate or heirs'],['senior','Senior exemption']];
+  ['corp','Owned by a company or organization'],['trust','Owned by a trust'],['estate','Estate or heirs'],['senior','Senior exemption']];
 const dec = new TextDecoder();
 
 /* plain-language categories */
@@ -383,7 +383,7 @@ function renderFacet(f){
 const PAGE=60; let shown=0;
 function ownerBadges(fl){
   const b=[]; if(fl&64) b.push('<span class="hot">Estate / heirs</span>'); if(fl&2) b.push('<span class="warm">Out-of-state owner</span>'); else if((fl&4) && !(fl&1)) b.push('<span>Absentee owner</span>');
-  if(fl&8) b.push('<span>LLC / company</span>'); if(fl&16) b.push('<span>Trust</span>'); if(fl&1) b.push('<span>Owner lives there</span>'); if(fl&128) b.push('<span>Senior</span>'); return b.join('');
+  if(fl&8) b.push('<span>Company / organization</span>'); if(fl&16) b.push('<span>Trust</span>'); if(fl&1) b.push('<span>Owner lives there</span>'); if(fl&128) b.push('<span>Senior</span>'); return b.join('');
 }
 function mzLabel(mi){ const e=MZ[mi]; if(!e) return ''; const bits=[]; if(e[4]) bits.push(e[4]+' stories'); if(e[3]&&+e[3]>0) bits.push(e[3]+' units/acre'); return e[2]+(bits.length?' ('+bits.join(', ')+')':''); }
 function mzHTML(mi){ const e=MZ[mi]; if(!e) return ''; return `<span class="mzcode">${esc(e[0])}</span> · ${esc(mzLabel(mi))}`; }
@@ -691,14 +691,14 @@ const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
 function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||'')]:['','','','','',''];}
 function buildCSV(ids=results){
-  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','LLC/Company','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note'];
+  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','Company/Organization','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note'];
   const parts=[head.join(',')+'\n']; let buf='';
   for(let j=0;j<ids.length;j++){
     const id=ids[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
     buf+=[getStr(p,'folio',i),csvq(getStr(p,'addr',i)),csvq(D.city[c.city[i]]),D.zip[c.zip[i]],csvq(TYPE_LABEL[LU_T[c.landuse[i]]]),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][0]):''),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][1]):''),csvq(mzLabel(c.mz[i])),csvq(ZONE_LABEL[Z_G[c.zoning[i]]]),csvq(D.zoning[c.zoning[i]]),csvq(D.landuse[c.landuse[i]]),
       c.lot[i],(c.lot[i]/SQFT_AC).toFixed(3),c.sqft[i],c.beds[i],c.baths[i]/10,c.units[i],c.stories[i],c.yb[i]||'',
       c.land[i],c.bldg[i],mv,c.assd[i],mv?Math.round(c.land[i]/mv*100):'',dateStr(c.sd1[i]),c.sale1[i]||'',c.sq1[i]===1?'Y':c.sq1[i]===2?'N':'',
-      dateStr(c.sd2[i]),c.sale2[i]||'',csvq(getStr(p,'owner',i)),fl&8?'LLC/Company':fl&16?'Trust':fl&32?'Government':'Individual',csvq(getStr(p,'mail',i)),
+      dateStr(c.sd2[i]),c.sale2[i]||'',csvq(getStr(p,'owner',i)),fl&8?'Company/Organization':fl&16?'Trust':fl&32?'Government':'Individual',csvq(getStr(p,'mail',i)),
       fl&1?'Y':'',fl&2?'Y':'',fl&4?'Y':'',fl&8?'Y':'',fl&16?'Y':'',fl&64?'Y':'',csvq(D.cra[c.cra[i]]||''),csvq(getStr(p,'legal',i)),
       fl&128?'Y':'',c.taxable[i],c.prv[i]||'',csvq(getStr(p,'grantor',i)),getStr(p,'book',i),p.geo&&p.geo.lat[i]>20?p.geo.lat[i].toFixed(6):'',p.geo&&p.geo.lat[i]>20?p.geo.lon[i].toFixed(6):'','https://apps.miamidadepa.gov/propertysearch/#/?folio='+getStr(p,'folio',i),
       c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i)),c.vscore?c.vscore[i]:'',csvq(vsigText(c.vsig?c.vsig[i]:0)),c.lperm?dateStr(c.lperm[i]):'',...savedCSV(getStr(p,'folio',i))].join(',')+'\n';

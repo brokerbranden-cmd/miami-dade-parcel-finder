@@ -107,20 +107,20 @@ for k, (c, j, d) in enumerate(zip(S('MZ_CODE'), S('MZ_JURIS'), S('MZ_DESC'))):
 o1, o2, o3 = S('TRUE_OWNER1'), S('TRUE_OWNER2'), S('TRUE_OWNER3')
 owner_all = (o1 + ' ' + o2 + ' ' + o3).str.upper().str.replace(r'\s+', ' ', regex=True)
 owner_str = [' | '.join([x for x in t if x]) for t in zip(o1, o2, o3)]
-GOV = re.compile(r"\b(MIAMI[- ]?DADE COUNTY|DADE COUNTY|MIAMI-DADE CNTY|BOARD OF COUNTY COMM|CITY OF|TOWN OF|VILLAGE OF|STATE OF FL|STATE OF FLORIDA|STATE OF FLA|SCHOOL BOARD|BOARD OF PUBLIC INSTRUCTION|UNITED STATES|U ?S ?A\b|USA\b|US GOVT|U S GOVT|FEDERAL GOVT|GSA\b|DEPT OF|DEPARTMENT OF|D O T|FDOT|HOUSING AUTHORITY|INTERNAL IMPROVEMENT|TIITF|SO(UTH)? FL(ORID)?A? WATER MGT|SOUTH FLORIDA WATER MANAGEMENT|WATER MGMT DIST|SFWMD|EXPRESSWAY AUTHORITY|TRANSPORTATION AUTHORITY|AVIATION DEPT|PORT AUTHORITY|COMMUNITY REDEVELOPMENT AGENCY|MDC\b|M-D C\b|PUBLIC HEALTH TRUST)")
-CORP = re.compile(r"\b(LLC|L L C|INC|INCORPORATED|CORP|CORPORATION|COMPANY|LP|L P|LTD|LLP|PLLC|BANK|BANCORP|NATIONAL ASSOCIATION|N A$|ASSN|ASSOCIATION|ASSOC|CHURCH|MINISTRY|MINISTRIES|CONGREGATION|TEMPLE|HOLDINGS?|PROPERTIES|INVESTMENTS?|INVESTORS|PARTNERS|PARTNERSHIP|ENTERPRISES?|GROUP|FUND|CAPITAL|VENTURES?|DEVELOPMENT|DEVELOPERS|REALTY|MANAGEMENT|MGMT|CONDOMINIUM|CONDO ASSN|HOMEOWNERS|FOUNDATION|SOCIETY|UNIVERSITY|COLLEGE|ACADEMY|HOSPITAL|CLUB|MORTGAGE|LENDING|SERVICES|SVCS|INTERNATIONAL|INTL|CO$|& CO\b|P A$|PA$|SA$|S A$|GMBH|LIMITED|COOPERATIVE|FEDERAL NATIONAL|FEDERAL HOME LOAN|SECRETARY OF HOUSING)\b")
-CORP_STRONG = re.compile(r"\b(LLC|L L C|INC|CORP|CORPORATION|LP|L P|LTD|BANK|NATIONAL ASSOCIATION|ASSN|ASSOCIATION|COMPANY)\b")
-TRUST = re.compile(r"\b(TRUST|TR|TRS|TRSTEE|TRUSTEE|TRUSTEES|REVOCABLE|REV TR|LIV TR|LIVING TR|LAND TR)\b")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import owner_kind
 EST = re.compile(r"\b(EST|ESTATE|EST OF|ESTATE OF|HEIRS?|DECEASED|DECD|DEC'D)\b")
-GOV_WEAK_ONLY = re.compile(r"^(U ?S ?A|USA|UNITED STATES)$")
-def kind_of(s):
-    g = GOV.search(s)
-    if g and not (CORP_STRONG.search(s) and GOV_WEAK_ONLY.match(g.group(0).strip())): return 'govt'
-    t = bool(TRUST.search(s)); c = bool(CORP.search(s))
-    if c and (CORP_STRONG.search(s) or not t): return 'corp'
-    if t: return 'trust'
-    return 'person'
-kinds = [kind_of(s) for s in owner_all]
+# owner type = owner_kind.classify (see that module): 'govt' | 'corp' (every non-government organization, incl. utilities, banks, associations,
+# institutions) | 'trust' | 'person'. Care-of / attn lines are ignored; owner-name lines are read together.
+_given = owner_kind.build_given(list(o1))
+_kc = {}
+def _cls(t):
+    r = _kc.get(t)
+    if r is None: r = _kc[t] = owner_kind.classify(t, _given)
+    return r
+_res = [_cls(t) for t in zip(o1, o2, o3)]
+kinds = [r[0] for r in _res]
+subs = [r[1] for r in _res]
 est = [k in ('person', 'trust') and bool(EST.search(re.sub(r'\b(LIFE|REAL|REALTY|RE|RL|R E) EST(ATE)?\b', ' ', s))) for s, k in zip(owner_all, kinds)]
 
 mstate = S('TRUE_MAILING_STATE').str.upper(); mcountry = S('TRUE_MAILING_COUNTRY').str.upper()
@@ -210,7 +210,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import owners_lib
 landuse_up = [x.upper() for x in landuse_s]
 is_condo_all = np.array(['CONDOMINIUM' in x or 'COOPERATIVE' in x for x in landuse_up])
-og, owners = owners_lib.group_owners(list(o1), kinds, list(S('TRUE_MAILING_ADDR1')), list(S('TRUE_MAILING_ADDR2')), list(S('TRUE_MAILING_ZIP_CODE')),
+og, owners = owners_lib.group_owners(list(o1), kinds, subs, list(S('TRUE_MAILING_ADDR1')), list(S('TRUE_MAILING_ADDR2')), list(S('TRUE_MAILING_ZIP_CODE')),
                                      list(S('TRUE_SITE_ADDR')), list(zip5), (dhard > 0) & ~govt_a, is_condo_all, N('TOTAL_VAL_CUR').values)
 owners['built'] = dt.datetime.now().strftime('%m/%d/%Y')
 with gzip.open(os.path.join(OUT, 'owners.json.gz'), 'wt', compresslevel=9) as fh: json.dump(owners, fh, separators=(',', ':'))

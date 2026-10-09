@@ -61,7 +61,7 @@ class UF:
         if a == b or self.sz[a] + self.sz[b] > cap: return False
         a, b = min(a, b), max(a, b); self.p[b] = a; self.sz[a] += self.sz[b]; return True
 
-def group_owners(owner1, kinds, mail1, mail2, mzip, site_addr, site_zip, distressed, is_condo, mkt):
+def group_owners(owner1, kinds, subs, mail1, mail2, mzip, site_addr, site_zip, distressed, is_condo, mkt):
     n = len(owner1)
     nn = [norm_name(s) for s in owner1]
     mk = [norm_mail(a, b, z) for a, b, z in zip(mail1, mail2, mzip)]
@@ -77,7 +77,7 @@ def group_owners(owner1, kinds, mail1, mail2, mzip, site_addr, site_zip, distres
         if kof[i] < 0 or not mk[i]: continue
         if mk[i].split('|')[0] == site[i].split('|')[0] and kinds[i] == 'person': continue   # owner lives there: not a portfolio link
         by_mail[mk[i]].add(kof[i])
-        if kinds[i] == 'govt' or BANK.search(owner1[i]) or ASSOC.search(owner1[i]): bad_mail.add(mk[i])
+        if kinds[i] == 'govt' or subs[i] in ('bank', 'assoc', 'utility', 'inst'): bad_mail.add(mk[i])
     linked = 0
     for m, ks in sorted(by_mail.items(), key=lambda x: len(x[1])):   # small (most specific) address groups first
         if 2 <= len(ks) <= MAX_NAMES and m not in bad_mail:
@@ -97,8 +97,8 @@ def group_owners(owner1, kinds, mail1, mail2, mzip, site_addr, site_zip, distres
     for i in np.nonzero(og)[0]:
         g = og[i]; names[g][owner1[i]] += 1
         if kinds[i] == 'govt': flags[g] |= 1
-        if BANK.search(owner1[i]): flags[g] |= 2
-        if ASSOC.search(owner1[i]): flags[g] |= 4
+        if subs[i] == 'bank': flags[g] |= 2
+        if subs[i] in ('assoc', 'inst', 'utility'): flags[g] |= 4
     flags |= (gn >= 200) * 8
     disp = [''] * G; nvar = [0] * G
     for g, c in names.items(): disp[g] = c.most_common(1)[0][0]; nvar[g] = len(c)

@@ -47,7 +47,7 @@ def money(s):
 fol = lambda s: re.sub(r'\D', '', str(s or ''))
 
 # ---------- PA roll index ----------
-pa = pd.read_parquet(f'{RAW}/pagis.parquet', columns=['FOLIO', 'TRUE_SITE_ADDR', 'TRUE_SITE_UNIT', 'TRUE_SITE_ZIP_CODE', 'TRUE_OWNER1', 'TRUE_OWNER2', 'TRUE_OWNER3', 'LEGAL'])
+pa = pd.read_parquet(f'{RAW}/pagis.parquet', columns=['FOLIO', 'TRUE_MAILING_ADDR1', 'TRUE_MAILING_ZIP_CODE', 'TRUE_SITE_ADDR', 'TRUE_SITE_UNIT', 'TRUE_SITE_ZIP_CODE', 'TRUE_OWNER1', 'TRUE_OWNER2', 'TRUE_OWNER3', 'LEGAL'])
 pa = pa[pa.FOLIO.notna()].drop_duplicates('FOLIO')
 pa['FOLIO'] = pa.FOLIO.astype(str).str.strip()
 FOLIOS = set(pa.FOLIO)
@@ -106,11 +106,16 @@ for f in glob.glob(f'{RAW}/clerk/LIS_legacy/*lis-pendens-raw-all.csv'):
 # fresh Official Records CSV exports (logged-in browser session) -> same model shape; one row per party pairing
 LPDIR = os.environ.get('LP_DOWNLOADS', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'raw', 'lp_downloads'))
 PLF_RX = re.compile(r'\b(BANK|BANC|MORTGAGE|MTG|LOAN|LENDING|SERVIC|FUNDING|FINANC|CAPITAL|CREDIT UNION|FEDERAL|SAVINGS|FSB|N\s?A$|NATIONAL ASS|TRUST CO|TRUSTEE|SECRETARY OF|HOUSING|ASS(OCIATIO)?N|ASSOC|CONDO|HOMEOWNER|HOA|MASTER|COMMUNITY|NATIONSTAR|MR COOPER|LAKEVIEW|FREEDOM|NEWREZ|CARRINGTON|ROCKET|PENNYMAC|DEUTSCHE|WILMINGTON|U S BANK|US BANK|COMPUTERSHARE|FANNIE|FREDDIE|CITIBANK|WELLS FARGO|JPMORGAN|CHASE|HSBC|MIDFIRST|SPECIALIZED|SELECT PORTFOLIO|SHELLPOINT|PHH|LOANCARE|PLANET HOME|CHAMPION|REVERSE|CIVIC|ONEMAIN)')
-n_csv_rows = 0
+n_csv_rows = 0; n_csv_dups = 0
+# the weekly exports overlap (e.g. lp_20261001_20261002 and lp_20260930_20261001 both hold 10/01): pool every row of every file by CFN and
+# drop exact duplicate rows, so one CFN is one document and its party pairings are complete even if they were split across two files
+by = collections.defaultdict(list); seen_rows = set()
 for f in sorted(glob.glob(f'{LPDIR}/*.csv')):
-    by = collections.defaultdict(list)
     for r in csv.DictReader(open(f, encoding='utf-8-sig', errors='replace')):
-        n_csv_rows += 1; by[r["Clerk's File Number"].strip()].append(r)
+        n_csv_rows += 1; k = tuple(r.values())
+        if k in seen_rows: n_csv_dups += 1; continue
+        seen_rows.add(k); by[r["Clerk's File Number"].strip()].append(r)
+if True:
     for cfn, rs in by.items():
         if not cfn or not rs[0]['Document Type'].startswith('LIS PENDENS'): continue
         G = collections.defaultdict(set)
@@ -217,7 +222,7 @@ for cfn, ms in lp_docs.items():
     add(folio, 'LP', rd, 'Lis pendens: ' + kind, 0, case or cfn,
         CLERK_URL, f"CFN {cfn}; match: {mh} ({conf} confidence); plaintiff: {'; '.join(sorted(plfs))[:120]}; defendant: {'; '.join(sorted(defs))[:120]}")
 lp_range = sorted(pdate(v[0].get('reC_DATE')) for v in lp_docs.values() if pdate(v[0].get('reC_DATE')))
-STATS['lis_pendens'] = {'documents': n_lp, 'matched': n_lp_m, 'how': dict(how), 'kind': dict(LPKIND), 'csv_rows': n_csv_rows, 'recorded_from': d2s(lp_range[0]) if lp_range else '', 'recorded_to': d2s(lp_range[-1]) if lp_range else '',
+STATS['lis_pendens'] = {'documents': n_lp, 'matched': n_lp_m, 'how': dict(how), 'kind': dict(LPKIND), 'csv_rows': n_csv_rows, 'csv_duplicate_rows_dropped': n_csv_dups, 'csv_files': len(glob.glob(f'{LPDIR}/*.csv')), 'recorded_from': d2s(lp_range[0]) if lp_range else '', 'recorded_to': d2s(lp_range[-1]) if lp_range else '',
                         'source': 'https://onlineservices.miamidadeclerk.gov/officialrecords/ (LIS PENDENS - LIS)'}
 
 # ---------- 2. foreclosure + tax-deed sales (RealAuction) ----------
@@ -349,6 +354,14 @@ for p in sorted(glob.glob(f'{RAW}/leads/matches_*.csv')):
         c['matched'] += 1
         add(f, 'DC', pdate(r['date_of_death']), f"Owner obituary: {r['decedent_name']} ({r['confidence']} confidence)", 0, '', r['obit_url'], r['reason'][:160])
 STATS['obituary_matches'] = dict(c)
+
+# ---------- 5b. Clerk probate exports (PAD / PRO / DCE) -> PR + DC, merged into the records above ----------
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import probate_lib
+PRDIR = os.environ.get('PROBATE_DOWNLOADS', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'raw', 'probate_downloads'))
+PCDIR = os.environ.get('PROBATE_CASES', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'raw', 'probate_cases'))
+if glob.glob(f'{PRDIR}/probate_*.csv') or glob.glob(f'{PCDIR}/ocs_*.txt'):
+    probate_lib.run(pa, PRDIR, add, recs, norm_addr, addr_to_folio, LEG, CLERK_URL, pdate, STATS, PCDIR)
 
 # ---------- points per folio ----------
 def points(rs):

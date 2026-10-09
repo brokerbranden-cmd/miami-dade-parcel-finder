@@ -118,11 +118,11 @@ async function fetchAll(files, onBytes){
   const bufs = await Promise.all(files.map(async f => {
     const key=META.ver+'/'+f, hit=await IDB.get(key);
     if(hit && hit.byteLength){ onBytes(hit.byteLength); return new Uint8Array(hit); }
-    const r = await fetch('data/'+f); if(!r.ok) throw new Error('Could not load '+f+' ('+r.status+')');
+    const r = await fetch('data/'+f+'?v='+META.ver); if(!r.ok) throw new Error('Could not load '+f+' ('+r.status+')');
     if(!r.body){ const b=new Uint8Array(await r.arrayBuffer()); onBytes(b.length); return b; }
     const rd=r.body.getReader(), chunks=[]; let len=0;
     for(;;){ const {done,value}=await rd.read(); if(done) break; chunks.push(value); len+=value.length; onBytes(value.length); }
-    const out=new Uint8Array(len); let o=0; for(const c of chunks){out.set(c,o);o+=c.length;} IDB.put(key,out.buffer); return out;
+    const out=new Uint8Array(len); let o=0; for(const c of chunks){out.set(c,o);o+=c.length;} if(!(navigator.serviceWorker&&navigator.serviceWorker.controller)) IDB.put(key,out.buffer); return out;
   }));
   const all=new Uint8Array(bufs.reduce((a,b)=>a+b.length,0)); let o=0; for(const b of bufs){all.set(b,o);o+=b.length;} return all;
 }
@@ -1072,6 +1072,11 @@ async function boot(){
     ['results','foot'].forEach(id=>$(id).hidden=false);
     run();
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');
+    /* small internal API for drive.js / lenders.js (same page, nothing leaves the browser) */
+    window.PF={META,D,PACKS,P,I,getStr,LU_T,TYPE_LABEL,SV,esc,money,fmt,dollars,dateStr,monYr,folioFmt,today,toast,savedInfo,loadGeo,loadLeaflet,openDrawer,scoreBadge,vacBadge,sigBadges,ensureSavedPacks,savedIdx,stKey,svDate,download,stamp,csvq,
+      setSaved:on=>{ S.saved=!!on; run(); }, rerun:()=>run()};
+    document.dispatchEvent(new Event('pf:ready')); window.PF_READY=true;
+    if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{});
     IDB.prune(META.ver);
     setTimeout(()=>{ loadDetail(0).catch(()=>{}); },1500);
     setTimeout(()=>{ loadGeo(0).catch(()=>{}); },4000);

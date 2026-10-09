@@ -11,6 +11,13 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
 <link rel="preload" href="data/meta.json" as="fetch" crossorigin>
 <link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0C0E10">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parcel Finder">
 </head>
 <body>
 <div class="wrap">
@@ -23,6 +30,7 @@
   <div class="stickybar" id="stickybar">
     <div class="sb-count"><span class="sb-num" id="liveCount">–</span><span class="sb-lab">properties match</span><span class="on-count" id="onCount" hidden>0 filters on</span></div>
     <div class="sb-act">
+      <button class="btn drivebtn" type="button" id="driveBtn" aria-pressed="false" title="Drive for dollars: map around your GPS location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span class="lbl">Drive</span></button>
       <button class="btn savedbtn" type="button" id="savedBtn" aria-pressed="false" aria-label="Saved properties" title="Show only your saved properties"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg><span class="lbl">Saved</span> <span class="badge-n" id="savedCount">0</span></button>
       <button class="btn reset" type="button" id="resetBtn">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>Clear all filters
@@ -203,7 +211,19 @@
 </div>
 <div id="drawerHost"></div>
 
+<div class="drive" id="drive" hidden role="region" aria-label="Drive for dollars map">
+  <div class="dtop"><span class="dbrand"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="#FC4C02" stroke-width="1.8"/><path d="M10 0v5M10 15v5M0 10h5M15 10h5" stroke="#FC4C02" stroke-width="1.8"/></svg>Drive</span>
+    <span class="dgps" id="dGps" role="status" aria-live="polite">GPS off</span>
+    <button type="button" class="dbtn dexit" id="dExit">List &amp; filters</button></div>
+  <div id="dmap" class="dmap"></div>
+  <div class="dhint" id="dHint" hidden></div>
+  <div class="dlegend" aria-hidden="true"><span><i style="background:var(--s0)"></i>none</span><span><i style="background:var(--s2)"></i>20+</span><span><i style="background:var(--s3)"></i>35+</span><span><i style="background:var(--s4)"></i>50+</span><span><i class="ring"></i>saved</span></div>
+  <button type="button" class="dbtn dlocate on" id="dLocate" aria-label="Center on my location">◎</button>
+  <button type="button" class="dbtn dhere" id="dHere">📍 Save where I am</button>
+  <div class="dsheet" id="dSheet" hidden></div>
+</div>
 <script src="saved.js"></script>
 <script src="app.js"></script>
+<script src="drive.js"></script>
 </body>
 </html>

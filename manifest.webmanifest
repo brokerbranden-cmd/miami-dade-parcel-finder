@@ -1,0 +1,21 @@
+{
+  "name": "Prop Hunters · Miami-Dade Parcel Finder",
+  "short_name": "Parcel Finder",
+  "description": "Drive for dollars: every Miami-Dade parcel with owner, distress score and vacancy hints, around your GPS location.",
+  "id": "./",
+  "start_url": "./?drive=1",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0C0E10",
+  "theme_color": "#0C0E10",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Drive for dollars", "url": "./?drive=1", "icons": [{"src": "icons/icon-192.png", "sizes": "192x192"}]},
+    {"name": "Search & filters", "url": "./?drive=0", "icons": [{"src": "icons/icon-192.png", "sizes": "192x192"}]}
+  ]
+}

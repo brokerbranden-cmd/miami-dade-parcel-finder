@@ -188,6 +188,27 @@ the last permit, an **aerial thumbnail** (Esri World Imagery export, dates vary)
 On a saved property you can tick **Looks vacant / damaged** and write a **condition note**. Both are stored with the saved list
 (`vacant`, `cond` in `saved.js`) and included in its JSON/CSV export/import.
 
+## Drive for dollars (phone) + installable app
+
+`drive.js`: a full-screen, phone-first map centered on your GPS position (follows you; drag to look around, ◎ to re-center).
+It opens automatically on screens ≤ 600 px wide (unless you opened a shared link with filters, or left drive mode before), from the
+**Drive** button in the sticky bar, or from `?drive=1` (the installed app's start URL; `?drive=0` forces the list).
+* Every parcel in view (zoom 15+) from the main pack + geo pack, as dots colored by distress score; saved parcels ringed in brand orange.
+  A ~200 m grid index keeps it fast on phones.
+* Tap a dot → bottom sheet: address, city, type, year built, value, owner, years owned, distress score, vacancy hint and signals,
+  a big **☆ Save** button, then status, **Looks vacant / damaged** and a quick note (same saved list as the rest of the app),
+  **Full details** (the normal drawer) and **Street View**.
+* **📍 Save where I am** saves the parcel nearest your GPS position (within 120 m) and tells you the distance and GPS accuracy so you can
+  double-check it's the right one.
+* Large touch targets (≥ 44 px, main buttons 56–60 px), safe-area insets, Streets/Satellite layers.
+* Location never leaves the phone; it's only used to center the map and find the nearest parcel. GPS stops when the app is hidden.
+* Limit: condo units aren't drawn separately in drive mode (one dot per building parcel from the main pack).
+
+PWA: `manifest.webmanifest` (standalone, Prop Hunters reticle icons 192/512 + maskable in `icons/`, apple-touch-icon) and `sw.js`:
+app shell network-first with offline fallback, `data/meta.json` network-first, versioned data files (`data/*.gz?v=<build>`) cache-first
+with old builds pruned, map tiles stale-while-revalidate (CORS only, capped at 1,500). Property packs are also kept in IndexedDB,
+so once a phone has opened the app online it reopens and draws parcels offline (tiles only for areas already viewed).
+
 ## Saved properties
 
 Star (☆) any property on a card, table row, map popup or in the detail drawer (keyboard: Tab to the star, Enter/Space).
@@ -204,7 +225,7 @@ cloud sync can be plugged in later; `PFSaved.onChange(fn)` reports every edit.
 
 ## Testing
 
-`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
+`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_mobile.py` covers drive mode at a phone viewport with mocked GPS (sheet, save/status/note, Save where I am, manifest, service worker, offline reload). `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
 
 ```bash
 pip install playwright && playwright install chromium

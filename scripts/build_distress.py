@@ -301,6 +301,23 @@ for r in v['rows']:
     c['matched'] += 1
     add(f, 'CC', ms2d(r['CASE_DATE']), 'Code case: ' + r['PROBLEM_DESC'].strip(), 0, r['CASE_NUM'], ARC(v['source'], 'CASE_NUM', r['CASE_NUM']), f"last action: {r['LAST_ACTV'].strip()}")
 STATS['code_cases_open'] = {**c, 'rows': len(v['rows']), 'source': v['source']}
+# municipal code cases (Tyler EnerGov portals: Hialeah, Miami Gardens, Coral Gables, Miami Beach, Doral, ...) -> same CC / BV / US / LN signals as the county's own cases
+mc = {}; c = collections.Counter()
+if os.path.exists(f'{RAW}/muni_cases.json'):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fetch_energov_cfg import PORTALS
+    mc = json.load(open(f'{RAW}/muni_cases.json'))
+    for f, items in mc.items():
+        if f not in FOLIOS: continue
+        for kind, opened, ctype, status, no, src, desc, flags in sorted(items, reverse=True)[:3]:
+            city, _, base = PORTALS.get(src, (src, '', ''))
+            url = base + '#/search' if base else ''
+            code = 'US' if flags & 2 else 'BV' if flags & 8 else 'CC'
+            c[code] += 1
+            add(f, code, pdate(opened), f"{city} code case: {ctype or 'Code violation'}" + (' (unsafe structure)' if code == 'US' else ''), 0, no, url, f"status {status}" + (f"; {desc[:90]}" if desc else ''))
+            if kind == 'lien':
+                c['LN'] += 1; add(f, 'LN', pdate(opened), f"{city} code lien / fines: {ctype or 'Code violation'}", 0, no, url, f"status {status}")
+STATS['municipal_code_cases_open'] = dict(c)
 seen_lien = set(); c = collections.Counter()
 for nm, label in (('cc_lien', 'Code lien'), ('cc_finance', 'Code fines sent to collections')):
     v = V(nm)

@@ -202,6 +202,13 @@ vscore, vsig, lastpermit, vac_stats = vacancy_lib.compute(RAW, list(S('FOLIO')),
 vbonus = np.where(vscore >= 60, 8, np.where(vscore >= 40, 5, 0))       # capped soft signal on top of the distress score
 dscore = np.where(govt_a, 0, np.minimum(100, dscore + vbonus))
 print('vacancy:', {k: v for k, v in vac_stats.items() if k != 'permits'})
+import permit_lib
+pl = getattr(vacancy_lib.compute, 'pl', None)       # per-parcel permit / code-case columns (None when merge_permits.py has not run: packs then carry zeros)
+z = lambda t: np.zeros(len(df), t)
+PC = {'pcs': z(np.uint16), 'pn5': z(np.uint16), 'cn_open': z(np.uint8), 'cn5': z(np.uint16), 'clast': z(np.uint16), 'psum': [''] * len(df), 'csum': [''] * len(df)}
+if pl is not None:
+    PC = {'pcs': pl['pcs'], 'pn5': pl['n5'], 'cn_open': pl['cn_open'], 'cn5': pl['cn5'], 'clast': pl['clast'].astype(np.uint16), 'psum': pl['psum'], 'csum': pl['csum']}
+    print('permit columns: parcels with permit data', int(pl['has_p'].sum()), 'with case data', int(pl['has_c'].sum()), 'no-permit flagged', int(pl['np_flag'].sum()))
 pd.DataFrame({'FOLIO': df.FOLIO.values, 'dscore': dscore.astype(int), 'dsig': dsig.astype(int), 'hard': np.minimum(100, dhard).astype(int), 'soft': soft.astype(int)}).to_parquet(f'{RAW}/scores.parquet', index=False)
 print('distress: parcels with any hard signal', int((dhard > 0).sum()), 'score>=50', int((dscore >= 50).sum()), 'score>=70', int((dscore >= 70).sum()))
 
@@ -226,12 +233,13 @@ cols_main = {
     'sqft': u32(sqft), 'yb': u16(yb), 'units': u16(N('UNIT_COUNT')), 'beds': u8(N('BEDROOM_COUNT')),
     'baths': u8((N('BATHROOM_COUNT') + 0.5 * N('HALF_BATHROOM_COUNT')) * 10), 'stories': u8(N('FLOOR_COUNT')),
     'sd1': u16(days('DOS_1')), 'sale1': u32(N('PRICE_1')), 'sq1': u8(qflag('QU_FLG_1')), 'flags': flags,
-    'prv': u32(N('TOTAL_VAL_PRI')), 'dscore': u8(dscore), 'dsig': u16(dsig), 'og': og.astype(np.uint32), 'vscore': vscore, 'vsig': vsig,
+    'prv': u32(N('TOTAL_VAL_PRI')), 'dscore': u8(dscore), 'dsig': u16(dsig), 'og': og.astype(np.uint32), 'vscore': vscore, 'vsig': vsig, 'pcs': PC['pcs'],
 }
 str_main = {'folio': list(S('FOLIO')), 'addr': addr, 'owner': [clean(o) for o in owner_str]}
 cols_det = {'assd': u32(N('ASSESSED_VAL_CUR')), 'taxable': u32(N('CNTY_TAXABLE_VAL_CUR')), 'sd2': u16(days('DOS_2')), 'sale2': u32(N('PRICE_2')),
-            'sq2': u8(qflag('QU_FLG_2')), 'sd3': u16(days('DOS_3')), 'sale3': u32(N('PRICE_3')), 'bcount': u16(N('BUILDING_COUNT')), 'lperm': u16(lastpermit)}
-str_det = {'mail': mail, 'legal': legal, 'grantor': [clean(x) for x in S('GRANTOR_1')],
+            'sq2': u8(qflag('QU_FLG_2')), 'sd3': u16(days('DOS_3')), 'sale3': u32(N('PRICE_3')), 'bcount': u16(N('BUILDING_COUNT')), 'lperm': u16(lastpermit),
+            'pn5': PC['pn5'], 'cn_open': PC['cn_open'], 'cn5': PC['cn5'], 'clast': PC['clast']}
+str_det = {'mail': mail, 'legal': legal, 'psum': PC['psum'], 'csum': PC['csum'], 'grantor': [clean(x) for x in S('GRANTOR_1')],
            'book': [f'{b}-{p}' if b.strip('0') else '' for b, p in zip(S('OR_BK_1'), S('OR_PG_1'))]}
 cols_geo = {'lat': ((lat - 24.0) * 1e6).clip(0, 4e9).astype(np.uint32), 'lon': ((lon + 81.5) * 1e6).clip(0, 4e9).astype(np.uint32)}
 
@@ -266,6 +274,10 @@ for name, rows in (('main', order_main), ('condo', order_condo)):
     packs.append({'name': name, 'n': int(len(rows)), 'files': [f1], 'bytes': b1, 'detail': [f2], 'detailBytes': b2, 'geo': [f3], 'geoBytes': b3})
     print(name, len(rows), f'main {b1/1e6:.1f}MB (raw {r1/1e6:.1f}) detail {b2/1e6:.1f}MB geo {b3/1e6:.1f}MB')
 
+permit_cov = None
+if pl is not None:
+    permit_cov = {'built': pl['index_built'], 'cities': {m: {k: v for k, v in c.items() if k not in ('permit_note', 'code_note')} | {'permit_note': c['permit_note'], 'code_note': c['code_note']} for m, c in pl['cov'].items()},
+                  'stats': pl['idx_stats'], 'sources': [{k: r.get(k) for k in ('city', 'kind', 'records', 'matched_folio', 'matched_address', 'match_rate', 'url')} for r in pl['sources']]}
 last_sale = int(max(cols_main['sd1'].max(), 0))
 meta = {
     'ver': ver, 'total': int(n), 'built': dt.datetime.now().strftime('%m/%d/%Y'),
@@ -273,7 +285,7 @@ meta = {
     'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%d/%Y'),
     'stats': stats, 'packs': packs,
     'distress': json.load(open(f'{RAW}/distress_stats.json')) if os.path.exists(f'{RAW}/distress_stats.json') else None,
-    'owners': owner_stats, 'vacancy': vac_stats, 'ownersFile': 'owners.json.gz',
+    'owners': owner_stats, 'vacancy': vac_stats, 'permitCov': permit_cov, 'ownersFile': 'owners.json.gz',
     'distressFile': 'distress.json.gz' if os.path.exists(os.path.join(OUT, 'distress.json.gz')) else None,
     'dicts': {'city': city, 'zip': zips, 'cra': cra, 'landuse': landuse, 'zoning': zoning, 'mzone': mz_list},
     'sources': {

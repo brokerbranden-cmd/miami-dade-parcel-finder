@@ -5,11 +5,15 @@ Only public records are used - nothing is inferred from imagery, and there is no
   distress layer tax delinquency (TC/TX/TD), probate / deceased (PR/DC), open unsafe-structure case
   violations     county code-compliance cases (open or in lien) - neglect types and foreclosure-registry cases;
                  county building cases of type 'Expired Permit'
-  permits        City of Miami permits 2014-present (City of Miami parcels only); County Building Dept permits (last ~2 years)
+  permits        every city with a public permit source (permit_lib.py / merge_permits.py): City of Miami 2014-today, County Building Dept (unincorporated), and the
+                 Tyler EnerGov portals (Hialeah, Miami Gardens, Coral Gables, Miami Beach, Doral, North Miami Beach, Homestead, Miami Shores, Surfside, North Bay Village, ...)
+                 'No permit' only counts inside a city's covered window (>= 5 years of history); municipal code cases feed NG / FR / OV / XP
 Only parcels with a building (building value > 0) and a non-government owner are scored.
 """
 import json, os, re, datetime as dt, collections
 import numpy as np
+sys_path_fix = __import__('sys').path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import permit_lib
 
 # (code, label, points)  - bit = index
 VSIG = [
@@ -18,7 +22,7 @@ VSIG = [
     ('NG', 'Neglect code case (overgrowth, junk, abandoned, upkeep, min. housing, unsecured pool)', 15),
     ('FR', 'Foreclosure registry case', 12),
     ('XP', 'Expired / revoked permit', 8),
-    ('NP', 'No permit on record since 2014 (City of Miami)', 6),   # 10 when built 1970 or earlier ("old, no improvements")
+    ('NP', 'No permit in the city\'s permit-data window', 6),   # 6 / 10 (built <= 1970) when the city's permit history is >= 8 yrs; half when 5-8 yrs; never when shorter or no data
     ('LO', 'Owned 20+ years', 5),
     ('LB', 'Building < 20% of value', 8),
     ('TX', 'Tax delinquent', 10),
@@ -53,27 +57,40 @@ def compute(RAW, folios, kinds, homestead, oos, absz, yrs_owned, bv, mk, yb, dsi
         if k is None: continue
         if r['CASE_TYPE'] == 'Expired Permit': xp[k] = True
         elif r['CASE_TYPE'] != 'Unsafe Structure': ov[k] = True
-    # permits
-    city_cov = np.array([f[:2] == '01' for f in folios])
-    has_city = np.zeros(n, bool); recent = np.zeros(n, bool); last_permit = [''] * n
-    cutoff = (today - dt.timedelta(days=730)).isoformat()
-    pf = f'{RAW}/permits.json'
-    pmeta = None
-    if os.path.exists(pf):
-        P = json.load(open(pf)); pmeta = {'pulled': P['pulled'], 'coverage': P['coverage'], 'sources': P['sources']}
-        for f, v in P['city'].items():
-            k = idx.get(f)
-            if k is None: continue
-            has_city[k] = True; last_permit[k] = max(last_permit[k], v[0] or '')
-            # expired/revoked permit with no later permit issued and nothing active
-            if v[3] and v[2] and v[2] >= (v[0] or '') and not v[4]: xp[k] = True
-        for f, v in P['county'].items():
-            k = idx.get(f)
-            if k is not None: last_permit[k] = max(last_permit[k], v[0] or '')
-        recent = np.array([lp >= cutoff for lp in last_permit])
+    # permits + municipal code cases (merge_permits.py -> permit_index.json); falls back to the City of Miami / County aggregates when the index is missing
+    pl = permit_lib.load(RAW, folios, yb, bv, today) if os.path.exists(f'{RAW}/permit_index.json') else None
+    pmeta = None; cutoff = (today - dt.timedelta(days=730)).isoformat()
+    compute.pl = pl
+    if pl is not None:
+        last_days = pl['last']; recent = pl['recent']; has_city = pl['has_p']
+        lp_days = last_days; last_permit = None
+        cfl = pl['cflags']; live = pl['cn_open'] > 0
+        neg |= live & ((cfl & 1) > 0); freg |= live & ((cfl & 4) > 0); xp |= live & ((cfl & 8) > 0)
+        ov |= live & ~neg & ~freg & ((cfl & 8) == 0)
+        cut5 = (today - dt.timedelta(days=1826) - dt.date(1900, 1, 1)).days
+        xp |= ((pl['nexp'] + pl['nrev']) > 0) & (pl['exp_last'] >= pl['last']) & (pl['exp_last'] >= cut5) & (pl['nopen'] == 0)
+        nop = pl['np_flag']; np_full = pl['np_full']
+        pmeta = {'index_built': pl['index_built'], 'sources': [{k: r[k] for k in ('city', 'kind', 'records', 'match_rate')} for r in pl['sources']],
+                 'np_cities_full': sorted({c['city'] for c in pl['cov'].values() if c['permit_level'] == 'full'}), 'np_cities_half': sorted({c['city'] for c in pl['cov'].values() if c['permit_level'] == 'half'})}
     else:
-        city_cov[:] = False
-    lp_days = np.array([(dt.date.fromisoformat(x) - dt.date(1900, 1, 1)).days if x else 0 for x in last_permit])
+        city_cov = np.array([f[:2] == '01' for f in folios])
+        has_city = np.zeros(n, bool); recent = np.zeros(n, bool); last_permit = [''] * n
+        pf = f'{RAW}/permits.json'
+        if os.path.exists(pf):
+            P = json.load(open(pf)); pmeta = {'pulled': P['pulled'], 'coverage': P['coverage'], 'sources': P['sources']}
+            for f, v in P['city'].items():
+                k = idx.get(f)
+                if k is None: continue
+                has_city[k] = True; last_permit[k] = max(last_permit[k], v[0] or '')
+                if v[3] and v[2] and v[2] >= (v[0] or '') and not v[4]: xp[k] = True
+            for f, v in P['county'].items():
+                k = idx.get(f)
+                if k is not None: last_permit[k] = max(last_permit[k], v[0] or '')
+            recent = np.array([lp >= cutoff for lp in last_permit])
+        else:
+            city_cov[:] = False
+        lp_days = np.array([(dt.date.fromisoformat(x) - dt.date(1900, 1, 1)).days if x else 0 for x in last_permit])
+        nop = city_cov & ~has_city & (yb > 0) & (yb < 2014); np_full = np.ones(n, bool)
     corp_gov = np.array([k in ('corp', 'govt') for k in kinds]); govt = np.array([k == 'govt' for k in kinds])
     built = (bv > 0) & ~govt
     pts = np.zeros(n, np.int32); bits = np.zeros(n, np.int64)
@@ -88,8 +105,8 @@ def compute(RAW, folios, kinds, homestead, oos, absz, yrs_owned, bv, mk, yb, dsi
     pts += np.where(built & nohs & ~oos & ~absz, 5, 0).astype(np.int32)
     put((dsig_hard >> 5 & 1).astype(bool), 'US', 25)
     put(neg, 'NG', 15); put(freg, 'FR', 12); put(xp, 'XP', 8)
-    nop = city_cov & ~has_city & (yb > 0) & (yb < 2014)
-    put(nop & (yb <= 1970), 'NP', 10); put(nop & (yb > 1970), 'NP', 6)
+    put(nop & np_full & (yb <= 1970), 'NP', 10); put(nop & np_full & (yb > 1970), 'NP', 6)
+    put(nop & ~np_full & (yb <= 1970), 'NP', 5); put(nop & ~np_full & (yb > 1970), 'NP', 3)
     put(yrs_owned >= 20, 'LO', 5)
     put((mk > 0) & (bv / np.maximum(mk, 1) < 0.2), 'LB', 8)
     put(((dsig_hard >> 2) & 1 | (dsig_hard >> 3) & 1 | (dsig_hard >> 4) & 1).astype(bool), 'TX', 10)
@@ -99,5 +116,5 @@ def compute(RAW, folios, kinds, homestead, oos, absz, yrs_owned, bv, mk, yb, dsi
     vscore = np.clip(pts, 0, 100)
     stats = {'scored_parcels': int(built.sum()), 'ge40': int((vscore >= 40).sum()), 'ge60': int((vscore >= 60).sum()),
              'by_signal': {c: int(((bits >> b) & 1).sum()) for b, (c, _, _) in enumerate(VSIG)},
-             'city_of_miami_with_permit': int(has_city.sum()), 'recent_permit': int((recent & built).sum()), 'permits': pmeta}
+             'parcels_with_permit_data': int(has_city.sum()), 'no_permit_flagged': int((nop & built).sum()), 'recent_permit': int((recent & built).sum()), 'permits': pmeta}
     return vscore.astype(np.uint8), bits.astype(np.uint16), lp_days, stats

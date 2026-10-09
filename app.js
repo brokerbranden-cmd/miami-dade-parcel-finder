@@ -20,8 +20,14 @@ const DSIG=[['FC','Foreclosure sale','hot'],['LP','Lis pendens','hot'],['TD','Ta
 const DSOFT=[[12,'Absentee / out of state'],[13,'Owned 20+ years'],[14,'Low building value'],[15,'No homestead']];
 const DBIT=Object.fromEntries(DSIG.map((d,i)=>[d[0],i]));
 /* vacancy / neglect hint: bit order matches scripts/vacancy_lib.py VSIG (points shown are the defaults; see README) */
-const VSIG=[['NA','No homestead + absentee',15],['US','Unsafe structure case',25],['NG','Neglect code case',15],['FR','Foreclosure registry',12],['XP','Expired / revoked permit',8],['NP','No permit since 2014',6],['LO','Owned 20+ years',5],['LB','Building < 20% of value',8],['TX','Tax delinquent',10],['ES','Estate / deceased',8],['OV','Other open case',4],['RP','Recent permit',-15]];
+const VSIG=[['NA','No homestead + absentee',15],['US','Unsafe structure case',25],['NG','Neglect code case',15],['FR','Foreclosure registry',12],['XP','Expired / revoked permit',8],['NP','No permit in city data window',6],['LO','Owned 20+ years',5],['LB','Building < 20% of value',8],['TX','Tax delinquent',10],['ES','Estate / deceased',8],['OV','Other open case',4],['RP','Recent permit',-15]];
 const VBIT=Object.fromEntries(VSIG.map((d,i)=>[d[0],i]));
+/* permits & code cases: bit order of the pack column 'pcs' (scripts/permit_lib.py PCS); PCOV = per-city coverage table (meta.permitCov) */
+let PCOV={};
+const PCS=[['PO','Open permit'],['PX','Expired / revoked permit'],['P5','Permit in last 5 yrs'],['PN','No permit in city data window'],['CO','Open code case'],['C5','Code case in last 5 yrs'],['CL','Code lien / fines'],['PC','City has permit data']];
+const PBIT=Object.fromEntries(PCS.map((d,i)=>[d[0],i]));
+const pcsText=g=>{ const a=[]; for(let b=0;b<7;b++) if(g&(1<<b)) a.push(PCS[b][1]); return a.join(', '); };
+const pcsCodes=g=>{ const a=[]; for(let b=0;b<7;b++) if(g&(1<<b)) a.push(PCS[b][0]); return a.join(' '); };
 const VS_STEPS=[[0,'Any'],[25,'25+ possible'],[40,'40+ likely'],[60,'60+ strong']];
 const vsTone=v=>v>=60?'v3':v>=40?'v2':v>=25?'v1':'v0';
 const vsWord=v=>v>=60?'Strong vacancy hint':v>=40?'Likely vacant / neglected':v>=25?'Possibly vacant':'';
@@ -101,7 +107,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { og:0, ogf:'', saved:false, vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
@@ -196,7 +202,7 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; return st;
+  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
@@ -210,7 +216,7 @@ function applyState(st){
   S.sort=SORT_MAP[st.sort]?st.sort:'lot_d'; $('sortSel').value=S.sort; S.view=['cards','table','map'].includes(st.view)?st.view:(S.view||'cards');
   $('ogMin').value=[0,2,3,5,10,25].includes(+st.ogMin)?String(+st.ogMin):'0'; $('ogDist').checked=!!st.ogDist; $('ogInst').checked=!!st.ogInst;
   if((st.ogf||'')!==S.ogf){ S.ogf=st.ogf||''; S.og=0; } $('ogRow').hidden=!S.ogf;
-  S.vsig=new Set((st.vsig||[]).filter(k=>k in VBIT)); $('vsMin').value=VS_STEPS.some(x=>x[0]===+st.vsMin)?String(+st.vsMin):'0'; $('vsMine').checked=!!st.vsMine;
+  S.vsig=new Set((st.vsig||[]).filter(k=>k in VBIT)); S.pcs=new Set((st.pcs||[]).filter(k=>k in PBIT)); $('vsMin').value=VS_STEPS.some(x=>x[0]===+st.vsMin)?String(+st.vsMin):'0'; $('vsMine').checked=!!st.vsMine;
   S.saved=!!st.saved; S.svSt=new Set((st.svSt||[]).filter(x=>SV.STATUSES.includes(x)));
   S.bbox=Array.isArray(st.bbox)&&st.bbox.length===4&&st.bbox.every(Number.isFinite)?st.bbox:null; $('areaRow').hidden=!S.bbox;
 }
@@ -246,12 +252,13 @@ function run(){
   const ogF=S.ogf?(S.og||-1):0, ogMin=st.ogMin||0, ogDist=st.ogDist?2:0, useOg=!!((ogMin||ogDist)&&OWN), exInst=useOg&&!st.ogInst;
   if((ogMin||ogDist||st.sort==='og_d'||st.sort==='ogd_d') && !OWN) loadOwners().then(()=>schedule(0)).catch(()=>{});
   let vsMask=0; for(const k of S.vsig) vsMask|=1<<VBIT[k]; const vsMin=st.vsMin||0, vc=new Uint32Array(VSIG.length+1);
+  let pcMask=0; for(const k of S.pcs) pcMask|=1<<PBIT[k]; const pcc=new Uint32Array(PCS.length+1);
   const mine=st.vsMine?new Set([...savedIdx()].filter(([f])=>{ const x=SV.get(f); return x&&x.vacant; }).map(([,id])=>id)):null;
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
-    const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n);
+    const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n), PG=c.pcs||new Uint16Array(n);
     if(bb && !gl) continue;
     for(let i=0;i<n;i++){
       if(hits && !hits[i]) continue;
@@ -283,15 +290,16 @@ function run(){
       const fu=lA&&!lA[li]?1:0, fz=zA&&!zA[zi]?1:0, fm=mA&&!mA[mi]?1:0;
       const kind = fl&8 ? 1 : fl&16 ? 2 : fl&32 ? 3 : 0, fk = wantK>=0 && kind!==wantK ? 1:0;
       const nf=fu+fz+fm+fk;
-      const vg=VG[i], fvs=vsMask&&!(vg&vsMask)?1:0;
+      const vg=VG[i], fvs=vsMask&&!(vg&vsMask)?1:0, pg=PG[i], fpc=pcMask&&!(pg&pcMask)?1:0;
       if(nf===0 && !fvs && sg&4095){ for(let b=0;b<12;b++) if(sg&(1<<b)) dc[b]++; if(!fsg) dc[12]++; }
       if(nf===0 && !fsg && vg){ for(let b=0;b<VSIG.length;b++) if(vg&(1<<b)) vc[b]++; }
-      if(fsg||fvs) continue;
+      if(nf===0 && !fsg && !fvs && pg){ for(let b=0;b<PCS.length;b++) if(pg&(1<<b)) pcc[b]++; }
+      if(fsg||fvs||fpc) continue;
       if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
       else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else kc[kind]++; }
     }
   }
-  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc};
+  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc};
   if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status))) r.push(id); } results=Uint32Array.from(r); }
   renderSavedUI();
   doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true);
@@ -348,6 +356,7 @@ function renderChips(){
   $('ownerKind').innerHTML=OWNER_KINDS.map(([k,l])=>`<button type="button" data-k="${k}" class="${S.owner===k?'on':''}" aria-pressed="${S.owner===k}">${l}<span class="n">${short(kN[k])}</span></button>`).join('');
   renderFacet('zoning'); renderFacet('landuse');
   const dcn=facet.dc||[]; $('dsigs').innerHTML=DSIG.map(([k,l],b)=>{ const on=S.dsig.has(k), n=dcn[b]||0; return `<button type="button" class="chip dchip ${on?'on':''} ${!n&&!on?'zero':''}" data-sig="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
+  const pcn=facet.pcc||[]; $('pcsigs').innerHTML=PCS.map(([k,l],b)=>{ const on=S.pcs.has(k), n=pcn[b]||0; return `<button type="button" class="chip vchip pchip ${on?'on':''} ${!n&&!on?'zero':''}" data-pc="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
   const vcn=facet.vc||[]; $('vsigs').innerHTML=VSIG.map(([k,l,pt],b)=>{ const on=S.vsig.has(k), n=vcn[b]||0; return `<button type="button" class="chip vchip ${pt<0?'neg':''} ${on?'on':''} ${!n&&!on?'zero':''}" data-vs="${k}" aria-pressed="${on}" title="${pt>0?'+':''}${pt} points">${l}<span class="n">${short(n)}</span></button>`; }).join('');
 }
 function median(a){ if(!a.length) return 0; a.sort(); return a[a.length>>1]; }
@@ -368,7 +377,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0);
+  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0);
   const tot=k+main; $('onCount').hidden=!tot; $('onCount').textContent=tot+(tot===1?' filter on':' filters on'); $('resetBtn').disabled=!tot;
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
 }
@@ -430,7 +439,7 @@ function renderResults(reset){
 
 /* table */
 const COLS=[
-  {h:'<span class="sr">Saved</span>★',cls:'stc'},{h:'Address',s:'addr_a'},{h:'Score',num:true,s:'ds_d'},{h:'Signals'},{h:'Vacancy',num:true,s:'vs_d'},{h:'Property'},{h:'City zoning'},{h:'Zoning type'},{h:'Lot sq ft',num:true,s:'lot_d'},{h:'Acres',num:true,s:'lot_d'},
+  {h:'<span class="sr">Saved</span>★',cls:'stc'},{h:'Address',s:'addr_a'},{h:'Score',num:true,s:'ds_d'},{h:'Signals'},{h:'Vacancy',num:true,s:'vs_d'},{h:'Permits & cases'},{h:'Property'},{h:'City zoning'},{h:'Zoning type'},{h:'Lot sq ft',num:true,s:'lot_d'},{h:'Acres',num:true,s:'lot_d'},
   {h:'Building sq ft',num:true},{h:'Units',num:true,s:'un_d'},{h:'Built',num:true,s:'yb_a'},{h:'Value',num:true,s:'mv_d'},
   {h:'Land %',num:true,s:'lp_d'},{h:'Last sale',num:true,s:'sold_d'},{h:'Sale price',num:true},{h:'Owner'}];
 function renderHead(){ $('thead').innerHTML=COLS.map(c=>`<th data-s="${c.s||''}" class="${c.num?'num':''} ${c.cls||''} ${c.s&&S.sort===c.s?'sorted':''}" scope="col">${c.h}</th>`).join(''); }
@@ -440,7 +449,7 @@ function rowHTML(id){
   const p=P(id), i=I(id), c=p.c, mv=c.mkt[i];
   const folio=getStr(p,'folio',i), sv=SV.get(folio);
   return `<tr data-id="${id}" class="${sv?'is-saved':''}"><td class="stc">${starHTML(id,folio)}</td><td class="addr">${esc(getStr(p,'addr',i)||'No street address')}<small>${esc(D.city[c.city[i]])} ${D.zip[c.zip[i]]}${sv?` · <span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span>`:''}</small></td>
-  <td class="num">${c.dscore[i]?scoreBadge(c.dscore[i]):'–'}</td><td class="sigs" title="${esc(sigText(c.dsig[i]))}">${esc(sigCodes(c.dsig[i]))||'–'}</td><td class="num" title="${esc(vsigText(c.vsig?c.vsig[i]:0))}">${c.vscore&&c.vscore[i]?`<span class="vnum ${vsTone(c.vscore[i])}">${c.vscore[i]}</span>`:'–'}${sv&&sv.vacant?' <span class="vmine" title="You marked it vacant / damaged">●</span>':''}</td>
+  <td class="num">${c.dscore[i]?scoreBadge(c.dscore[i]):'–'}</td><td class="sigs" title="${esc(sigText(c.dsig[i]))}">${esc(sigCodes(c.dsig[i]))||'–'}</td><td class="num" title="${esc(vsigText(c.vsig?c.vsig[i]:0))}">${c.vscore&&c.vscore[i]?`<span class="vnum ${vsTone(c.vscore[i])}">${c.vscore[i]}</span>`:'–'}${sv&&sv.vacant?' <span class="vmine" title="You marked it vacant / damaged">●</span>':''}</td><td class="sigs" title="${esc(pcsText(c.pcs?c.pcs[i]:0))}">${esc(pcsCodes(c.pcs?c.pcs[i]:0))||'–'}</td>
   <td>${TYPE_LABEL[LU_T[c.landuse[i]]]}</td><td title="${esc(mzLabel(c.mz[i]))}"><span class="mzcode">${MZ[c.mz[i]]?esc(MZ[c.mz[i]][0]):'–'}</span></td><td title="${esc(D.zoning[c.zoning[i]])}">${esc(nice(D.zoning[c.zoning[i]])||'–')}</td>
   <td class="num">${c.lot[i]?fmt.format(c.lot[i]):'–'}</td><td class="num">${c.lot[i]?(c.lot[i]/SQFT_AC).toFixed(2):'–'}</td>
   <td class="num">${c.sqft[i]?fmt.format(c.sqft[i]):'–'}</td><td class="num">${c.units[i]||'–'}</td><td class="num">${c.yb[i]||'–'}</td>
@@ -488,12 +497,35 @@ function distressHTML(p,i,folio){
     <div class="note">Records matched to this folio from public sources. Confirm status at the source before acting: cases close and liens get released.</div>`;
 }
 
+/* permit / code-case data coverage per city (meta.permitCov, built by scripts/merge_permits.py + permit_lib.py) */
+function covShort(cv,kind){
+  if(!cv) return 'Not covered';
+  const lv=cv[kind+'_level'], from=cv[kind+'_from'], src=cv[kind+'_src'];
+  if(lv==='none'||!from) return cv.status==='none'?'None (no public source)':cv.status==='portal'?'None (portal not machine-readable)':'None';
+  return `${lv==='recent'?'Recent only':'Since '+from.slice(0,7)}${lv==='half'?' (5-8 yrs)':''} - ${src}`;
+}
+function covHTML(cv,folio){
+  if(!cv) return '<div class="note">No permit-coverage information for this city.</div>';
+  const pl=cv.permit_level, cl=cv.code_level, esc2=esc, link=cv.portal?` <a href="${esc2(cv.portal)}" target="_blank" rel="noopener">${esc2(cv.tech||'portal')} ↗</a>`:'';
+  const pTxt = pl==='full'||pl==='half' ? `Permit history is covered since <b>${esc2(cv.permit_from.slice(0,7))}</b> (${cv.permit_years} yrs) from ${esc2(cv.permit_src)}. “No permit” counts toward the vacancy hint${pl==='half'?' at half weight (window is under 8 yrs)':''}.`
+    : pl==='recent' ? `Only <b>${cv.permit_years} yrs</b> of permit history (since ${esc2(cv.permit_from.slice(0,7))}) from ${esc2(cv.permit_src)}. Too short to say “no permit”, so absence of a permit is <b>not</b> used in the vacancy hint.`
+    : `<b>No public permit data</b> for ${esc2(cv.city)}${cv.reason?': '+esc2(cv.reason):''}. Absence of a permit is <b>not</b> used in the vacancy hint.${link}`;
+  const cTxt = cl==='none' ? `<b>No public code-case data</b> for ${esc2(cv.city)}${cv.code_note?' ('+esc2(cv.code_note)+')':''}.` : `Code cases covered since <b>${esc2(cv.code_from.slice(0,7))}</b> from ${esc2(cv.code_src)}.`;
+  return `<div class="pcov"><div>${pTxt}</div><div>${cTxt}</div></div>`;
+}
+function permitsHTML(p,i,folio){
+  const c=p.c, cv=PCOV[folio.slice(0,2)], lp=c.lperm?c.lperm[i]:0, n5=c.pn5?c.pn5[i]:0, co=c.cn_open?c.cn_open[i]:0, c5=c.cn5?c.cn5[i]:0;
+  const pcs=c.pcs?c.pcs[i]:0, ps=getStr(p,'psum',i), cs=getStr(p,'csum',i);
+  const dl=[['Last permit', lp?`<b>${dateStr(lp)}</b>${ps?`<small>${esc(ps)}</small>`:''}`:''],['Permits, last 5 yrs', n5?String(n5):''],['Code cases', cs?`${co?`<b>${co} open</b> · `:''}${c5} in the last 5 yrs<small>${esc(cs)}</small>`:''],['Flags', pcsText(pcs&127)]].filter(x=>x[1]);
+  return `<h3>Permits &amp; code cases</h3>${dl.length?`<div class="dl">${dl.map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join('')}</div>`:'<div class="note">No permits or code cases on record for this parcel in the sources we cover.</div>'}
+    <div class="pcovbox" data-cov="${esc(folio.slice(0,2))}"><div class="note"><b>Permit data coverage — ${esc(cv?cv.city:'this city')}</b></div>${covHTML(cv,folio)}</div>`;
+}
 /* vacancy / condition hint (mirrors scripts/vacancy_lib.py) */
 function vacParts(c,i,folio){
   const vg=c.vsig?c.vsig[i]:0, fl=c.flags[i], yb=c.yb[i], parts=[];
   for(let b=0;b<VSIG.length;b++){ if(!(vg&(1<<b))) continue; let [k,l,pt]=VSIG[b];
     if(k==='NA'){ pt=fl&2?18:15; l=fl&2?'No homestead + owner mails from out of state':'No homestead + owner mails elsewhere (absentee)'; }
-    if(k==='NP'){ pt=yb&&yb<=1970?10:6; l=yb&&yb<=1970?`Built ${yb}, no City of Miami permit on record since 2014`:'No City of Miami permit on record since 2014'; }
+    if(k==='NP'){ const cv=PCOV[folio.slice(0,2)]||{}, half=cv.permit_level==='half', y=(cv.permit_from||'').slice(0,4)||'?', old=yb&&yb<=1970; pt=half?(old?5:3):(old?10:6); l=`${old?`Built ${yb}, no`:'No'} permit on record since ${y} (${cv.city||'city'} permit data${half?', 5-8 yr window: half points':''})`; }
     if(k==='US') l='Open unsafe structure case'; if(k==='NG') l='Neglect-type code case (overgrowth / junk / abandoned / upkeep / minimum housing / unsecured pool)';
     if(k==='FR') l='Foreclosure registry code case (registration required)'; if(k==='XP') l='Expired or revoked permit (no newer permit)'; if(k==='LB') l='Building worth under 20% of the total value';
     if(k==='TX') l='Tax delinquent (certificate, tax deed or unpaid taxes)'; if(k==='ES') l='Estate / probate / owner deceased'; if(k==='OV') l='Other open code or building case';
@@ -504,11 +536,11 @@ function vacParts(c,i,folio){
 }
 function vacancyHTML(p,i,folio){
   const c=p.c, v=c.vscore?c.vscore[i]:0, g=p.geo, la=g?g.lat[i]:NaN, lo=g?g.lon[i]:NaN, hasG=isFinite(la)&&la>20;
-  const parts=vacParts(c,i,folio), raw=parts.reduce((a,b)=>a+b[1],0), lp=c.lperm?c.lperm[i]:0, cityCov=folio.slice(0,2)==='01';
+  const parts=vacParts(c,i,folio), raw=parts.reduce((a,b)=>a+b[1],0), lp=c.lperm?c.lperm[i]:0, cityCov=false;
   const sv=SV.get(folio), d=0.0011, bbox=hasG?[lo-d*1.25,la-d*0.8,lo+d*1.25,la+d*0.8].map(x=>x.toFixed(6)).join(','):'';
   const aerial=hasG?`<a class="aerial" href="https://www.google.com/maps/@?api=1&map_action=map&center=${la.toFixed(6)},${lo.toFixed(6)}&zoom=20&basemap=satellite" target="_blank" rel="noopener" title="Open satellite view in Google Maps"><img alt="Aerial photo of the parcel (Esri World Imagery)" loading="lazy" width="400" height="256" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&imageSR=3857&size=400,256&format=jpg&f=image"><span class="pin" aria-hidden="true"></span><small>Aerial: Esri World Imagery (dates vary) · open satellite ↗</small></a>`:'';
   const links=hasG?`<div class="links vlinks"><a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${la.toFixed(6)},${lo.toFixed(6)}" target="_blank" rel="noopener">Street View ↗</a><a href="https://www.google.com/maps/@?api=1&map_action=map&center=${la.toFixed(6)},${lo.toFixed(6)}&zoom=20&basemap=satellite" target="_blank" rel="noopener">Satellite ↗</a></div>`:'';
-  const permit=lp?`Last permit on record: <b>${dateStr(lp)}</b>`:cityCov?'No City of Miami permit on record (2014–today)':(folio.slice(0,2)==='30'?'No County permit in the last 2 years (older County permits are not published)':'Permit history is not published for this city');
+  const cvv=PCOV[folio.slice(0,2)], permit=lp?`Last permit on record: <b>${dateStr(lp)}</b>`:(cvv&&(cvv.permit_level==='full'||cvv.permit_level==='half'))?`No permit on record since ${cvv.permit_from.slice(0,4)} (${esc(cvv.city)} permit data)`:'Permit history for this city is not covered, so "no permit" is not scored';
   if(!c.bldg[i]) return `<h3>Vacancy &amp; condition</h3><div class="note">No building on record, so there is no vacancy hint.</div>${aerial}${links}`;
   return `<h3>Vacancy &amp; condition ${v?`<span class="vnum big ${vsTone(v)}" title="Vacancy / neglect hint ${v} of 100">${v}</span>`:''}</h3>
     ${v>=25?`<div class="vword ${vsTone(v)}">${vsWord(v)}</div>`:''}
@@ -566,6 +598,7 @@ async function openDrawer(id,opts){
     <div id="finBox">${finHTML(folio)}</div>
     ${distressHTML(p,i,folio)}
     ${vacancyHTML(p,i,folio)}
+    ${permitsHTML(p,i,folio)}
     <h3>The property</h3><div class="dl">${rows([
       ['What it is', `${TYPE_LABEL[LU_T[c.landuse[i]]]}<small>${esc(lu)}</small>`],
       ['City zoning', MZ[c.mz[i]] ? `<span class="mzcode">${esc(MZ[c.mz[i]][0])}</span> · ${esc(MZ[c.mz[i]][1])}<small>${esc(mzLabel(c.mz[i]))}${MZ[c.mz[i]][5]?' · min lot '+fmt.format(+MZ[c.mz[i]][5])+' sq ft':''}</small>` : 'Not found on the zoning map'],
@@ -691,7 +724,7 @@ const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
 function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||'')]:['','','','','',''];}
 function buildCSV(ids=results){
-  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','Company/Organization','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note'];
+  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','Company/Organization','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Permits (5 yrs)','Last Permit Detail','Open Code Cases','Code Cases (5 yrs)','Code Case Detail','Permit/Code Signals','Permit Data Coverage','Code Data Coverage','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note'];
   const parts=[head.join(',')+'\n']; let buf='';
   for(let j=0;j<ids.length;j++){
     const id=ids[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
@@ -701,7 +734,7 @@ function buildCSV(ids=results){
       dateStr(c.sd2[i]),c.sale2[i]||'',csvq(getStr(p,'owner',i)),fl&8?'Company/Organization':fl&16?'Trust':fl&32?'Government':'Individual',csvq(getStr(p,'mail',i)),
       fl&1?'Y':'',fl&2?'Y':'',fl&4?'Y':'',fl&8?'Y':'',fl&16?'Y':'',fl&64?'Y':'',csvq(D.cra[c.cra[i]]||''),csvq(getStr(p,'legal',i)),
       fl&128?'Y':'',c.taxable[i],c.prv[i]||'',csvq(getStr(p,'grantor',i)),getStr(p,'book',i),p.geo&&p.geo.lat[i]>20?p.geo.lat[i].toFixed(6):'',p.geo&&p.geo.lat[i]>20?p.geo.lon[i].toFixed(6):'','https://apps.miamidadepa.gov/propertysearch/#/?folio='+getStr(p,'folio',i),
-      c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i)),c.vscore?c.vscore[i]:'',csvq(vsigText(c.vsig?c.vsig[i]:0)),c.lperm?dateStr(c.lperm[i]):'',...savedCSV(getStr(p,'folio',i))].join(',')+'\n';
+      c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i)),c.vscore?c.vscore[i]:'',csvq(vsigText(c.vsig?c.vsig[i]:0)),c.lperm?dateStr(c.lperm[i]):'',c.pn5?c.pn5[i]:'',csvq(getStr(p,'psum',i)||''),c.cn_open?c.cn_open[i]:'',c.cn5?c.cn5[i]:'',csvq(getStr(p,'csum',i)||''),csvq(pcsText(c.pcs?c.pcs[i]:0)),csvq(covShort(PCOV[getStr(p,'folio',i).slice(0,2)],'permit')),csvq(covShort(PCOV[getStr(p,'folio',i).slice(0,2)],'code')),...savedCSV(getStr(p,'folio',i))].join(',')+'\n';
     if(buf.length>1e6){ parts.push(buf); buf=''; }
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
@@ -733,7 +766,7 @@ function writeHash(st){
     if(st.exL.length) h.set('lu',st.exL.map(v=>v.split(' - ')[0]).join(','));
     if(st.owner&&st.owner!=='all') h.set('owner',st.owner);
     if(st.dsig&&st.dsig.length) h.set('sig',st.dsig.join(',')); if(st.dsMin) h.set('ds',st.dsMin);
-    if(st.vsig&&st.vsig.length) h.set('vsig',st.vsig.join(',')); if(st.vsMin) h.set('vs',st.vsMin); if(st.vsMine) h.set('vme','1');
+    if(st.vsig&&st.vsig.length) h.set('vsig',st.vsig.join(',')); if(st.pcs&&st.pcs.length) h.set('pcs',st.pcs.join(',')); if(st.vsMin) h.set('vs',st.vsMin); if(st.vsMine) h.set('vme','1');
     OWNER_ROWS.forEach(([k])=>{ const v=st.flags[k]; if(v==='yes'||v==='no') h.set('o_'+k,v); });
     HASH_NUM.forEach(id=>{ if(st[id]!=null && st[id]!=='' && !(id.startsWith('mv')&&!st[id])) h.set(id,st[id]); });
     if(!st.hideGov) h.set('gov','1'); if(st.noBldg) h.set('land','1'); if(st.qualOnly) h.set('mkt','1');
@@ -753,7 +786,7 @@ function parseHash(){
   const st={...BLANK()};
   st.q=h.get('q')||''; st.qScope=h.get('in')||'ao'; st.city=h.get('city')||''; st.zips=h.get('zip')||''; st.cra=h.get('cra')||''; st.mzq=h.get('code')||'';
   st.types=list('type'); st.zones=list('zone'); st.exZ=byCode(D.zoning,list('pz')); st.exL=byCode(D.landuse,list('lu'));
-  st.dsig=list('sig'); st.dsMin=+h.get('ds')||0; st.vsig=list('vsig'); st.vsMin=+h.get('vs')||0; st.vsMine=h.get('vme')==='1';
+  st.dsig=list('sig'); st.dsMin=+h.get('ds')||0; st.vsig=list('vsig'); st.pcs=list('pcs'); st.vsMin=+h.get('vs')||0; st.vsMine=h.get('vme')==='1';
   st.owner=h.get('owner')||'all'; st.flags={}; OWNER_ROWS.forEach(([k])=>{ const v=h.get('o_'+k); if(v==='yes'||v==='no') st.flags[k]=v; });
   HASH_NUM.forEach(id=>{ const v=h.get(id); st[id]=(v==null||v==='')?null:(isFinite(+v)?+v:null); });
   st.hideGov=h.get('gov')!=='1'; st.noBldg=h.get('land')==='1'; st.qualOnly=h.get('mkt')==='1';
@@ -1012,6 +1045,8 @@ function wire(){
   $('dsigs').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.sig; S.dsig.has(k)?S.dsig.delete(k):S.dsig.add(k); run(); });
   $('dsMin').addEventListener('change',()=>{ clearIdea(); schedule(0); });
   $('clrDs').onclick=()=>{ S.dsig.clear(); $('dsMin').value='0'; clearIdea(); run(); };
+  $('pcsigs').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.pc; S.pcs.has(k)?S.pcs.delete(k):S.pcs.add(k); run(); });
+  $('clrPc').onclick=()=>{ S.pcs.clear(); clearIdea(); run(); };
   $('vsigs').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.vs; S.vsig.has(k)?S.vsig.delete(k):S.vsig.add(k); run(); });
   ['vsMin','vsMine'].forEach(id=>$(id).addEventListener('change',async()=>{ clearIdea(); if($('vsMine').checked) await ensureSavedPacks(); schedule(0); }));
   $('clrVs').onclick=()=>{ S.vsig.clear(); $('vsMin').value='0'; $('vsMine').checked=false; clearIdea(); run(); };
@@ -1055,7 +1090,7 @@ function wire(){
 
 async function boot(){
   try{
-    META=await (await fetch('data/meta.json')).json(); D=META.dicts;
+    META=await (await fetch('data/meta.json')).json(); D=META.dicts; PCOV=(META.permitCov&&META.permitCov.cities)||{};
     MZ=D.mzone||[null]; MZ_UP=MZ.map(e=>e?String(e[0]).toUpperCase():''); LU_T=D.landuse.map(luType); Z_G=D.zoning.map(zGroup);
     $('srcCount').textContent=fmt.format(META.total); $('srcDate').textContent=META.salesThrough||META.built;
     $('srcLine').title=`Downloaded from Miami-Dade County GIS on ${META.built}. Newest recorded sale on the roll: ${META.salesThrough}. ${META.rollYear} values.`;
@@ -1068,6 +1103,11 @@ async function boot(){
     $('dsMin').innerHTML=DS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
     try{ MAP_COLOR=localStorage.getItem('mdpf.mapColor')==='score'?'score':'type'; }catch(e){} $('mapColor').value=MAP_COLOR;
     if(META.distress){ const d=META.distress; $('dsSrc').textContent=`Built ${META.built}. ${fmt.format(d.parcels_with_signals||0)} parcels have at least one record.`; }
+    if(META.permitCov){ const pc=META.permitCov, cs=Object.entries(pc.cities).sort((a,b)=>a[1].city.localeCompare(b[1].city));
+      const withP=cs.filter(([,c])=>c.permit_level==='full'||c.permit_level==='half').length, withC=cs.filter(([,c])=>c.code_level!=='none').length;
+      $('pcSrc').textContent=`${withP} of ${cs.length} jurisdictions have 5+ years of public permit history; ${withC} have code-case data. Built ${pc.built||META.built}.`;
+      const lv={full:'8+ yrs',half:'5-8 yrs',recent:'< 5 yrs',none:'none'};
+      $('pcCov').innerHTML=`<table class="covt"><thead><tr><th>City</th><th>Permits</th><th>Code cases</th><th>Source</th></tr></thead><tbody>`+cs.map(([m,c])=>`<tr><td>${esc(c.city)}</td><td>${c.permit_from?`since ${esc(c.permit_from.slice(0,7))} (${lv[c.permit_level]})`:'none'}</td><td>${c.code_from?`since ${esc(c.code_from.slice(0,7))}`:'none'}</td><td>${c.portal?`<a href="${esc(c.portal)}" target="_blank" rel="noopener">${esc(c.tech||'portal')}</a>`:''}${c.reason?` <small>${esc(c.reason)}</small>`:''}</td></tr>`).join('')+'</tbody></table>'; }
     if(META.vacancy){ const v=META.vacancy; $('vsSrc').textContent=`${fmt.format(v.ge40)} parcels score 40+ (likely), ${fmt.format(v.ge60)} score 60+. Built ${META.built}.`; }
     if(META.owners){ const o=META.owners; $('ogSrc').textContent=`${fmt.format(o.groups)} owners hold 2+ properties; ${fmt.format(o.groups_2plus_distressed_non_institutional)} (excluding banks, government and big institutions) have 2+ parcels with public-record distress signals.`; }
     $('sortSel').innerHTML=SORTS.map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');

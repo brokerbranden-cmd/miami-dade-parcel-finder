@@ -25,21 +25,12 @@ ONLY = set((opt('--only') or '').split(',')) - {''}
 KINDS = (opt('--kinds') or 'permit,code').split(',')
 SINCE = int(opt('--since', '1990'))
 OUT = f'{RAW}/permits/energov'
-UA = 'parcel-finder weekly refresh (python-requests)'
+TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energov_template.json')   # the portal's own search request body (all criteria blocks, nulls)
 SORT = {'permit': 'PermitNumber.keyword', 'code': 'CaseNumber.keyword'}
 
 # slug: (city, municipality code in the PA roll, portal base). Portals found from each city's own permit page / web search.
-PORTALS = {
-    'hialeah':       ('Hialeah', '04', 'https://hialeahfl-energovpub.tylerhost.net/apps/selfservice'),
-    'miami_gardens': ('Miami Gardens', '34', 'https://miamigardensfl-energovpub.tylerhost.net/apps/selfservice'),
-    'coral_gables':  ('Coral Gables', '03', 'https://coralgablesfl-energovpub.tylerhost.net/apps/selfservice'),
-    'miami_beach':   ('Miami Beach', '02', 'https://energovcss.miamibeachfl.gov/EnerGovProd/SelfService'),
-    'surfside':      ('Surfside', '14', 'https://surfsidefl-energovpub.tylerhost.net/apps/selfservice'),
-    'north_bay':     ('North Bay Village', '23', 'https://northbayvillagefl-energovpub.tylerhost.net/apps/selfservice'),
-    'miami_shores':  ('Miami Shores', '11', 'https://villageofmiamishoresfl-energovweb.tylerhost.net/apps/selfservice'),
-}
-EXTRA = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energov_portals.json')   # optional extra portals {slug: [city, code, base]}
-if os.path.exists(EXTRA): PORTALS.update({k: tuple(v) for k, v in json.load(open(EXTRA)).items()})
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fetch_energov_cfg import PORTALS
 
 def blank_body(kind):
     crit = {
@@ -54,7 +45,7 @@ def blank_body(kind):
 class Portal:
     def __init__(self, slug):
         self.slug = slug; self.city, self.muni, self.base = PORTALS[slug]
-        self.s = requests.Session(); self.s.headers['User-Agent'] = UA
+        self.s = requests.Session()   # NB: these WAFs 403 a custom User-Agent; the stock python-requests one is accepted
         self.last = 0
         for i in range(4):
             try:
@@ -71,10 +62,9 @@ class Portal:
         c.update({'PageNumber': page, 'PageSize': size, 'SortBy': SORT[kind], 'SortAscending': True})
         if kind == 'permit': c.update({'ApplyDateFrom': d0 + 'T00:00:00', 'ApplyDateTo': d1 + 'T23:59:59'})
         else: c.update({'OpenedDateFrom': d0 + 'T00:00:00', 'OpenedDateTo': d1 + 'T23:59:59'})
-        body = {"Keyword": "", "ExactMatch": False, "SearchModule": module, "FilterModule": module, "SearchMainAddress": False, "ExcludeCases": None, "HiddenInspectionTypeIDs": None,
-                "PageNumber": page, "PageSize": size, "SortBy": SORT[kind], "SortAscending": True, ck: c}
-        for other in ('PlanCriteria', 'InspectionCriteria', 'RequestCriteria', 'BusinessLicenseCriteria', 'ProfessionalLicenseCriteria', 'LicenseCriteria', 'ProjectCriteria', 'OperationalPermitCriteria'):
-            pass
+        body = copy.deepcopy(json.load(open(TEMPLATE)))
+        body.update({"Keyword": "", "ExactMatch": False, "SearchModule": module, "FilterModule": module, "PageNumber": page, "PageSize": size, "SortBy": SORT[kind], "SortAscending": True})
+        body[ck].update(c)
         for i in range(5):
             wait = 1.0 - (time.time() - self.last)
             if wait > 0: time.sleep(wait)

@@ -62,6 +62,12 @@
         <label class="dsmin">Min score <select id="dsMin" aria-label="Minimum distress score"></select></label></div>
     </div>
 
+    <div class="grp permits">
+      <div class="grp-h"><h2>Permits &amp; code cases</h2><span class="hint">Building permit history and city / county code cases matched to each folio. Pick any to see parcels with at least one. “No permit” is only used for cities whose permit history is public and 5+ years long. <span id="pcSrc"></span></span><button class="clr" type="button" id="clrPc">Clear</button></div>
+      <div class="chips" id="pcsigs"></div>
+      <details class="pccov"><summary>Permit &amp; code data coverage by city</summary><div id="pcCov"></div></details>
+    </div>
+
     <div class="grp vacancy">
       <div class="grp-h"><h2>Vacancy &amp; condition</h2><span class="hint">A "likely vacant / neglected" hint built only from public records: homestead and mailing address, neglect code cases, unsafe structures, expired or missing permits, tax delinquency and values. No utility data is published, so none is used. <span id="vsSrc"></span></span><button class="clr" type="button" id="clrVs">Clear</button></div>
       <div class="dsrow"><div class="chips" id="vsigs"></div>

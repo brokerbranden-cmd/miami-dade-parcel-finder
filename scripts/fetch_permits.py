@@ -5,7 +5,7 @@ Two public ArcGIS sources, aggregated server-side (groupBy FolioNumber, 1,000-2,
   city   City of Miami Building_Permits_Since_2014  (City of Miami parcels only, permits issued 2014 -> today)
   county Miami-Dade miamidade_permit_data           (permits issued by the County Building Dept, rolling last ~2 years)
 Other municipalities (Miami Beach, Hialeah, Coral Gables, ...) publish no permit API, so they have no permit data here.
-Output: RAW/permits.json {city: {folio: [last_issued 'YYYY-MM-DD', count, last_expired_or_revoked or '', n_expired_revoked, n_active]},
+Output: RAW/permits.json {city: {folio: [last_issued 'YYYY-MM-DD', count, last_expired_or_revoked or '', n_expired_revoked, n_active, count_last_5y]},
                           county: {folio: [last_issued, count]}, sources, coverage}
 """
 import json, os, sys, time, datetime as dt, requests
@@ -70,6 +70,13 @@ if __name__ == '__main__':
     for r in agg(CITY, '1=1', 'IssuedDate', 2000):
         f = fol(r['FolioNumber'])
         if f: city[f] = [d(r['mx']), r['n'], '', 0, 0]
+    # 5-year permit count per folio (permits issued since today-5y) -> 6th array element
+    c5 = (dt.date.today() - dt.timedelta(days=1826)).isoformat()
+    for r in agg(CITY, f"IssuedDate >= DATE '{c5}'", 'IssuedDate', 2000):
+        f = fol(r['FolioNumber'])
+        if f in city: city[f].append(r['n'])
+    for v in city.values():
+        if len(v) < 6: v.append(0)
     print('city folios', len(city), flush=True)
     for r in rows(CITY, "BuildingPermitStatusDescription IN ('Expired','Revoked','Active')", 'FolioNumber,IssuedDate,BuildingPermitStatusDescription'):
         f = fol(r['FolioNumber'])

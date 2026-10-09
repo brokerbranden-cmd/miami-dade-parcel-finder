@@ -474,3 +474,11 @@ body.lending{overflow:hidden}
 .finlist small{display:block;color:var(--muted);font-size:12.5px}
 body.lending .wrap{display:none}
 .lp-wrap>*,.lpkpis>*{min-width:0}.lp-wrap{grid-template-columns:minmax(0,1fr)}
+
+.grp.permits .pccov{margin-top:8px;font-size:.85rem}
+.grp.permits .pccov summary{cursor:pointer;color:var(--accent,inherit)}
+.covt{width:100%;border-collapse:collapse;margin-top:6px;font-size:.8rem}
+.covt th,.covt td{text-align:left;padding:3px 6px;border-bottom:1px solid color-mix(in srgb,currentColor 12%,transparent);vertical-align:top}
+.covt small{opacity:.7}
+.pcov>div{margin:4px 0;font-size:.85rem}
+.pcovbox{margin-top:6px}

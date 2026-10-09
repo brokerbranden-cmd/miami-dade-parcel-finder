@@ -1,0 +1,43 @@
+"""Per-municipality catalog of public permit / code-enforcement sources (checked 10/09/2026). Keys are the PA municipality codes (= first two folio digits).
+status: 'api'      machine-readable bulk source, ingested (see merge_permits.py coverage windows for the real start dates)
+        'portal'   free public search exists but only per record / 50-row cap / needs login, so it is NOT ingested
+        'none'     no public searchable source found (requests by mail / fee-based lien search only)
+permit / code give the access note shown in the README and drawer."""
+CATALOG = {
+ '01': dict(city='Miami', status='api', portal='https://datahub-miamigis.opendata.arcgis.com/datasets/MiamiGIS::building-permits-since-2014', tech='ArcGIS FeatureServer',
+            permit='Building_Permits_Since_2014 (ArcGIS), 2014-today', code='Code cases not published (CityView per-case lookup only)'),
+ '02': dict(city='Miami Beach', status='api', portal='https://energovcss.miamibeachfl.gov/EnerGovProd/SelfService/', tech='Tyler EnerGov CSS (public search API)', permit='all permits (1990s-today)', code='code cases (1992-today)'),
+ '03': dict(city='Coral Gables', status='api', portal='https://coralgablesfl-energovpub.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits (EnerGov; Eden legacy partial)', code='NOV / tickets / liens'),
+ '04': dict(city='Hialeah', status='api', portal='https://hialeahfl-energovpub.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits since the EnerGov go-live (older: per-folio app apps.hialeahfl.gov/building)', code='code cases (2023-today)'),
+ '05': dict(city='Miami Springs', status='portal', portal='https://mias-trk.aspgov.com/etrakit/', tech='CentralSquare eTRAKiT', reason='eTRAKiT search returns max 50 rows per query and no dates/status; per-folio only'),
+ '06': dict(city='North Miami', status='api', portal='https://cityofnorthmiamifl-energovweb.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS', reason='EnerGov tenant went live in 2026 (9 permits, 3 cases); history is in the older Eden portal https://eportal.northmiamifl.gov (per-permit search)'),
+ '07': dict(city='North Miami Beach', status='api', portal='https://css.northmiamibeachfl.gov/energovprod/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits', code='code cases (open cases after 05/02/2022)'),
+ '08': dict(city='Opa-locka', status='none', portal='https://cityofopalockafl-energovweb.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (empty)', reason='EnerGov tenant exists but holds 0 permits / 1 code case; open-permit search is by mail, $50 per folio'),
+ '09': dict(city='South Miami', status='portal', portal='https://etrakit.southmiamifl.gov/etrakit/', tech='CentralSquare eTRAKiT', reason='eTRAKiT: 50-row cap, no dates/status in results; per-folio only'),
+ '10': dict(city='Homestead', status='api', portal='https://cityofhomesteadfl-energovweb.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits since the 2025 EnerGov go-live (older: eGovPlus per-permit)', code='code cases'),
+ '11': dict(city='Miami Shores', status='api', portal='https://villageofmiamishoresfl-energovweb.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits (2001-today)', code='code cases'),
+ '12': dict(city='Bal Harbour', status='portal', portal='https://vlg-balharbour-fl.smartgovcommunity.com/Public/Home', tech='SmartGov', reason='public reports need a staff-issued access code'),
+ '13': dict(city='Bay Harbor Islands', status='portal', portal='https://www2.citizenserve.com/bhi', tech='Citizenserve', reason='per-address / folio lookup only, no bulk listing'),
+ '14': dict(city='Surfside', status='api', portal='https://surfsidefl-energovpub.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits (1989-today, legacy rows matched by address)', code='code cases'),
+ '15': dict(city='West Miami', status='none', portal='https://cityofwestmiami.gov/building-department', tech='none', reason='no public permit or code search found; requests go to the Building Department'),
+ '16': dict(city='Florida City', status='portal', portal='https://flc.csqrcloud.com/community-etrakit', tech='CentralSquare eTRAKiT', reason='eTRAKiT: 50-row cap, no dates/status in results; per-folio only'),
+ '17': dict(city='Biscayne Park', status='none', portal='https://biscayneparkfl.gov/?SEC=37D66DF7-212E-40FF-ABB5-9AED4040A0F7', tech='CAP / GoGov (applications only)', reason='portals are for applications and plan review, no public search'),
+ '18': dict(city='El Portal', status='none', portal='https://elportalvillage.com/code-enforcement-building-department/', tech='CAP plan review + GovPilot', reason='no public search; open-permit search is a $25 request'),
+ '19': dict(city='Golden Beach', status='none', portal='https://goldenbeach.us', tech='online application only', reason='no public permit / code search found'),
+ '20': dict(city='Pinecrest', status='portal', portal='https://pine-trk.aspgov.com/eTRAKiT/', tech='CentralSquare eTRAKiT', reason='eTRAKiT: 50-row cap, no dates/status in results; per-folio only'),
+ '21': dict(city='Indian Creek', status='none', portal='', tech='none', reason='no public permit / code search found'),
+ '22': dict(city='Medley', status='none', portal='https://www.medleyfl.org', tech='none', reason='no public permit / code search found'),
+ '23': dict(city='North Bay Village', status='api', portal='https://northbayvillagefl-energovpub.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits (2009-today)', code='code cases'),
+ '24': dict(city='Key Biscayne', status='portal', portal='https://aca-prod.accela.com/keybiscayne/Default.aspx', tech='Accela Citizen Access', reason='Accela ACA search needs address/parcel per query (not bulk); not ingested'),
+ '25': dict(city='Sweetwater', status='api', portal='https://cityofsweetwaterfl-energovweb.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS', reason='EnerGov tenant went live in 2026 (27 permits, 23 cases); no history'),
+ '26': dict(city='Virginia Gardens', status='none', portal='', tech='none', reason='no public permit / code search found'),
+ '27': dict(city='Hialeah Gardens', status='none', portal='https://www.cityofhialeahgardens.com/city-government/city-clerk-s-office/lien-and-open-permit-search', tech='fee-based Lien Library request ($325)', reason='no public permit / code search'),
+ '28': dict(city='Aventura', status='portal', portal='https://etrakit.cityofaventura.com/etrakit/', tech='CentralSquare eTRAKiT', reason='eTRAKiT: 50-row cap, no dates/status in results; per-folio only'),
+ '30': dict(city='Unincorporated Miami-Dade', status='api', portal='https://gisweb.miamidade.gov/arcgis/rest/services/MD_LandInformation/MapServer/1', tech='County ArcGIS layers', permit='County Building Dept permits (dense 2023-today) + certificates of occupancy (2002-today)', code='Code Compliance (CCVIOL, all cases) + building violations'),
+ '31': dict(city='Sunny Isles Beach', status='portal', portal='https://ci-sunnyislesbeach-fl.smartgovcommunity.com/Public/Home', tech='SmartGov', reason='needs a portal account + access code'),
+ '32': dict(city='Miami Lakes', status='portal', portal='https://trakit.miamilakes-fl.gov/etrakit/', tech='CentralSquare eTRAKiT', reason='eTRAKiT: 50-row cap, no dates/status in results; per-folio only'),
+ '33': dict(city='Palmetto Bay', status='portal', portal='https://eden.palmettobay-fl.gov/EdenWebNet/Default.aspx?Build=PM.pmPermit.SearchForm', tech='Tyler Eden + CivicGov', reason='per-permit / per-address search only'),
+ '34': dict(city='Miami Gardens', status='api', portal='https://miamigardensfl-energovpub.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits (2007-today incl. Eden history)', code='code cases'),
+ '35': dict(city='Doral', status='api', portal='https://doralfl-energovweb.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS (public search API)', permit='permits (2004-today)', code='code cases'),
+ '36': dict(city='Cutler Bay', status='api', portal='https://townofcutlerbayfl-energovweb.tylerhost.net/apps/selfservice', tech='Tyler EnerGov CSS', reason='EnerGov tenant went live in 2026 (93 permits, 47 cases); no history'),
+}

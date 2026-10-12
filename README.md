@@ -365,3 +365,12 @@ How records are tied to a folio (precision first; a record that cannot be tied t
 Each record carries the document type, case number (when present), recorded/filing date, CFN, match method + confidence, and a link to the Clerk search page (Official Records standard search for recorded documents, the OCS home for court cases - neither offers a stable deep link, so search by the CFN or case number shown). "Probate case filed" appears as a PR record (title "Probate case filed: <case type> (<status>)", case number, filing date, status, section) rather than a thirteenth signal bit, because the packs' hard-signal bits are full (bits 12-15 are the soft factors).
 
 Match counts and rates per source are written to `raw/distress_stats.json` (`clerk_probate`). Weekly routine: the logged-in browser step must drop new `probate_*.csv` exports into `raw/probate_downloads/` and new `ocs_*.txt` lists into `raw/probate_cases/` (as it already does for `raw/lp_downloads/`), then run `scripts/build_all.sh`. The days with no records (e.g. LP 08/01-08/03, 09/12-09/14, 09/27-09/29) are genuine, not gaps.
+
+## Assemblages
+
+`scripts/build_assemblages.py` (run by `build_all.sh` after `fetch_parcels.py`, which caches county parcel polygons in `$RAW/parcels`) finds adjoining parcels in the same zoning, held by 2+ different owners, each with a reason to sell (teardown, estate/heirs, held 10+ years, vacant, under min lot, out-of-state or absentee owner). Shared boundary of at least 3 m; groups are capped at 8 lots. Each group gets combined lot size, units allowed combined vs separately, a "unlocks the zone minimum" flag, an upside flag and a 1–100 score.
+
+- `data/asm.json.gz` (~2 MB) has the groups and members keyed by folio. It loads only when the Assemblages filter or a preset is used (or a few seconds after start, for the card badges).
+- `data/asm-polys/<x>_<y>.json.gz` holds outlines split into 0.1° tiles. They are fetched only in map view, and only for the groups being drawn.
+- UI: Assemblages filter, "Only groups with a combined-site upside", two presets, sorting by assemblage score (members stay together), a card badge that opens "Show group" (with an "All groups" back button), a drawer section (reason, members, Group on the map), map outlines, 9 CSV columns, and hash keys `asm` / `asmup` / `asmg`.
+- Tests: `tests/e2e_asm.py URL [shots/] [mobile]`.

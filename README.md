@@ -20,6 +20,7 @@ Any static file host works. The `.bin.gz` files are fetched as raw bytes and unz
 ```
 index.html        page markup (same layout as the original app, plus map/link/export controls)
 styles.css        original styles + map, drawer and mobile additions
+teardown.js       teardown rule (pure logic: tier, unit / sq ft / story multiples, lot split)
 app.js            all app logic (filters, sorting, cards/table/map, drawer, CSV, URL state)
 vendor/leaflet/   Leaflet 1.9.4 (stored locally, loaded only when the map is opened)
 data/             meta.json + binary packs (see below)
@@ -38,6 +39,8 @@ shots/            screenshots from the test runs
 | `main-geo.bin.gz` | 2.4 MB | lazily: map view, area search, export, or about 4 s after load |
 | `condo.bin.gz` | 7.9 MB | only when "Condo units" is picked: 349,837 units |
 | `condo-detail.bin.gz` | 11.4 MB | lazily |
+| `zoning-rules.json` | 29 KB | at start: min lot, units/acre, stories, lot coverage, FAR, height per city / county zoning code (keyed by jurisdiction + code) |
+| `extras.json.gz` | 100 KB | at start: main-building construction category (180K folios) + adverse-possession folios |
 | `condo-geo.bin.gz` | 48 KB | lazily (units share building points) |
 
 Pack format: `uint32 header length` + JSON header `{n, cols:[{name,type,offset,bytes}]}`, then 4-byte-aligned typed-array columns (uint8/16/32) and newline-joined string columns, with the whole file gzipped. Dates are days since 1900-01-01. Packs are cached in IndexedDB under `meta.ver`, so a rebuild invalidates the cache automatically.
@@ -313,9 +316,23 @@ Privacy: everything stays in this browser (`localStorage` key `mdpf.lenders.v1`)
 (`window.PFLenders`) keeps storage behind the same small `{load(), save(data)}` adapter as saved properties (`PFLenders.use(backend)`,
 `PFLenders.onChange(fn)`), so login and cloud sync (planned: Supabase) can be added later without changing the UI.
 
+## Parcel Seeker features (teardown rule, zone rules, Send to)
+
+Ported from the "Miami-Dade Parcel Seeker" (oaken-pocket-t64p.here.now) and kept in the Prop Hunters styling:
+
+- **Teardown** panel: Any / Teardown (basic) / Strong teardown with live counts. Basic = single-family or 2-9 unit use (DOR 01xx / 08xx), land >= 80% of the value, built in or before 1969. Strong = basic + the lot meets the zone minimum + zoning allows 3x the units (density), else 3x the floor area (FAR, or lot coverage x stories), else 3x the stories. Every number is editable (min land share, max year built, unit / sq ft / story multiples, lot split factor, "lot under the zone minimum can't be strong" toggle) with **Reset to defaults**; non-default rules go in the share link (`tdr=`). The drawer shows the verdict, the reasons it failed, units allowed, buildable sq ft and the zone numbers with their source. Cards show the tier tag and an Upside line.
+- **Lot vs zone minimum** chips (in Zoning type): Lot could be split (single-family zone, lot >= split factor x minimum), Lot meets zone minimum, Lot under zone minimum.
+- **City zoning code by city**: every city / county code grouped by jurisdiction in collapsible groups with counts; a picked code only matches in that city (`mzs=`). The typed prefix box and the Miami 21 / County quick chips still match across cities.
+- **Money shorthand**: market value, sale price, lot and building boxes accept `500k`, `1.2m`, `$250,000`.
+- **Construction** chips (main building: CBS, wood frame, other masonry, steel / reinforced concrete, other, unknown) and an **Adverse possession** claim filter.
+- **Send to**: Call center / Door knock buttons on every card and in the drawer (stored in this browser, `pf.send.v1`). Chips filter to tagged parcels; Export builds `<list name>.csv` (Folio, Team, List Name, then the normal export columns) with only parcels not already sent to that team, then offers **Mark as sent**; a Sent badge with **Re-send** clears the mark.
+- New presets (Strong teardowns, Lots that could be split, Houses on lots under zone minimum; Teardowns now uses the rule) and sorts (unit multiple, units allowed, buildable sq ft multiple). CSV gains teardown tier/reasons, zone min lot / units per acre / stories / FAR, units allowed, multiples, lot vs minimum, split, construction, adverse possession and Send-to tags.
+
+`scripts/build_zoning_rules.py` writes `data/zoning-rules.json` + `data/extras.json.gz` without touching the packs. It caches the Seeker's public `zoning_by_folio.js` (its `zones` table: county / city GIS zoning maps, Miami 21 Art. 4 Table 2, Miami-Dade Code ch. 33, 2018 municipal zoning file), `construction_by_folio.js` and `adverse_by_folio.js` in `$RAW/seeker/`, matches by (jurisdiction, code), and fills blanks from our own `mzone` numbers. 579 of 622 codes have numbers; the rest (civic, PAD, overlays) stay blank on purpose. Building area for the sq ft multiple is living sq ft (the Seeker uses actual sq ft). Confirm zoning with the city before acting.
+
 ## Testing
 
-`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_lenders.py` covers lender tracking (forms, deals, dashboard math, drawer Financing, JSON/CSV export + import, phone layout). `tests/e2e_mobile.py` covers drive mode at a phone viewport with mocked GPS (sheet, save/status/note, Save where I am, manifest, service worker, offline reload). `tests/e2e_permits.py` covers the permit / code-case chips, per-city coverage table and drawer, CSV columns. `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
+`tests/e2e_owners.py` covers owner portfolios. `tests/e2e_lenders.py` covers lender tracking (forms, deals, dashboard math, drawer Financing, JSON/CSV export + import, phone layout). `tests/e2e_mobile.py` covers drive mode at a phone viewport with mocked GPS (sheet, save/status/note, Save where I am, manifest, service worker, offline reload). `tests/e2e_permits.py` covers the permit / code-case chips, per-city coverage table and drawer, CSV columns. `tests/e2e_vacancy.py` covers the vacancy hint (chips, filter, sort, drawer, aerial, saved vacant flag/condition note, exports). `tests/e2e_seeker.py` covers the Parcel Seeker features (teardown tier + rule panel, lot-vs-minimum chips, city-grouped zoning, money shorthand, construction, adverse possession, Send to export / mark sent / re-send, presets, sorts, hash). `tests/e2e_saved.py` covers save/unsave (mouse + keyboard), notes, status, Saved view, condo units, reload persistence and export/import.
 
 ```bash
 pip install playwright && playwright install chromium

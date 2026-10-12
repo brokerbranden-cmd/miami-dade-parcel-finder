@@ -107,11 +107,67 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
+/* teardown rule, zone rules (data/zoning-rules.json), construction + adverse possession (data/extras.json.gz) */
+const TD=window.PFTeardown, EXTRA_VER='z20261012b';
+let ZR=null, ZREC=null, LU_CODE=null, EX=null, CNMAP=null, APSET=null;
+const CN_CATS=[[1,'Concrete block (CBS)'],[2,'Wood frame'],[3,'Other masonry / brick'],[4,'Steel / reinforced concrete'],[5,'Other'],[0,'Unknown']];
+const CN_LABEL=Object.fromEntries(CN_CATS);
+const LOTZ=[['split','Lot could be split'],['minok','Lot meets zone minimum'],['below','Lot under zone minimum']];
+const RULE_IDS=[['td_land','min_land_share',100],['td_yb','max_year_built',1],['td_um','min_unit_multiple',1],['td_qm','min_sqft_multiple',1],['td_sm','min_story_multiple',1],['td_split','lot_split_factor',1]];
+const RULE_KEYS=['min_land_share','max_year_built','min_unit_multiple','min_sqft_multiple','min_story_multiple','lot_split_factor','enforce_min_lot'];
+const parseAmt=v=>{ v=String(v==null?'':v).trim().toLowerCase().replace(/[$,\s]/g,''); if(!v) return null; const m=/^(-?\d*\.?\d+)([km]?)$/.exec(v); if(!m) return null; let x=parseFloat(m[1]); if(m[2]==='k') x*=1e3; if(m[2]==='m') x*=1e6; return isFinite(x)?Math.round(x*100)/100:null; };
+const fmtAmt=v=>v==null||v===''?'':v>=1e6&&v%1e4===0?(v/1e6)+'m':v>=1e3&&v%1e3===0?(v/1e3)+'k':String(v);
+const MONEY_IDS=new Set(['mvMin','mvMax','spMin','spMax']);
+async function loadZoneRules(){
+  try{ const r=await fetch('data/zoning-rules.json?v='+META.ver+'-'+EXTRA_VER); if(r.ok) ZR=await r.json(); }catch(e){}
+  ZREC=MZ.map((e,i)=>{ const r=ZR&&e&&ZR.rules[e[1]+'|'+String(e[0]).toUpperCase()]; if(!r) return null; const n=v=>v==null||v===''?null:+v;
+    return {upa:n(r[0]),stories:n(r[1]),min_lot_sf:n(r[2]),lot_cov:n(r[3]),far:n(r[4]),height_ft:n(r[5]),zt:r[6]||null,sf:r[6]?(r[6]==='sf'?1:0):null,pd:!!r[7]||r[6]==='pad',src:r[8]||''}; });
+  LU_CODE=D.landuse.map(s=>{ const m=/^\s*(\d{4})/.exec(s); return m?parseInt(m[1],10):-1; });
+  try{ const r=await fetch('data/extras.json.gz?v='+META.ver+'-'+EXTRA_VER); if(r.ok){ const u8=new Uint8Array(await r.arrayBuffer()); EX=JSON.parse(dec.decode(u8[0]===0x1f&&u8[1]===0x8b?await gunzip(u8):u8)); } }catch(e){}
+  if(EX){ CNMAP=new Map(); for(const [k,s] of Object.entries(EX.cn.groups)){ const m=parseInt(k,10); let v=0; for(const t of s.split(',')){ v+=parseInt(t,36); CNMAP.set(v,m); } } APSET=new Set(EX.ap.folios); }
+}
+/* per-pack zoning upside (rule-independent) + tier / split (depends on S.rules) */
+function prepPack(p){
+  if(!p||p.td||!ZREC) return; const c=p.c, n=p.n;
+  const um=new Float32Array(n), qm=new Float32Array(n), sm=new Float32Array(n), al=new Float32Array(n), below=new Int8Array(n), zmin=new Float32Array(n), sfz=new Int8Array(n);
+  for(let i=0;i<n;i++){ const z=ZREC[c.mz[i]]; um[i]=qm[i]=sm[i]=al[i]=zmin[i]=NaN; below[i]=-1; sfz[i]=-1; if(!z) continue;
+    const lot=c.lot[i], eu=Math.max(c.units[i],1), es=Math.max(c.stories[i],1), bl=c.sqft[i];
+    if(z.upa>0&&lot>0){ const a=Math.floor(lot/SQFT_AC*z.upa+1e-9); al[i]=a; um[i]=Math.round(a/eu*10)/10; }
+    if(z.stories>0) sm[i]=Math.round(z.stories/es*10)/10;
+    let x=null; if(lot>0){ if(z.far>0) x=lot*z.far; else if(z.lot_cov>0&&z.stories>0) x=lot*Math.min(z.lot_cov,100)/100*z.stories; }
+    if(x!=null&&bl>0) qm[i]=Math.round(Math.floor(x)/bl*10)/10;
+    if(!z.pd&&z.min_lot_sf>0&&lot>0){ below[i]=lot<z.min_lot_sf?1:0; zmin[i]=z.min_lot_sf; if(z.sf!=null) sfz[i]=z.sf; } }
+  const cn=new Uint8Array(n), ap=new Uint8Array(n);
+  if(CNMAP||APSET){ const f=strCol(p,'folio'); for(let i=0;i<n;i++){ if(CNMAP){ const v=CNMAP.get(+f[i]); if(v) cn[i]=v; } if(APSET&&APSET.has(f[i])) ap[i]=1; } }
+  p.td={um,qm,sm,al,below,zmin,sfz,tier:new Uint8Array(n),split:new Int8Array(n),key:''}; p.cn=cn; p.ap=ap;
+}
+function tierPack(p){
+  if(!p||!p.td) return; const r=S.rules, key=JSON.stringify(r); if(p.td.key===key) return; const t=p.td, c=p.c, f=r.lot_split_factor;
+  for(let i=0;i<p.n;i++){ t.tier[i]=TD.tierFast(LU_CODE[c.landuse[i]],c.land[i],c.mkt[i],c.yb[i],t.um[i],t.qm[i],t.sm[i],t.below[i]===1,r);
+    const mn=t.zmin[i]; t.split[i]=(mn>0&&t.sfz[i]>=0)?((t.sfz[i]===1&&c.lot[i]>=f*mn)?1:0):-1; }
+  t.key=key;
+}
+function zoneOf(p,i){ return ZREC?ZREC[p.c.mz[i]]:null; }
+function tdEval(p,i){ const c=p.c; return TD.evaluate({code:LU_CODE[c.landuse[i]],land:c.land[i],total:c.mkt[i],yb:c.yb[i],lot:c.lot[i],units:c.units[i],stories:c.stories[i],bldg:c.sqft[i]},zoneOf(p,i)||{},S.rules); }
+/* Send to: tag parcels for the call center / door knocker (this browser only) */
+const SEND_KEY='pf.send.v1';
+const TEAMS=[{k:'cc',label:'Call center',noun:'call center',prefix:'CallCenter'},{k:'dk',label:'Door knock',noun:'door knock',prefix:'DoorKnock'}];
+const teamOf=k=>TEAMS.find(t=>t.k===k);
+const SEND=(()=>{ let o={}; try{ o=JSON.parse(localStorage.getItem(SEND_KEY)||'{}')||{}; }catch(e){} return {tags:o.tags&&typeof o.tags==='object'?o.tags:{}, sent:o.sent&&typeof o.sent==='object'?o.sent:{}}; })();
+let SEND_PENDING=null;
+const saveSend=()=>{ try{ localStorage.setItem(SEND_KEY,JSON.stringify(SEND)); }catch(e){ toast("Couldn't save the tags in this browser."); } };
+const isTagged=(f,k)=>!!(SEND.tags[f]&&SEND.tags[f][k]);
+const sentOf=(f,k)=>SEND.sent[f]&&SEND.sent[f][k]||null;
+const tagCount=k=>Object.values(SEND.tags).filter(r=>r&&r[k]).length;
+const dayStr=d=>{ d=new Date(d); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+function sendBtns(folio){ return `<span class="sendtools">${TEAMS.map(t=>{ const on=isTagged(folio,t.k); return `<button type="button" class="sbtn ${on?'on':''}" data-sendtag="${t.k}" data-folio="${folio}" aria-pressed="${on}" title="${on?`On the ${t.noun} list (tagged ${dayStr(SEND.tags[folio][t.k])}). Click to remove`:`Add this property to the ${t.noun} list`}">${t.label}</button>`; }).join('')}</span>`; }
+function sentBadges(folio){ return TEAMS.map(t=>{ const s=sentOf(folio,t.k); return s?`<span class="sentb" title="Exported to the ${t.noun} list ${s.list?'“'+esc(s.list)+'” ':''}on ${s.d}. It won't be exported to the ${t.noun} again unless you retag it or press Re-send.">${t.label} · Sent ${s.d} <button type="button" class="resend" data-resend="${t.k}" data-folio="${folio}">Re-send</button></span>`:''; }).join(''); }
 const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
-function mzAllow(q){ const toks=mzTokens(q); if(!toks.length) return null; const a=new Uint8Array(MZ.length); for(let i=1;i<MZ.length;i++){ const c=MZ_UP[i]; for(const t of toks){ if(c===t || c.startsWith(t)){ a[i]=1; break; } } } return a; }
+const mzKey=i=>MZ[i]?MZ[i][1]+'|'+MZ_UP[i]:'';
+function mzAllow(q){ const toks=mzTokens(q); if(!toks.length && !S.mzSel.size) return null; const a=new Uint8Array(MZ.length); for(let i=1;i<MZ.length;i++){ const c=MZ_UP[i]; if(S.mzSel.size && S.mzSel.has(mzKey(i))){ a[i]=1; continue; } for(const t of toks){ if(c===t || c.startsWith(t)){ a[i]=1; break; } } } return a; }
 
 const IDB=(()=>{ let dbp=null;
   const open=()=>dbp||(dbp=new Promise((res,rej)=>{ try{ const r=indexedDB.open('mdpf',1); r.onupgradeneeded=()=>r.result.createObjectStore('f'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>rej(new Error('blocked')); }catch(e){ rej(e); } }));
@@ -155,7 +211,7 @@ async function loadPack(i,label){
   const raw=await fetchAll(pk.files,n=>{ got+=n; $('loadBar').style.width=Math.min(100,got/pk.bytes*100).toFixed(1)+'%'; $('loadSub').textContent=(got/1e6).toFixed(1)+' of '+(pk.bytes/1e6).toFixed(1)+' MB'; });
   $('loadMsg').textContent=label;
   $('loadSub').textContent='Unpacking…';
-  PACKS[i]=parsePack(await gunzip(raw),pk.name,i);
+  PACKS[i]=parsePack(await gunzip(raw),pk.name,i); prepPack(PACKS[i]);
   $('loadbox').hidden=true;
 }
 const DET=[];
@@ -195,19 +251,20 @@ async function ensureSavedPacks(){
 const NUM_IDS=['lotMin','lotMax','sfMin','sfMax','ybMin','ybMax','unMin','unMax','bdMin','stMax','lsMin','lsMax','hdMin','hdMax','spMin','spMax'];
 const ADV_IDS=NUM_IDS.slice(2);
 const MONEY_STEPS=[0,50e3,100e3,150e3,200e3,300e3,400e3,500e3,750e3,1e6,1.5e6,2e6,3e6,5e6,10e6,25e6];
-const num=id=>{ const v=$(id).value.trim(); if(v==='') return null; const n=Number(v); return isFinite(n)?n:null; };
+const num=id=>parseAmt($(id).value);
 function readState(){
   const st={}; NUM_IDS.forEach(id=>st[id]=num(id));
-  st.mvMin=+$('mvMin').value||null; st.mvMax=+$('mvMax').value||null;
+  st.mvMin=num('mvMin'); st.mvMax=num('mvMax');
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; return st;
+  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.send=[...S.send]; st.mzSel=[...S.mzSel]; return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
-  NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':st[id]);
-  $('mvMin').value=st.mvMin||0; $('mvMax').value=st.mvMax||0;
+  NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':(MONEY_IDS.has(id)?fmtAmt(st[id]):st[id]));
+  $('mvMin').value=st.mvMin?fmtAmt(st.mvMin):''; $('mvMax').value=st.mvMax?fmtAmt(st.mvMax):'';
+  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.mzSel=new Set(st.mzSel||[]); renderRules();
   $('mzq').value=st.mzq||''; $('q').value=st.q||''; $('qScope').value=st.qScope||'ao'; $('city').value=st.city||''; $('zips').value=st.zips||''; $('cra').value=st.cra||'';
   $('hideGov').checked=st.hideGov!==false; $('noBldg').checked=!!st.noBldg; $('qualOnly').checked=!!st.qualOnly;
   S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]); S.dsig=new Set((st.dsig||[]).filter(k=>k in DBIT)); $('dsMin').value=DS_STEPS.some(x=>x[0]===+st.dsMin)?String(+st.dsMin):'0';
@@ -221,6 +278,10 @@ function applyState(st){
   S.bbox=Array.isArray(st.bbox)&&st.bbox.length===4&&st.bbox.every(Number.isFinite)?st.bbox:null; $('areaRow').hidden=!S.bbox;
 }
 
+function sanRules(r){ const o={...TD.DEFAULT_RULES}; for(const k of RULE_KEYS){ if(k==='enforce_min_lot'){ if(r[k]!=null) o[k]=!!r[k]; } else { const v=+r[k]; if(r[k]!=null&&r[k]!==''&&isFinite(v)&&v>=0) o[k]=v; } } return o; }
+function renderRules(){ if(!$('td_land')) return; for(const [id,k,mul] of RULE_IDS){ if(document.activeElement!==$(id)) $(id).value=String(Math.round(S.rules[k]*mul*100)/100); } $('td_minlot').checked=!!S.rules.enforce_min_lot; }
+function readRules(){ const r={...S.rules}; for(const [id,k,mul] of RULE_IDS){ const v=parseAmt($(id).value); if(v!=null&&v>=0) r[k]=v/mul; } r.enforce_min_lot=$('td_minlot').checked; S.rules=r; }
+const rulesDefault=()=>RULE_KEYS.every(k=>S.rules[k]===TD.DEFAULT_RULES[k]);
 /* filtering */
 function textMatcher(st){
   if(!st.q) return null;
@@ -255,15 +316,20 @@ function run(){
   let pcMask=0; for(const k of S.pcs) pcMask|=1<<PBIT[k]; const pcc=new Uint32Array(PCS.length+1);
   const mine=st.vsMine?new Set([...savedIdx()].filter(([f])=>{ const x=SV.get(f); return x&&x.vacant; }).map(([,id])=>id)):null;
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
+  const tierW=S.tier==='strong'?2:S.tier==='basic'?1:0, tcn=new Uint32Array(3), lzSel=S.lotz, lzc={split:0,minok:0,below:0}, cnSel=S.cons, cnc=new Uint32Array(6);
+  const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0;
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
+    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), FO=sendSet?strCol(p,'folio'):null;
     const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n), PG=c.pcs||new Uint16Array(n);
     if(bb && !gl) continue;
     for(let i=0;i<n;i++){
       if(hits && !hits[i]) continue;
       if(ogF && c.og[i]!==ogF) continue;
       if(mine && !mine.has(base+i)) continue;
+      if(sendSet && !sendSet.has(FO[i])) continue;
+      if(apOnly && !APa[i]) continue;
       if(vsMin && VS[i]<vsMin) continue;
       if(useOg){ const g=c.og[i]; if(!g || (ogMin && OWN.n[g]<ogMin) || (ogDist && OWN.nd[g]<ogDist) || (exInst && OWN.fl[g])) continue; }
       if(gl){ const la=gl.lat[i], lo=gl.lon[i]; if(!(la>=bb[0]&&la<=bb[2]&&lo>=bb[1]&&lo<=bb[3])) continue; }
@@ -289,17 +355,18 @@ function run(){
       const mi=c.mz[i];
       const fu=lA&&!lA[li]?1:0, fz=zA&&!zA[zi]?1:0, fm=mA&&!mA[mi]?1:0;
       const kind = fl&8 ? 1 : fl&16 ? 2 : fl&32 ? 3 : 0, fk = wantK>=0 && kind!==wantK ? 1:0;
-      const nf=fu+fz+fm+fk;
+      const tv=TT[i], ft=tierW&&tv<tierW?1:0, lsp=TS[i]===1, lok=TB[i]===0, lbl=TB[i]===1, flz=lzSel.size&&!((lzSel.has('split')&&lsp)||(lzSel.has('minok')&&lok)||(lzSel.has('below')&&lbl))?1:0, cv=CNa[i], fcn=cnSel.size&&!cnSel.has(cv)?1:0;
+      const nf=fu+fz+fm+fk+ft+flz+fcn;
       const vg=VG[i], fvs=vsMask&&!(vg&vsMask)?1:0, pg=PG[i], fpc=pcMask&&!(pg&pcMask)?1:0;
       if(nf===0 && !fvs && sg&4095){ for(let b=0;b<12;b++) if(sg&(1<<b)) dc[b]++; if(!fsg) dc[12]++; }
       if(nf===0 && !fsg && vg){ for(let b=0;b<VSIG.length;b++) if(vg&(1<<b)) vc[b]++; }
       if(nf===0 && !fsg && !fvs && pg){ for(let b=0;b<PCS.length;b++) if(pg&(1<<b)) pcc[b]++; }
       if(fsg||fvs||fpc) continue;
-      if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
-      else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else kc[kind]++; }
+      if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; tcn[tv]++; if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; cnc[cv]++; if(APa[i]) apN++; if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
+      else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else if(ft) tcn[tv]++; else if(flz){ if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; } else if(fcn) cnc[cv]++; else kc[kind]++; }
     }
   }
-  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc};
+  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,apN};
   if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status))) r.push(id); } results=Uint32Array.from(r); }
   renderSavedUI();
   doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true);
@@ -310,7 +377,7 @@ const SORTS=[
   ['ds_d','Highest distress score','dscore',-1],['vs_d','Most likely vacant / neglected','vscore',-1],['sv_d','Recently saved','saved',-1],['ogd_d','Owner\'s distressed parcels','ogd',-1],['og_d','Owner\'s portfolio size','ogn',-1],['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
   ['mv_a','Lowest value first','mkt',1],['mv_d','Highest value first','mkt',-1],
   ['held_d','Owned the longest','sd1',1],['sold_d','Sold most recently','sd1',-1],
-  ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
+  ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['um_d','Highest unit multiple (zoning ÷ existing)','um',-1],['au_d','Most units allowed by zoning','al',-1],['qm_d','Highest buildable sq ft multiple','qm',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
   ['addr_a','Address A–Z','addr',1]];
 const SORT_MAP=Object.fromEntries(SORTS.map(s=>[s[0],s]));
 function doSort(){
@@ -326,7 +393,7 @@ function doSort(){
     for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id), g=c.og[i]; key[j]=(g&&!(OWN.fl[g]&&!inst)?A[g]:(k==='ogn'?1:(c.dsig[i]&4095?1:0)))*256+c.dscore[i]; } }
   else if(k==='saved'){ for(let j=0;j<n;j++){ const id=results[j], it=SV.get(getStr(P(id),'folio',I(id))); key[j]=it?Date.parse(it.savedAt):0; } }
   else for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id);
-    key[j] = k==='vscore' ? (c.vscore?c.vscore[i]:0) : k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
+    key[j] = (k==='um'||k==='al'||k==='qm') ? (()=>{ const t=P(id).td; const v=t?t[k][i]:NaN; return v===v?v:-1; })() : k==='vscore' ? (c.vscore?c.vscore[i]:0) : k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
   const idx=new Uint32Array(n); for(let i=0;i<n;i++) idx[i]=i;
   const k2=k==='dscore'?(j=>{ const id=results[j]; return P(id).c.mkt[I(id)]; }):k==='vscore'?(j=>{ const id=results[j]; return P(id).c.dscore[I(id)]; }):null;
   idx.sort((a,b)=>(key[a]-key[b])*dir || (k2?k2(b)-k2(a):0) || a-b);
@@ -352,12 +419,26 @@ function renderChips(){
   for(const [host,list] of [['mzMiami',MZ_MIAMI],['mzCounty',MZ_COUNTY]]){
     $(host).innerHTML=list.map(([t,l])=>{ const on=toks.includes(t), n=mzCount(t); return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-mz="${t}" aria-pressed="${on}" title="${esc(l)}">${t}<span class="n">${short(n)}</span></button>`; }).join('');
   }
+  renderMzCities();
+  const tcn=facet.tcn||[0,0,0]; $('tcBasic').textContent=short(tcn[1]+tcn[2]); $('tcStrong').textContent=short(tcn[2]);
+  $('tierSeg').querySelectorAll('button').forEach(b=>{ const on=b.dataset.tier===S.tier; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); });
+  const lzc=facet.lzc||{}; $('lotz').innerHTML=LOTZ.map(([k,l])=>{ const on=S.lotz.has(k), n=lzc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-lz="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
+  const cnc=facet.cnc||[]; $('cnChips').innerHTML=EX?CN_CATS.map(([k,l])=>{ const on=S.cons.has(k), n=cnc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-cn="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join(''):'<span class="note">Construction data did not load.</span>';
+  $('apCount').textContent=EX?'('+fmt.format(facet.apN||0)+')':''; $('apOnly').checked=S.ap;
+  renderSend();
   const kc=facet.kc, kAll=kc[0]+kc[1]+kc[2]+kc[3], kN={all:kAll,person:kc[0],corp:kc[1],trust:kc[2]};
   $('ownerKind').innerHTML=OWNER_KINDS.map(([k,l])=>`<button type="button" data-k="${k}" class="${S.owner===k?'on':''}" aria-pressed="${S.owner===k}">${l}<span class="n">${short(kN[k])}</span></button>`).join('');
   renderFacet('zoning'); renderFacet('landuse');
   const dcn=facet.dc||[]; $('dsigs').innerHTML=DSIG.map(([k,l],b)=>{ const on=S.dsig.has(k), n=dcn[b]||0; return `<button type="button" class="chip dchip ${on?'on':''} ${!n&&!on?'zero':''}" data-sig="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
   const pcn=facet.pcc||[]; $('pcsigs').innerHTML=PCS.map(([k,l],b)=>{ const on=S.pcs.has(k), n=pcn[b]||0; return `<button type="button" class="chip vchip pchip ${on?'on':''} ${!n&&!on?'zero':''}" data-pc="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
   const vcn=facet.vc||[]; $('vsigs').innerHTML=VSIG.map(([k,l,pt],b)=>{ const on=S.vsig.has(k), n=vcn[b]||0; return `<button type="button" class="chip vchip ${pt<0?'neg':''} ${on?'on':''} ${!n&&!on?'zero':''}" data-vs="${k}" aria-pressed="${on}" title="${pt>0?'+':''}${pt} points">${l}<span class="n">${short(n)}</span></button>`; }).join('');
+}
+function renderMzCities(){
+  const host=$('mzCities'); if(!host) return; const by=new Map(), mc=facet.mc||[];
+  for(let i=1;i<MZ.length;i++){ const e=MZ[i]; if(!e) continue; const j=e[1]; if(!by.has(j)) by.set(j,new Map()); const g=by.get(j), k=MZ_UP[i]; g.set(k,(g.get(k)||0)+(mc[i]||0)); }
+  const order=['Miami','Miami-Dade County'], js=[...by.keys()].sort((a,b)=>{ const x=order.indexOf(a), y=order.indexOf(b); if(x>=0||y>=0) return (x<0?99:x)-(y<0?99:y); return a.localeCompare(b); });
+  host.innerHTML='<div class="mzc-h">By city <span class="hint">tap a city to open it; picked codes count only in that city</span></div>'+js.map(j=>{ const g=by.get(j), codes=[...g.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])), tot=codes.reduce((s,x)=>s+x[1],0), sel=codes.filter(([k])=>S.mzSel.has(j+'|'+k)).length, open=S.mzOpen.has(j)||sel>0;
+    return `<details class="mzc" data-j="${esc(j)}" ${open?'open':''}><summary>${esc(j==='Miami-Dade County'?'Unincorporated county':j)} <span class="c">${short(tot)} · ${codes.length} codes</span>${sel?` <span class="sel">${sel} picked</span>`:''}</summary><div class="chips">${codes.map(([k,n])=>{ const key=j+'|'+k, on=S.mzSel.has(key); return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-mzs="${esc(key)}" aria-pressed="${on}">${esc(k)}<span class="n">${short(n)}</span></button>`; }).join('')}</div></details>`; }).join('');
 }
 function median(a){ if(!a.length) return 0; a.sort(); return a[a.length>>1]; }
 function renderSummary(){
@@ -377,7 +458,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0);
+  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
   const tot=k+main; $('onCount').hidden=!tot; $('onCount').textContent=tot+(tot===1?' filter on':' filters on'); $('resetBtn').disabled=!tot;
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
 }
@@ -408,7 +489,7 @@ function cardHTML(id){
   const sale = c.sd1[i]? `${monYr(c.sd1[i])}${c.sale1[i]>100?' for '+money(c.sale1[i]):''} · owned ${Math.max(0,Math.floor((today-c.sd1[i])/365.25))} yrs` : 'No sale on record';
   const folio=getStr(p,'folio',i), sv=SV.get(folio);
   return `<article class="card ${sv?'is-saved':''}" data-id="${id}" data-folio="${folio}" tabindex="0" aria-label="${esc(addr)}. Open details">
-    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span><span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span><span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
+    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span><span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span>${tdTag(p,i)}<span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
     ${sv?`<div class="svline"><span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span>${sv.vacant?'<span class="spill vmine" title="You marked it as looking vacant / damaged">Looks vacant (you)</span>':''}<span class="svd">Saved ${svDate(sv.savedAt)}</span>${sv.note||sv.cond?`<span class="svn" title="${esc([sv.note,sv.cond].filter(Boolean).join(' · '))}">${esc(sv.note||sv.cond)}</span>`:''}</div>`:''}
     <div><h3>${esc(addr)}</h3><div class="city">${esc(D.city[c.city[i]])}, FL ${D.zip[c.zip[i]]}</div></div>
     <div class="facts">
@@ -420,9 +501,16 @@ function cardHTML(id){
     <div class="line"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
+    ${upLine(p,i)}
+    <div class="sendline">${sendBtns(folio)}${sentBadges(folio)}${p.ap&&p.ap[i]?'<span class="hot apb" title="Adverse possession claim noted in the Property Appraiser legal description">Adverse possession</span>':''}</div>
     <div class="ob">${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
 }
+function tdTag(p,i){ const t=p.td?p.td.tier[i]:0; return t===2?'<span class="tt tds" title="Strong teardown under your rule">Strong teardown</span>':t===1?'<span class="tt tdb" title="Teardown (basic) under your rule">Teardown</span>':''; }
+function upLine(p,i){ const t=p.td; if(!t) return ''; const b=[]; const al=t.al[i], um=t.um[i], qm=t.qm[i], sp=t.split[i];
+  if(al===al) b.push(`<b>${fmt.format(al)}</b> units allowed${um===um?` (${um}×)`:''}`); else if(qm===qm) b.push(`buildable <b>${qm}×</b> the building`);
+  if(t.below[i]===1) b.push('<span class="warmt">lot under zone min</span>'); else if(sp===1) b.push('<span class="okt">could be split</span>');
+  return b.length?`<div class="line"><span class="k">Upside</span><span class="v">${b.join(' · ')}</span></div>`:''; }
 function renderResults(reset){
   const n=results.length, cardsOn=S.view==='cards', mapOn=S.view==='map', tableOn=S.view==='table';
   $('empty').hidden=n>0 || mapOn;
@@ -568,6 +656,19 @@ function savedBoxHTML(id,folio){
     <span class="note" id="svNoteMsg">Notes save automatically in this browser.</span></div>`;
 }
 
+function teardownHTML(p,i){
+  const z=zoneOf(p,i), ev=tdEval(p,i), r=S.rules, nf=v=>v==null?'':fmt.format(v);
+  const verdict=ev.strong?'<span class="tt tds">Strong teardown</span>':ev.basic?'<span class="tt tdb">Teardown (basic)</span>':'<span class="tt">Not a teardown</span>';
+  const zr=z?[z.min_lot_sf?nf(z.min_lot_sf)+' sf min lot':'',z.upa?z.upa+' units/acre':'',z.far?'FAR '+z.far:'',z.stories?z.stories+' stories':'',z.height_ft?z.height_ft+' ft':'',z.lot_cov?z.lot_cov+'% coverage':''].filter(Boolean).join(' · '):'';
+  return `<h3>Teardown & zoning upside</h3><div class="dl">${[
+    ['Verdict', verdict+(ev.reasons.length?`<small>${esc(ev.reasons.join('; '))}</small>`:`<small>Meets your rule: land ≥ ${Math.round(r.min_land_share*100)}%, built ≤ ${r.max_year_built}${ev.strong?', zoning allows the multiple':''}</small>`)],
+    ['Zone rules', zr?esc(zr)+(z.src?`<small>Source: ${esc(z.src)} · confirm with the city</small>`:''):'Not confirmed for this code'],
+    ['Units allowed', ev.allowed!=null?`${fmt.format(ev.allowed)} (${ev.um}× the ${Math.max(p.c.units[i],1)} there now)`:''],
+    ['Buildable sq ft', ev.sqft!=null?`${fmt.format(ev.sqft)} sf by ${ev.basis}${ev.qm!=null?` (${ev.qm}× the building)`:''}`:''],
+    ['Story multiple', ev.sm!=null?ev.sm+'×':''],
+    ['Lot vs zone minimum', ev.below==null?'':ev.below?'<b>Under</b> the zone minimum':ev.split?`Meets it, and is ≥ ${r.lot_split_factor}× (could be split)`:'Meets it']
+  ].filter(x=>x[1]!=='').map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join('')}</div>`;
+}
 async function openDrawer(id,opts){
   if(OGMAP){ OGMAP.remove(); OGMAP=null; }
   if(!P(id).det){ toast('Loading details…'); try{ await Promise.all([loadDetail(P(id).idx), loadGeo(P(id).idx).catch(()=>{})]); }catch(e){ toast('Details did not load. Try again.'); return; } }
@@ -594,11 +695,13 @@ async function openDrawer(id,opts){
       <button class="btn" type="button" id="copyFolio">Copy folio</button>
       <button class="btn" type="button" id="onMap">Show on map</button>
     </div>
+    <div class="sendline dsend">${sendBtns(folio)}${sentBadges(folio)}</div>
     <div id="savedBox" data-folio="${folio}" data-id="${id}">${savedBoxHTML(id,folio)}</div>
     <div id="finBox">${finHTML(folio)}</div>
     ${distressHTML(p,i,folio)}
     ${vacancyHTML(p,i,folio)}
     ${permitsHTML(p,i,folio)}
+    ${teardownHTML(p,i)}
     <h3>The property</h3><div class="dl">${rows([
       ['What it is', `${TYPE_LABEL[LU_T[c.landuse[i]]]}<small>${esc(lu)}</small>`],
       ['City zoning', MZ[c.mz[i]] ? `<span class="mzcode">${esc(MZ[c.mz[i]][0])}</span> · ${esc(MZ[c.mz[i]][1])}<small>${esc(mzLabel(c.mz[i]))}${MZ[c.mz[i]][5]?' · min lot '+fmt.format(+MZ[c.mz[i]][5])+' sq ft':''}</small>` : 'Not found on the zoning map'],
@@ -608,6 +711,8 @@ async function openDrawer(id,opts){
       ['Beds / baths', (c.beds[i]||c.baths[i])? c.beds[i]+' beds / '+(c.baths[i]/10)+' baths':''],
       ['Units', c.units[i]||''],['Stories', c.stories[i]||''],['Year built', c.yb[i]||''],
       ['Buildings on the lot', c.bcount&&c.bcount[i]>1?c.bcount[i]:''],
+      ['Construction', p.cn&&EX?(p.cn[i]?esc(CN_LABEL[p.cn[i]]):'<span class="note">Unknown</span>')+'<small>Main building, Property Appraiser building details</small>':''],
+      ['Adverse possession', p.ap&&p.ap[i]?'<b>Claim noted</b><small>F.S. 95.18 / DR-452, from the Property Appraiser legal description</small>':''],
       ['Redevelopment area', esc(D.cra[c.cra[i]]||'')],['Legal description', esc(getStr(p,'legal',i))]])}</div>
     <h3>${META.rollYear||''} values</h3><div class="dl">${rows([
       ['Market value', dollars(mv)],['Land', dollars(c.land[i])+(mv?`<small>${Math.round(c.land[i]/mv*100)}% of the total</small>`:'')],['Building', dollars(c.bldg[i])],
@@ -723,22 +828,27 @@ async function copy(text,ok){
 const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
 function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||'')]:['','','','','',''];}
-function buildCSV(ids=results){
-  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','Company/Organization','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Permits (5 yrs)','Last Permit Detail','Open Code Cases','Code Cases (5 yrs)','Code Case Detail','Permit/Code Signals','Permit Data Coverage','Code Data Coverage','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note'];
+function buildCSV(ids=results,extra){
+  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','Company/Organization','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Permits (5 yrs)','Last Permit Detail','Open Code Cases','Code Cases (5 yrs)','Code Case Detail','Permit/Code Signals','Permit Data Coverage','Code Data Coverage','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note','Teardown Tier','Teardown Reasons','Zone Min Lot SqFt','Zone Units/Acre','Zone Max Stories','Zone FAR','Units Allowed','Unit Multiple','Buildable SqFt Multiple','Lot vs Zone Minimum','Lot Could Be Split','Construction','Adverse Possession','Call Center Tag','Door Knock Tag'];
+  if(extra) head.splice(1,0,'Team','List Name');
   const parts=[head.join(',')+'\n']; let buf='';
   for(let j=0;j<ids.length;j++){
     const id=ids[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
-    buf+=[getStr(p,'folio',i),csvq(getStr(p,'addr',i)),csvq(D.city[c.city[i]]),D.zip[c.zip[i]],csvq(TYPE_LABEL[LU_T[c.landuse[i]]]),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][0]):''),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][1]):''),csvq(mzLabel(c.mz[i])),csvq(ZONE_LABEL[Z_G[c.zoning[i]]]),csvq(D.zoning[c.zoning[i]]),csvq(D.landuse[c.landuse[i]]),
+    const row=[getStr(p,'folio',i),csvq(getStr(p,'addr',i)),csvq(D.city[c.city[i]]),D.zip[c.zip[i]],csvq(TYPE_LABEL[LU_T[c.landuse[i]]]),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][0]):''),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][1]):''),csvq(mzLabel(c.mz[i])),csvq(ZONE_LABEL[Z_G[c.zoning[i]]]),csvq(D.zoning[c.zoning[i]]),csvq(D.landuse[c.landuse[i]]),
       c.lot[i],(c.lot[i]/SQFT_AC).toFixed(3),c.sqft[i],c.beds[i],c.baths[i]/10,c.units[i],c.stories[i],c.yb[i]||'',
       c.land[i],c.bldg[i],mv,c.assd[i],mv?Math.round(c.land[i]/mv*100):'',dateStr(c.sd1[i]),c.sale1[i]||'',c.sq1[i]===1?'Y':c.sq1[i]===2?'N':'',
       dateStr(c.sd2[i]),c.sale2[i]||'',csvq(getStr(p,'owner',i)),fl&8?'Company/Organization':fl&16?'Trust':fl&32?'Government':'Individual',csvq(getStr(p,'mail',i)),
       fl&1?'Y':'',fl&2?'Y':'',fl&4?'Y':'',fl&8?'Y':'',fl&16?'Y':'',fl&64?'Y':'',csvq(D.cra[c.cra[i]]||''),csvq(getStr(p,'legal',i)),
       fl&128?'Y':'',c.taxable[i],c.prv[i]||'',csvq(getStr(p,'grantor',i)),getStr(p,'book',i),p.geo&&p.geo.lat[i]>20?p.geo.lat[i].toFixed(6):'',p.geo&&p.geo.lat[i]>20?p.geo.lon[i].toFixed(6):'','https://apps.miamidadepa.gov/propertysearch/#/?folio='+getStr(p,'folio',i),
-      c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i)),c.vscore?c.vscore[i]:'',csvq(vsigText(c.vsig?c.vsig[i]:0)),c.lperm?dateStr(c.lperm[i]):'',c.pn5?c.pn5[i]:'',csvq(getStr(p,'psum',i)||''),c.cn_open?c.cn_open[i]:'',c.cn5?c.cn5[i]:'',csvq(getStr(p,'csum',i)||''),csvq(pcsText(c.pcs?c.pcs[i]:0)),csvq(covShort(PCOV[getStr(p,'folio',i).slice(0,2)],'permit')),csvq(covShort(PCOV[getStr(p,'folio',i).slice(0,2)],'code')),...savedCSV(getStr(p,'folio',i))].join(',')+'\n';
+      c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i)),c.vscore?c.vscore[i]:'',csvq(vsigText(c.vsig?c.vsig[i]:0)),c.lperm?dateStr(c.lperm[i]):'',c.pn5?c.pn5[i]:'',csvq(getStr(p,'psum',i)||''),c.cn_open?c.cn_open[i]:'',c.cn5?c.cn5[i]:'',csvq(getStr(p,'csum',i)||''),csvq(pcsText(c.pcs?c.pcs[i]:0)),csvq(covShort(PCOV[getStr(p,'folio',i).slice(0,2)],'permit')),csvq(covShort(PCOV[getStr(p,'folio',i).slice(0,2)],'code')),...savedCSV(getStr(p,'folio',i)),...tdCSV(p,i)];
+    if(extra) row.splice(1,0,csvq(extra.team.label),csvq(extra.list));
+    buf+=row.join(',')+'\n';
     if(buf.length>1e6){ parts.push(buf); buf=''; }
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
 }
+function tdCSV(p,i){ const z=zoneOf(p,i)||{}, t=p.td, ev=tdEval(p,i), f=getStr(p,'folio',i), nn=v=>v===v&&v!=null?v:'';
+  return [ev.strong?'Strong':ev.basic?'Teardown':'',csvq(ev.reasons.join('; ')),z.min_lot_sf||'',z.upa||'',z.stories||'',z.far||'',t?nn(t.al[i]):'',t?nn(t.um[i]):'',t?nn(t.qm[i]):'',t&&t.below[i]>=0?(t.below[i]?'Under':'Meets'):'',t&&t.split[i]===1?'Y':'',p.cn&&EX?csvq(CN_LABEL[p.cn[i]]):'',p.ap&&p.ap[i]?'Y':'',isTagged(f,'cc')?'Y':'',isTagged(f,'dk')?'Y':'']; }
 $('exportBtn').onclick=async()=>{ if(results.length) return exportIds(results,S.saved?'saved':S.ogf?'owner':'properties',$('exportBtn'));
   if(!results.length){ toast('Nothing to export yet.'); return; }
   const btn=$('exportBtn'); btn.disabled=true; btn.textContent='Preparing…';
@@ -773,6 +883,8 @@ function writeHash(st){
     if(st.sort&&st.sort!=='lot_d') h.set('sort',st.sort); if(st.view&&st.view!=='cards') h.set('view',st.view);
     if(st.bbox) h.set('area',st.bbox.join(','));
     if(st.ogf) h.set('ogf',st.ogf); if(st.ogMin) h.set('ogn',st.ogMin); if(st.ogDist) h.set('ogd','1'); if(st.ogInst) h.set('ogi','1');
+    if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';'));
+    if(st.rules&&!RULE_KEYS.every(k=>st.rules[k]===TD.DEFAULT_RULES[k])) h.set('tdr',RULE_KEYS.map(k=>k==='enforce_min_lot'?(st.rules[k]?1:0):st.rules[k]).join(','));
     if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
     const str=h.toString(), want=str?'#'+str:'';
     if(location.hash!==want) history.replaceState(null,'',want||(location.pathname+location.search));
@@ -793,6 +905,8 @@ function parseHash(){
   st.sort=h.get('sort')||'lot_d'; st.view=h.get('view')||'cards';
   st.ogf=(h.get('ogf')||'').replace(/\D/g,''); st.ogMin=+h.get('ogn')||0; st.ogDist=h.get('ogd')==='1'; st.ogInst=h.get('ogi')==='1';
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
+  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean);
+  const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length){ st.rules={}; RULE_KEYS.forEach((k,j)=>st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]); }
   const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null;
   return st;
 }
@@ -959,13 +1073,16 @@ const IDEAS=[
   ['Owners with 5+ properties', ()=>({...BLANK(), ogMin:5, sort:'og_d'})],
   ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:5000, lotMax:87120, sort:'lot_a'})],
   ['Houses on multifamily land', ()=>({...BLANK(), types:['sf'], zones:['mf'], sort:'lot_d'})],
-  ['Teardowns', ()=>({...BLANK(), types:['sf','mf29'], lsMin:80, ybMax:1969, sort:'lp_d'})],
+  ['Teardowns', ()=>({...BLANK(), tier:'basic', sort:'lp_d'})],
   ['Out-of-state owners, 15+ years', ()=>({...BLANK(), types:['sf','th','mf29','vacant'], hdMin:15, flags:{oos:'yes',homestead:'no'}, sort:'held_d'})],
   ['Estates and heirs', ()=>({...BLANK(), flags:{estate:'yes'}, sort:'held_d'})],
   ['Small multifamily (2–9 units)', ()=>({...BLANK(), types:['mf29'], flags:{homestead:'no'}, sort:'un_d'})],
   ['Big lots, 1 acre+', ()=>({...BLANK(), types:['sf','vacant'], lotMin:43560, sort:'lot_a'})],
   ['Tired landlords (absentee, 20+ yrs)', ()=>({...BLANK(), types:['sf','th','mf29'], hdMin:20, flags:{homestead:'no',absz:'yes'}, sort:'held_d'})],
   ['Lots owned from far away', ()=>({...BLANK(), types:['vacant'], lotMin:4000, flags:{absz:'yes'}, sort:'ppl_a'})],
+  ['💥 Strong teardowns', ()=>({...BLANK(), tier:'strong', sort:'um_d'})],
+  ['Lots that could be split', ()=>({...BLANK(), types:['sf','vacant'], lotz:['split'], sort:'lot_d'})],
+  ['Houses on lots under zone minimum', ()=>({...BLANK(), types:['sf'], lotz:['below'], sort:'lp_d'})],
 ];
 const LOT_CHIPS=[[0,'Any'],[5000,'5,000+ sf'],[7500,'7,500+ sf'],[10000,'10,000+ sf'],[21780,'½ acre+'],[43560,'1 acre+'],[217800,'5 acres+']];
 
@@ -1021,6 +1138,35 @@ function wireSaved(){
   let nt=null; $('drawerHost').addEventListener('input',e=>{ const id=e.target.id; if(id!=='svNote'&&id!=='svCond') return; const f=$('savedBox').dataset.folio, v=e.target.value; clearTimeout(nt); $('svNoteMsg').textContent='Saving…'; nt=setTimeout(()=>{ SV.update(f,id==='svNote'?{note:v}:{cond:v}); const m=$('svNoteMsg'); if(m) m.textContent=SV.error||'Saved in this browser.'; },400); });
 }
 
+/* send to: tagging, export, mark as sent */
+function refreshSendUi(folio){ document.querySelectorAll(`.sendline`).forEach(el=>{ if(el.querySelector(`[data-folio="${folio}"]`)) el.innerHTML=sendBtns(folio)+sentBadges(folio)+(el.querySelector('.apb')?el.querySelector('.apb').outerHTML:''); }); renderSend(); }
+function toggleSendTag(f,k){ if(!/^\d{13}$/.test(f)) return; const r=SEND.tags[f]||(SEND.tags[f]={}); let on;
+  if(r[k]){ delete r[k]; if(!Object.keys(r).length) delete SEND.tags[f]; on=false; }
+  else { r[k]=new Date().toISOString(); on=true; if(SEND.sent[f]&&SEND.sent[f][k]){ delete SEND.sent[f][k]; if(!Object.keys(SEND.sent[f]).length) delete SEND.sent[f]; } }
+  saveSend(); toast(on?`Added to the ${teamOf(k).noun} list`:`Removed from the ${teamOf(k).noun} list`);
+  if(S.send.size){ run(); return; } refreshSendUi(f); }
+function resendTag(f,k){ if(!SEND.sent[f]) return; delete SEND.sent[f][k]; if(!Object.keys(SEND.sent[f]).length) delete SEND.sent[f]; const r=SEND.tags[f]||(SEND.tags[f]={}); if(!r[k]) r[k]=new Date().toISOString(); saveSend(); refreshSendUi(f); toast(`Back on the ${teamOf(k).noun} list`); }
+function folioIds(fs){ const want=new Set(fs), ids=new Map(); if(want.size) for(const p of PACKS){ if(!p) continue; const a=strCol(p,'folio'), base=p.idx*16777216; for(let i=0;i<a.length;i++) if(want.has(a[i])){ ids.set(a[i],base+i); if(ids.size===want.size) break; } } return ids; }
+function sendPlan(k){ const fs=Object.keys(SEND.tags).filter(f=>SEND.tags[f][k]).sort((a,b)=>SEND.tags[a][k]<SEND.tags[b][k]?-1:SEND.tags[a][k]>SEND.tags[b][k]?1:a<b?-1:1);
+  const ids=folioIds(fs), rows=[]; let sent=0, missing=0; for(const f of fs){ if(sentOf(f,k)){ sent++; continue; } const id=ids.get(f); if(id==null){ missing++; continue; } rows.push(id); } return {rows,sent,missing,tagged:fs.length}; }
+const defaultList=t=>t.prefix+'_'+dayStr(new Date());
+function renderSend(){ const ch=$('sendChips'); if(!ch) return;
+  ch.innerHTML=TEAMS.map(t=>{ const on=S.send.has(t.k), n=tagCount(t.k); return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-send="${t.k}" aria-pressed="${on}" title="Only properties tagged ${t.label}">${t.label}<span class="n">${fmt.format(n)}</span></button>`; }).join('');
+  if(!PACKS[0]) return;
+  TEAMS.forEach(t=>{ const p=sendPlan(t.k); $('sendInfo-'+t.k).textContent=`${fmt.format(p.rows.length)} ready`+(p.sent?` · ${fmt.format(p.sent)} already sent`:'')+(p.missing?` · ${fmt.format(p.missing)} not loaded`:''); $('listName-'+t.k).placeholder=defaultList(t); $('sendExp-'+t.k).disabled=!p.rows.length; });
+  const el=$('sendBar'); if(!SEND_PENDING){ el.hidden=true; el.innerHTML=''; return; }
+  const t=teamOf(SEND_PENDING.k), n=SEND_PENDING.folios.length; el.hidden=false;
+  el.innerHTML=`<span><b>Exported ${fmt.format(n)} ${n===1?'property':'properties'}</b> for the ${t.noun} as ${esc(SEND_PENDING.list)}. Mark them as Sent ${SEND_PENDING.day} so they aren't exported to the ${t.noun} again?</span><button type="button" class="btn primary" data-sendmark="1">Mark as sent</button><button type="button" class="btn" data-sendmark="0">Not now</button>`; }
+function sendMark(yes){ const P0=SEND_PENDING; SEND_PENDING=null;
+  if(yes&&P0){ const iso=new Date().toISOString(); P0.folios.forEach(f=>{ if(!isTagged(f,P0.k)) return; (SEND.sent[f]||(SEND.sent[f]={}))[P0.k]={d:P0.day,t:iso,list:P0.list}; }); saveSend(); P0.folios.forEach(refreshSendUi); toast(`Marked ${fmt.format(P0.folios.length)} as Sent ${P0.day} for the ${teamOf(P0.k).noun}`); }
+  renderSend(); }
+async function exportSend(k){ const t=teamOf(k);
+  if(!PACKS[1] && Object.keys(SEND.tags).some(f=>SEND.tags[f][k]&&!sentOf(f,k))){ const p0=sendPlan(k); if(p0.missing){ try{ await loadPack(1,'Loading condo units for your list…'); }catch(e){} } }
+  const p=sendPlan(k); if(!p.rows.length){ toast(p.tagged?`Nothing new for the ${t.noun}: every tagged property is already sent. Use Re-send on a card to send one again.`:`No properties tagged ${t.label} yet.`); return; }
+  const list=$('listName-'+k).value.trim()||defaultList(t), day=dayStr(new Date()), btn=$('sendExp-'+k);
+  btn.disabled=true; try{ await ensureDetail(); await ensureGeo(); await loadDistress(); }catch(e){}
+  download((list.replace(/[^\w.\-]+/g,'_').replace(/^_+|_+$/g,'')||t.prefix)+'.csv', buildCSV(Uint32Array.from(p.rows),{team:t,list}));
+  SEND_PENDING={k,folios:p.rows.map(id=>getStr(P(id),'folio',I(id))),list,day}; btn.disabled=false; renderSend(); toast(`Exported ${fmt.format(p.rows.length)} for the ${t.noun}`); }
 /* wiring */
 let timer=null; const schedule=(ms=120)=>{ clearTimeout(timer); const lc=document.getElementById('liveCount'); if(lc) lc.classList.add('busy'); timer=setTimeout(run,ms); };
 async function ensureOg(){
@@ -1039,7 +1185,8 @@ function wire(){
   $('panel').addEventListener('input',e=>{ if(!e.target.closest('#ideas')) clearIdea(); });
   $('panel').addEventListener('click',e=>{ if(e.target.closest('.chip') && !e.target.closest('#ideas')) clearIdea(); });
   NUM_IDS.concat(['zips']).forEach(id=>$(id).addEventListener('input',()=>schedule()));
-  ['mvMin','mvMax','city','cra','qScope','hideGov','noBldg','qualOnly'].forEach(id=>$(id).addEventListener('change',()=>{ clearIdea(); schedule(0); }));
+  ['mvMin','mvMax'].forEach(id=>$(id).addEventListener('input',()=>schedule(250)));
+  ['city','cra','qScope','hideGov','noBldg','qualOnly'].forEach(id=>$(id).addEventListener('change',()=>{ clearIdea(); schedule(0); }));
   $('q').addEventListener('input',()=>schedule(250));
   $('types').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.t; S.types.has(k)?S.types.delete(k):S.types.add(k); await ensureCondo(); run(); });
   $('dsigs').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.sig; S.dsig.has(k)?S.dsig.delete(k):S.dsig.add(k); run(); });
@@ -1056,7 +1203,23 @@ function wire(){
   $('ownerKind').addEventListener('click',e=>{ const b=e.target.closest('button[data-k]'); if(!b) return; S.owner=b.dataset.k; clearIdea(); run(); });
   $('mzq').addEventListener('input',()=>schedule(150));
   for(const h of ['mzMiami','mzCounty']) $(h).addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const t=b.dataset.mz; let toks=mzTokens($('mzq').value); toks = toks.includes(t)? toks.filter(x=>x!==t) : toks.concat(t); $('mzq').value=toks.join(', '); run(); });
-  $('clrMz').onclick=()=>{ $('mzq').value=''; clearIdea(); run(); };
+  $('clrMz').onclick=()=>{ $('mzq').value=''; S.mzSel.clear(); clearIdea(); run(); };
+  $('mzCities').addEventListener('click',e=>{ const b=e.target.closest('.chip[data-mzs]'); if(!b) return; const k=b.dataset.mzs; S.mzSel.has(k)?S.mzSel.delete(k):S.mzSel.add(k); run(); });
+  $('mzCities').addEventListener('toggle',e=>{ const d=e.target; if(!d.dataset||!d.dataset.j) return; d.open?S.mzOpen.add(d.dataset.j):S.mzOpen.delete(d.dataset.j); },true);
+  $('lotz').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const k=b.dataset.lz; S.lotz.has(k)?S.lotz.delete(k):S.lotz.add(k); run(); });
+  $('tierSeg').addEventListener('click',e=>{ const b=e.target.closest('button[data-tier]'); if(!b) return; S.tier=b.dataset.tier; clearIdea(); run(); });
+  $('clrTd').onclick=()=>{ S.tier='any'; clearIdea(); run(); };
+  RULE_IDS.forEach(([id])=>$(id).addEventListener('input',()=>{ readRules(); schedule(300); }));
+  $('td_minlot').addEventListener('change',()=>{ readRules(); schedule(0); });
+  $('tdReset').onclick=()=>{ S.rules={...TD.DEFAULT_RULES}; renderRules(); run(); toast('Teardown rule reset to the defaults'); };
+  $('cnChips').addEventListener('click',e=>{ const b=e.target.closest('.chip[data-cn]'); if(!b) return; const k=+b.dataset.cn; S.cons.has(k)?S.cons.delete(k):S.cons.add(k); run(); });
+  $('clrCn').onclick=()=>{ S.cons.clear(); clearIdea(); run(); };
+  $('apOnly').addEventListener('change',()=>{ S.ap=$('apOnly').checked; clearIdea(); run(); });
+  $('sendChips').addEventListener('click',e=>{ const b=e.target.closest('.chip[data-send]'); if(!b) return; const k=b.dataset.send; S.send.has(k)?S.send.delete(k):S.send.add(k); run(); });
+  $('clrSend').onclick=()=>{ S.send.clear(); clearIdea(); run(); };
+  TEAMS.forEach(t=>{ $('sendExp-'+t.k).onclick=()=>exportSend(t.k); });
+  $('sendBar').addEventListener('click',e=>{ const b=e.target.closest('[data-sendmark]'); if(b) sendMark(b.dataset.sendmark==='1'); });
+  document.addEventListener('click',e=>{ const b=e.target.closest('[data-sendtag],[data-resend]'); if(!b) return; e.preventDefault(); e.stopPropagation(); b.dataset.sendtag?toggleSendTag(b.dataset.folio,b.dataset.sendtag):resendTag(b.dataset.folio,b.dataset.resend); },true);
   $('clrZone').onclick=()=>{ S.zones.clear(); S.exZ.clear(); clearIdea(); run(); };
   $('lotChips').innerHTML=LOT_CHIPS.map(([v,l])=>`<button type="button" class="chip" data-v="${v}">${l}</button>`).join('');
   $('lotChips').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const v=+b.dataset.v; $('lotMin').value=v||''; $('lotMax').value=''; run(); });
@@ -1079,7 +1242,7 @@ function wire(){
   ['ogMin','ogDist','ogInst'].forEach(id=>$(id).addEventListener('change',async()=>{ clearIdea(); await ensureOg(); run(); }));
   $('clrOg').onclick=()=>{ S.ogf=''; S.og=0; renderOgRow(); clearIdea(); run(); };
   $('showMore').onclick=()=>renderResults(false);
-  $('cards').addEventListener('click',e=>{ if(e.target.closest('[data-star]')) return; const c=e.target.closest('.card'); if(c) openDrawer(+c.dataset.id); });
+  $('cards').addEventListener('click',e=>{ if(e.target.closest('[data-star],[data-sendtag],[data-resend]')) return; const c=e.target.closest('.card'); if(c) openDrawer(+c.dataset.id); });
   $('cards').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && e.target.classList.contains('card')){ e.preventDefault(); openDrawer(+e.target.dataset.id); } });
   $('tbody').addEventListener('click',e=>{ if(e.target.closest('[data-star]')) return; const tr=e.target.closest('tr[data-id]'); if(tr) openDrawer(+tr.dataset.id); });
   wireSaved();
@@ -1097,8 +1260,6 @@ async function boot(){
     $('footData').textContent=`Pulled ${META.built}; ${fmt.format(META.stats.farmland_removed)} farm parcels and ${fmt.format(META.stats.reference_removed)} reference-only folios left out.`;
     D.city.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('city').appendChild(o); });
     D.cra.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('cra').appendChild(o); });
-    $('mvMin').innerHTML=MONEY_STEPS.map(v=>`<option value="${v}">${v?money(v):'No min'}</option>`).join('');
-    $('mvMax').innerHTML=MONEY_STEPS.map(v=>`<option value="${v}">${v?money(v):'No max'}</option>`).join('');
     $('vsMin').innerHTML=VS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
     $('dsMin').innerHTML=DS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
     try{ MAP_COLOR=localStorage.getItem('mdpf.mapColor')==='score'?'score':'type'; }catch(e){} $('mapColor').value=MAP_COLOR;
@@ -1113,7 +1274,11 @@ async function boot(){
     $('sortSel').innerHTML=SORTS.map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');
     $('ownerGrid').innerHTML=OWNER_ROWS.map(([k,l])=>`<label for="ow_${k}">${l}</label><select id="ow_${k}"><option value="any">Either</option><option value="yes">Only</option><option value="no">Hide</option></select>`).join('');
     OWNER_ROWS.forEach(([k])=>$('ow_'+k).addEventListener('change',e=>{ S.flags[k]=e.target.value; clearIdea(); schedule(0); }));
-    wire();
+    await loadZoneRules();
+    if(ZR) $('tdSrc').textContent=`Zone rules for ${fmt.format(ZR.counts.matched)} of ${fmt.format(ZR.counts.codes)} city / county codes (min lot, density, FAR, stories).`;
+    if(EX&&EX.cn.meta) $('cnSrc').textContent=`${fmt.format(EX.cn.meta.folios||0)} folios have a recorded category (${EX.cn.meta.source||''}).`;
+    $('lotzNote').textContent='Lot vs the zone minimum lot size; “could be split” = single-family zone and lot ≥ your split factor × the minimum.';
+    wire(); renderRules();
     let st=parseHash(), fresh=false; if(!st){ try{ st=JSON.parse(localStorage.getItem('mdpf.v2')||'null'); }catch(e){} }
     if(!st){ st=IDEAS[0][1](); fresh=true; }
     applyState(st);

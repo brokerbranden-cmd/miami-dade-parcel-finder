@@ -85,11 +85,29 @@
       <input type="search" id="mzq" placeholder="e.g. T4, T5-O, RU-2, BU-1A" autocomplete="off" aria-label="City zoning codes" style="max-width: 420px;">
       <div class="mzrow"><span class="mzlab">Miami 21</span><div class="chips" id="mzMiami"></div></div>
       <div class="mzrow"><span class="mzlab">County</span><div class="chips" id="mzCounty"></div></div>
+      <div class="mzcities" id="mzCities" aria-label="Zoning codes by city"></div>
     </div>
 
     <div class="grp">
       <div class="grp-h"><h2>Zoning type</h2><span class="hint">Plain-language groups that work the same in every city.</span><button class="clr" type="button" id="clrZone">Clear</button></div>
       <div class="chips" id="zones"></div>
+      <div class="chips lotz" id="lotz" role="group" aria-label="Lot compared with the zone minimum"></div>
+      <span class="note" id="lotzNote"></span>
+    </div>
+
+    <div class="grp teardown" id="tdGrp">
+      <div class="grp-h"><h2>Teardown</h2><span class="hint">Target use (single family or 2–9 units), land is most of the value, old building. <b>Strong</b> = the lot meets the zone minimum and zoning allows 3× the units (or 3× the floor area by FAR, or 3× the stories). Every number below is yours to change. <span id="tdSrc"></span></span><button class="clr" type="button" id="clrTd">Clear</button></div>
+      <div class="seg tier" role="group" aria-label="Teardown tier" id="tierSeg"><button type="button" data-tier="any" class="on">Any</button><button type="button" data-tier="basic">Teardown (basic) <span class="n" id="tcBasic">–</span></button><button type="button" data-tier="strong">Strong teardown <span class="n" id="tcStrong">–</span></button></div>
+      <div class="tdrules" id="tdRules">
+        <label>Min land share <span class="u"><input type="text" inputmode="decimal" id="td_land" aria-label="Minimum land share percent"> % of total value</span></label>
+        <label>Max year built <span class="u"><input type="text" inputmode="numeric" id="td_yb" aria-label="Maximum year built"> built in or before</span></label>
+        <label>Min unit multiple <span class="u"><input type="text" inputmode="decimal" id="td_um" aria-label="Minimum unit multiple"> × existing units</span></label>
+        <label>Min sq ft multiple <span class="u"><input type="text" inputmode="decimal" id="td_qm" aria-label="Minimum square foot multiple"> × building (if no density)</span></label>
+        <label>Min story multiple <span class="u"><input type="text" inputmode="decimal" id="td_sm" aria-label="Minimum story multiple"> × stories (if neither)</span></label>
+        <label>Lot split at <span class="u"><input type="text" inputmode="decimal" id="td_split" aria-label="Lot split factor"> × zone min lot</span></label>
+        <label class="check"><input type="checkbox" id="td_minlot"> Lot under the zone minimum can't be strong</label>
+        <button class="btn sm" type="button" id="tdReset">Reset to defaults</button>
+      </div>
     </div>
 
     <div class="grp">
@@ -108,13 +126,34 @@
       <div class="grp">
         <div class="grp-h"><h2>Lot size</h2><span class="hint">1 acre = 43,560 sq ft</span></div>
         <div class="chips" id="lotChips"></div>
-        <div class="range"><input type="number" id="lotMin" placeholder="Min sq ft" min="0" aria-label="Minimum lot sq ft"><span>to</span><input type="number" id="lotMax" placeholder="Max sq ft" min="0" aria-label="Maximum lot sq ft"></div>
+        <div class="range"><input type="text" inputmode="decimal" id="lotMin" placeholder="Min sq ft" aria-label="Minimum lot sq ft"><span>to</span><input type="text" inputmode="decimal" id="lotMax" placeholder="Max sq ft" aria-label="Maximum lot sq ft"></div>
       </div>
       <div class="grp">
-        <div class="grp-h"><h2>Market value</h2><span class="hint">Property Appraiser's 2026 value</span></div>
-        <div class="range"><select id="mvMin" aria-label="Minimum value"></select><span>to</span><select id="mvMax" aria-label="Maximum value"></select></div>
+        <div class="grp-h"><h2>Market value</h2><span class="hint">Property Appraiser's 2026 value. Type 500k or 1.2m.</span></div>
+        <div class="range"><input type="text" inputmode="decimal" id="mvMin" placeholder="No min" aria-label="Minimum value"><span>to</span><input type="text" inputmode="decimal" id="mvMax" placeholder="No max" aria-label="Maximum value"></div>
         <label class="check"><input type="checkbox" id="hideGov" checked=""> Hide government-owned property</label>
       </div>
+    </div>
+
+    <div class="row2">
+      <div class="grp">
+        <div class="grp-h"><h2>Construction</h2><span class="hint">Main building, from the Property Appraiser's building details. Pick one or more. Unknown = no building data or not recorded. <span id="cnSrc"></span></span><button class="clr" type="button" id="clrCn">Clear</button></div>
+        <div class="chips" id="cnChips"></div>
+      </div>
+      <div class="grp">
+        <div class="grp-h"><h2>Title flags</h2><span class="hint">Adverse possession: a claim (F.S. 95.18, DR-452) noted in the Property Appraiser's legal description.</span></div>
+        <label class="check"><input type="checkbox" id="apOnly"> Adverse possession claim <span class="n" id="apCount"></span></label>
+      </div>
+    </div>
+
+    <div class="grp sendto" id="sendGrp">
+      <div class="grp-h"><h2>Send to</h2><span class="hint">Tag properties on a card for the call center or the door knocker. Tags are saved in this browser. Export builds the list (only parcels not already sent to that team), then you can mark them as sent so they are not exported twice.</span><button class="clr" type="button" id="clrSend">Clear</button></div>
+      <div class="chips" id="sendChips"></div>
+      <div class="sendrow">
+        <div class="sendbox"><button class="btn" type="button" id="sendExp-cc">Export call center list</button><input type="text" id="listName-cc" aria-label="Call center list name" placeholder="List name"><span class="note" id="sendInfo-cc"></span></div>
+        <div class="sendbox"><button class="btn" type="button" id="sendExp-dk">Export door knock list</button><input type="text" id="listName-dk" aria-label="Door knock list name" placeholder="List name"><span class="note" id="sendInfo-dk"></span></div>
+      </div>
+      <div class="sendbar" id="sendBar" hidden></div>
     </div>
 
     <details class="more" id="moreBox" open="">
@@ -129,14 +168,14 @@
             <div class="range"><input type="number" id="hdMin" placeholder="Min" min="0"><span>to</span><input type="number" id="hdMax" placeholder="Max" min="0"></div>
             <span class="note">Properties with no sale on record count as owned 50+ years.</span></div>
           <div class="field"><label for="spMin">Last sale price ($)</label>
-            <div class="range"><input type="number" id="spMin" placeholder="Min" min="0"><span>to</span><input type="number" id="spMax" placeholder="Max" min="0"></div></div>
+            <div class="range"><input type="text" inputmode="decimal" id="spMin" placeholder="Min" min="0"><span>to</span><input type="text" inputmode="decimal" id="spMax" placeholder="Max" min="0"></div></div>
           <label class="check"><input type="checkbox" id="qualOnly"> Only real market sales (skip $100 transfers)</label>
         </div>
         <div class="grp" style="gap:14px">
           <div class="field"><label for="ybMin">Year built</label>
             <div class="range"><input type="number" id="ybMin" placeholder="From" min="1800"><span>to</span><input type="number" id="ybMax" placeholder="To" min="1800"></div></div>
           <div class="field"><label for="sfMin">Building size (living sq ft)</label>
-            <div class="range"><input type="number" id="sfMin" placeholder="Min" min="0"><span>to</span><input type="number" id="sfMax" placeholder="Max" min="0"></div></div>
+            <div class="range"><input type="text" inputmode="decimal" id="sfMin" placeholder="Min" min="0"><span>to</span><input type="text" inputmode="decimal" id="sfMax" placeholder="Max" min="0"></div></div>
           <label class="check"><input type="checkbox" id="noBldg"> Only land with no building</label>
         </div>
         <div class="grp" style="gap:14px">
@@ -243,6 +282,7 @@
 </div>
 <script src="saved.js"></script>
 <script src="lenders.js"></script>
+<script src="teardown.js"></script>
 <script src="app.js"></script>
 <script src="drive.js"></script>
 <script src="lenders-page.js"></script>

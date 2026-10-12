@@ -33,4 +33,5 @@ python3 scripts/fetch_energov.py "$RAW"        || echo "WARN: a Tyler EnerGov po
 python3 scripts/merge_permits.py "$RAW"        || echo "WARN: permit merge failed - vacancy hint falls back to City of Miami / County aggregates, municipal code cases skipped"
 RAW="$RAW" python3 scripts/build_distress.py data  # -> raw/distress.parquet + data/distress.json.gz
 RAW="$RAW" python3 scripts/build_data.py data   # -> data/meta.json + data/*.bin.gz
+RAW="$RAW" python3 scripts/build_zoning_rules.py data   # -> data/zoning-rules.json + data/extras.json.gz (zone min lot / density / FAR / height, construction, adverse possession)
 echo "Done. Serve with: python3 -m http.server 8080"

@@ -30,7 +30,10 @@ with sync_playwright() as pw:
     ok(any('asm.json.gz' in u for u in reqs) and not any('asm-polys' in u for u in reqs), 'asm.json.gz loaded, outlines still not loaded')
     src = pg.inner_text('#asmSrc'); ok(re.search(r'[\d,]+ groups \([\d,]+ parcels\)', src) is not None, 'source line: ' + src)
     ok('asm=1' in pg.evaluate('location.hash'), 'hash has asm=1')
-    top = pg.evaluate("""()=>ASM.groups.slice(0,200).map(g=>[g.zone,g.lot,g.score,g.units,g.partsB,g.unlock])""")
+    import urllib.request, gzip as _gz, json as _js
+    _raw = urllib.request.urlopen(URL.split('#')[0].split('?')[0] + 'data/asm.json.gz', timeout=120).read()
+    _o = _js.loads(_gz.decompress(_raw) if _raw[:2] == b'\x1f\x8b' else _raw)
+    top = [[_o['zones'][r[5]], r[6], r[1], None if r[7] < 0 else r[7], None if r[8] < 0 else r[8], r[12] == 1] for r in _o['g'][:200]]
     ok(not any(z.upper() in ('AU', 'GU', 'AG') for z, *_ in top), 'no agricultural zoning in the top 200 groups')
     ok(max(t[1] for t in top) <= 2 * 43560, f'top 200 groups are all <= 2 acres combined (max {max(t[1] for t in top) / 43560:.2f} ac)')
     ok(all(t[5] or (t[3] or 0) > (t[4] or 0) for t in top[:50]), 'top 50 groups clear the zone minimum or add units')

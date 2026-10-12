@@ -194,16 +194,17 @@ for piece in comps:
     if infill and meets and (unlock or gain > 0): score += 8
     if ag: score -= 45
     elif zg in ('civic', 'interim', 'pud', 'other'): score -= 30
-    if acres > 5: score -= 45
-    elif acres > 2: score -= 25
+    if acres > 5: score -= 70
+    elif acres > 2: score -= 45
+    raw = score  # unclamped, used to order ties at 100
     score = int(max(1, min(100, score)))
     sts = []
     for i in rows:
         st_ = street(addr[i])
         if st_ and st_ not in sts: sts.append(st_)
     groups.append(dict(rows=rows, owners=owners, okey=okey, z=str(mz[c['mz'][rows[0]]][0]), muni=str(mz[c['mz'][rows[0]]][1]), lot=L, units=u, partsB=pb_, gain=gain,
-                       sqft=sq, sqftGain=sqg, unlock=unlock, below=below, minSize=int(mn or 0), meets=meets, upside=upside, score=score, streets=sts[:2], piece=piece))
-groups.sort(key=lambda g: (-g['score'], -g['gain'], g['lot']))
+                       sqft=sq, sqftGain=sqg, unlock=unlock, below=below, minSize=int(mn or 0), meets=meets, upside=upside, score=score, raw=raw, streets=sts[:2], piece=piece))
+groups.sort(key=lambda g: (-g['score'], -g['raw'], -g['gain'], g['lot']))
 log('groups', len(groups), 'upside', sum(g['upside'] for g in groups))
 
 # ---- payload: groups table + members (folio, bits, seller index); polygons separately ----

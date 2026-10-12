@@ -374,3 +374,9 @@ Match counts and rates per source are written to `raw/distress_stats.json` (`cle
 - `data/asm-polys/<x>_<y>.json.gz` holds outlines split into 0.1° tiles. They are fetched only in map view, and only for the groups being drawn.
 - UI: Assemblages filter, "Only groups with a combined-site upside", two presets, sorting by assemblage score (members stay together), a card badge that opens "Show group" (with an "All groups" back button), a drawer section (reason, members, Group on the map), map outlines, 9 CSV columns, and hash keys `asm` / `asmup` / `asmg`.
 - Tests: `tests/e2e_asm.py URL [shots/] [mobile]`.
+
+### Assemblage score
+The score starts from the sell signals (number of owners, strong teardowns, estate owners, absentee or out-of-state owners) and the combined-site upside (unit gain, clearing the zone minimum).
+- **Boosted:** urban residential infill. Single-family zoning gets +12, townhouse +15, and duplex, multifamily or mixed zoning +18. Groups whose median lot is ≤10,000 sf get another +8, and another +5 if it is ≤7,500 sf. Infill groups that clear the zone minimum or add units get +8.
+- **Penalized:** agricultural groups (AU/GU zoning, appraiser zoning 9000, or mostly ag/acreage land use) get −45. Civic/parks/special, interim, PUD or unclassified zoning gets −30. Combined sites over 2 acres get −45, and over 5 acres −70.
+- Scores are clamped to 1–100. Ties are broken by the unclamped score, then unit gain, then the smaller site.

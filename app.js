@@ -154,7 +154,7 @@ function zoneOf(p,i){ return ZREC?ZREC[p.c.mz[i]]:null; }
 function tdEval(p,i){ const c=p.c; return TD.evaluate({code:LU_CODE[c.landuse[i]],land:c.land[i],total:c.mkt[i],yb:c.yb[i],lot:c.lot[i],units:c.units[i],stories:c.stories[i],bldg:c.sqft[i]},zoneOf(p,i)||{},S.rules); }
 /* Assemblages (data/asm.json.gz, scripts/build_assemblages.py): adjoining parcels, same zoning, 2+ owners, each with a reason to sell.
    Loaded on demand (filter / preset / a few seconds after start for card badges); outlines (data/asm-polys.json.gz) only for the map. */
-const ASM_VER='a1';
+const ASM_VER='a2';
 let ASM=null, asmP=null; const APOLY=new Map(), apolyP=new Map();
 const gzJSON=async url=>{ const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); const u8=new Uint8Array(await r.arrayBuffer()); return JSON.parse(dec.decode(u8[0]===0x1f&&u8[1]===0x8b?await gunzip(u8):u8)); };
 function asmDecode(o){ const nul=v=>v<0?null:v, groups=[], byFolio=new Map(), byId=new Map();

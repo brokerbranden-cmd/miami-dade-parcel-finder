@@ -138,6 +138,26 @@ log('components', len(comps))
 
 def street(a):
     m = re.match(r'^\s*\d+[A-Z]?\s+(.*)$', a or ''); return (m.group(1) if m else (a or '')).strip()
+AG_ZONES = {'AU', 'GU', 'AG', 'AGR', 'A-1', 'A-2', 'A', 'AU-1'}
+AG_LU = re.compile(r'AGRIC|ACREAGE|GROVE|FARM|NURSER|PASTURE|CROPLAND|DAIRY|POULTRY')
+INFILL = {'sf', 'duplex', 'th', 'mf', 'mixed'}
+def zgroup(s):  # mirrors app.js zGroup()
+    s = str(s); u = s.upper(); m = re.match(r'\d+', s); code = int(m.group(0)) if m else 0
+    if not code or not re.search('[A-Z]', re.sub(r'^\S+\s*-\s*', '', u)): return 'other'
+    if code == 1900 or 5400 <= code <= 5600 or code in (9300, 9400, 9450): return 'pud'
+    if code in (9301, 9302): return 'mf'
+    if 100 <= code <= 2700: return 'sf'
+    if code == 2800: return 'th'
+    if 5700 <= code <= 5900: return 'duplex'
+    if 3000 <= code <= 4700 or code in (4900, 5100): return 'mf'
+    if 4800 <= code <= 4802: return 'mixed'
+    if 5000 <= code <= 5300: return 'mixed' if 'MIX' in u else 'com'
+    if 6000 <= code < 7000: return 'mixed' if re.search(r'MIX|UC |URBAN|CORE|TOWN CENTER|TRANSIT|DKUC|MAIN STREET|RESIDENTIAL|RES /|ARTS|MARKET|OVERTOWN|HIGH DENS|CEN-PED|PERFORMING|UNIVERSITY|DESIGN D|NBHD', u) else 'com'
+    if code == 7610: return 'mixed'
+    if 7000 <= code < 7800: return 'ind'
+    if code == 8900: return 'interim'
+    if code == 9500: return 'com'
+    return 'civic'
 groups = []
 for piece in comps:
     rows = [gi[k] for k in piece]
@@ -159,7 +179,23 @@ for piece in comps:
     for i, k in zip(rows, okey): sb[k] |= int(bits[i])
     sellers = list(sb.values())
     strong = sum(1 for v in sellers if v & 1); est = sum(1 for v in sellers if v & 4); far_ = sum(1 for v in sellers if v & (64 | 128))
-    score = 20 + 8 * min(owners, 5) + 10 * strong + 6 * est + 4 * far_ + min(gain, 10) * 3 + (15 if unlock else 0) + (5 if upside else 0) - (20 if not meets else 0)
+    # score: reasons to sell + combined-site upside, then favour urban residential infill and push down
+    # agricultural / civic-parks-special / big acreage tracts (see README "Assemblage score")
+    zg = zgroup(D['zoning'][c['zoning'][rows[0]]]) if 'zoning' in c else 'other'
+    mzc = str(mz[c['mz'][rows[0]]][0]).upper()
+    ag = (mzc in AG_ZONES or any(str(D['zoning'][c['zoning'][i]])[:4] == '9000' for i in rows if 'zoning' in c)
+          or sum(1 for i in rows if AG_LU.search(lu[c['landuse'][i]].upper())) * 2 >= len(rows))
+    acres = L / SQFT_AC; medlot = sorted(lot[i] for i in rows)[len(rows) // 2]
+    score = 15 + 6 * min(owners, 5) + 8 * strong + 5 * est + 3 * far_ + 3 * min(gain, 8) + (12 if unlock else 0) + (4 if upside else 0) - (20 if not meets else 0)
+    infill = zg in INFILL and not ag
+    if infill: score += {'sf': 12, 'th': 15}.get(zg, 18)
+    if infill and medlot <= 10000: score += 8
+    if infill and medlot <= 7500: score += 5
+    if infill and meets and (unlock or gain > 0): score += 8
+    if ag: score -= 45
+    elif zg in ('civic', 'interim', 'pud', 'other'): score -= 30
+    if acres > 5: score -= 45
+    elif acres > 2: score -= 25
     score = int(max(1, min(100, score)))
     sts = []
     for i in rows:
@@ -167,7 +203,7 @@ for piece in comps:
         if st_ and st_ not in sts: sts.append(st_)
     groups.append(dict(rows=rows, owners=owners, okey=okey, z=str(mz[c['mz'][rows[0]]][0]), muni=str(mz[c['mz'][rows[0]]][1]), lot=L, units=u, partsB=pb_, gain=gain,
                        sqft=sq, sqftGain=sqg, unlock=unlock, below=below, minSize=int(mn or 0), meets=meets, upside=upside, score=score, streets=sts[:2], piece=piece))
-groups.sort(key=lambda g: (-g['score'], -g['lot']))
+groups.sort(key=lambda g: (-g['score'], -g['gain'], g['lot']))
 log('groups', len(groups), 'upside', sum(g['upside'] for g in groups))
 
 # ---- payload: groups table + members (folio, bits, seller index); polygons separately ----

@@ -155,15 +155,15 @@ function tdEval(p,i){ const c=p.c; return TD.evaluate({code:LU_CODE[c.landuse[i]
 /* Assemblages (data/asm.json.gz, scripts/build_assemblages.py): adjoining parcels, same zoning, 2+ owners, each with a reason to sell.
    Loaded on demand (filter / preset / a few seconds after start for card badges); outlines (data/asm-polys.json.gz) only for the map. */
 const ASM_VER='a1';
-let ASM=null, asmP=null, APOLY=null, apolyP=null;
+let ASM=null, asmP=null; const APOLY=new Map(), apolyP=new Map();
 const gzJSON=async url=>{ const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); const u8=new Uint8Array(await r.arrayBuffer()); return JSON.parse(dec.decode(u8[0]===0x1f&&u8[1]===0x8b?await gunzip(u8):u8)); };
 function asmDecode(o){ const nul=v=>v<0?null:v, groups=[], byFolio=new Map(), byId=new Map();
   o.g.forEach((a,j)=>{ const g={id:a[0],score:a[1],upside:a[2]===1,owners:a[3],muni:o.munis[a[4]],zone:o.zones[a[5]],lot:a[6],units:nul(a[7]),partsB:nul(a[8]),gain:a[9],sqft:nul(a[10]),sqftGain:a[11],unlock:a[12]===1,below:a[13],minSize:a[14],meets:a[15]===1,streets:a.slice(16).map(x=>o.streets[x]),mem:[]};
     for(const t of o.m[j].split(',')){ const [f,b,sl]=t.split('.'); g.mem.push([f,parseInt(b,16),+sl]); byFolio.set(f,j); }
     groups.push(g); byId.set(g.id,j); });
-  return {meta:o.meta,mot:o.mot,groups,byFolio,byId}; }
+  return {meta:o.meta,mot:o.mot,gt:o.gt,groups,byFolio,byId}; }
 function loadAsm(){ return asmP||(asmP=(async()=>{ ASM=asmDecode(await gzJSON('data/asm.json.gz?v='+META.ver+'-'+ASM_VER)); PACKS.forEach(asmIndexPack); return ASM; })().catch(e=>{ asmP=null; throw e; })); }
-function loadPolys(){ return apolyP||(apolyP=gzJSON('data/asm-polys.json.gz?v='+META.ver+'-'+ASM_VER).then(o=>APOLY=o).catch(e=>{ apolyP=null; throw e; })); }
+function loadTile(t){ const key=ASM.meta.tiles[t]; if(!apolyP.has(t)) apolyP.set(t,gzJSON('data/asm-polys/'+key+'.json.gz?v='+META.ver+'-'+ASM_VER).then(o=>{ o.j.forEach((j,x)=>APOLY.set(j,o.p[x])); }).catch(e=>{ apolyP.delete(t); throw e; })); return apolyP.get(t); }
 function asmIndexPack(p){ if(!p||!ASM||p.asmG) return; const f=strCol(p,'folio'), g=new Int32Array(p.n).fill(-1); for(let i=0;i<p.n;i++){ const x=ASM.byFolio.get(f[i]); if(x!==undefined) g[i]=x; } p.asmG=g; }
 const asmOf=(p,i)=>ASM&&p.asmG&&p.asmG[i]>=0?ASM.groups[p.asmG[i]]:null;
 async function ensureAsm(){ if(!S.asm||ASM) return; $('asmSrc').textContent='Loading assemblage groups…'; try{ await loadAsm(); }catch(e){ toast('Assemblage data did not load: '+e.message); S.asm=false; } renderAsmSrc(); }
@@ -191,14 +191,13 @@ const asmHint=t=>{ const el=$('mapHint'); el.textContent=el.textContent.replace(
 async function drawAsmOutlines(){
   if(!LMAP) return; if(!asmLayer) asmLayer=L.layerGroup().addTo(LMAP); asmLayer.clearLayers();
   if(!S.asm||!ASM||S.view!=='map') return;
-  try{ await loadPolys(); }catch(e){ asmHint('outlines did not load.'); return; }
-  asmLayer.clearLayers();
   const b=LMAP.getBounds(), want=new Set();
   if(S.asmGroup){ const j=ASM.byId.get(S.asmGroup); if(j!=null) want.add(j); }
   else { if(LMAP.getZoom()<15){ asmHint('zoom in to see group outlines.'); return; }
     for(let j=0;j<results.length && want.size<1500;j++){ const id=results[j], p=P(id), i=I(id); if(!p.asmG||p.asmG[i]<0||!p.geo) continue; const la=p.geo.lat[i], lo=p.geo.lon[i]; if(la>=b.getSouth()&&la<=b.getNorth()&&lo>=b.getWest()&&lo<=b.getEast()) want.add(p.asmG[i]); } }
-  const sc=APOLY.scale, all=[];
-  for(const j of want){ const g=ASM.groups[j]; for(const enc of APOLY.p[j]||[]){ const ll=[]; let x=0,y=0; for(let k=0;k<enc.length;k+=2){ x+=enc[k]; y+=enc[k+1]; ll.push([y/sc,x/sc]); } if(ll.length>2){ asmLayer.addLayer(L.polygon(ll,{className:'asmpoly',color:'#FC4C02',weight:2,fillColor:g.upside?'#FC4C02':'#00B2BD',fillOpacity:.18}).bindTooltip(`Assemblage #${g.id} · score ${g.score}`)); all.push(...ll); } } }
+  try{ await Promise.all([...new Set([...want].map(j=>ASM.gt[j]))].map(loadTile)); }catch(e){ asmHint('outlines did not load.'); return; }
+  asmLayer.clearLayers(); const sc=1e6, all=[];
+  for(const j of want){ const g=ASM.groups[j]; for(const enc of APOLY.get(j)||[]){ const ll=[]; let x=0,y=0; for(let k=0;k<enc.length;k+=2){ x+=enc[k]; y+=enc[k+1]; ll.push([y/sc,x/sc]); } if(ll.length>2){ asmLayer.addLayer(L.polygon(ll,{className:'asmpoly',color:'#FC4C02',weight:2,fillColor:g.upside?'#FC4C02':'#00B2BD',fillOpacity:.18}).bindTooltip(`Assemblage #${g.id} · score ${g.score}`)); all.push(...ll); } } }
   if(S.asmGroup && all.length && drawAsmOutlines.fitted!==S.asmGroup){ drawAsmOutlines.fitted=S.asmGroup; LMAP.fitBounds(L.latLngBounds(all).pad(0.6),{maxZoom:19,animate:false}); }
   asmHint(`${fmt.format(want.size)} group${want.size===1?'':'s'} outlined${S.asmGroup?'':' in view'}.`);
 }

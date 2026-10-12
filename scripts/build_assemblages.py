@@ -201,8 +201,25 @@ for k, g in enumerate(groups, 1):
 mot = [[1, 'strong teardown'], [2, 'teardown'], [4, 'estate/heirs owner'], [8, 'held 10+ yrs'], [16, 'vacant land'], [32, 'under min lot'], [64, 'out-of-state owner'], [128, 'absentee owner']]
 gm = {'built': time.strftime('%Y-%m-%d'), 'roll_built': meta['built'], 'groups': len(G), 'upside': sum(g['upside'] for g in groups), 'members': sum(len(g['rows']) for g in groups), 'maxGroup': MAXG,
       'cols': ['id', 'score', 'upside', 'owners', 'muni', 'zone', 'lot', 'units', 'partsB', 'gain', 'sqft', 'sqftGain', 'unlock', 'below', 'minSize', 'meets', 'streets...']}
+# outlines split into 0.1-degree tiles (data/asm-polys/<x>_<y>.json.gz) so the map loads only the area in view
+import shutil
+TD = os.path.join(OUT, 'asm-polys')
+shutil.rmtree(TD, ignore_errors=True); os.makedirs(TD)
+tiles, gt, tdat = [], [], {}
+for j, pp in enumerate(polys):
+    r0 = next((r for r in pp if len(r) >= 2), [0, 0])
+    key = f"{int(r0[0] // 100000)}_{int(r0[1] // 100000)}"
+    if key not in tdat: tdat[key] = {'scale': 1e6, 'j': [], 'p': []}; tiles.append(key)
+    gt.append(tiles.index(key))
+    tdat[key]['j'].append(j); tdat[key]['p'].append(pp)
+tot = 0
+for key, d in tdat.items():
+    fn = os.path.join(TD, key + '.json.gz')
+    with gzip.open(fn, 'wt', compresslevel=9) as f: json.dump(d, f, separators=(',', ':'))
+    tot += os.path.getsize(fn)
+gm['tiles'] = tiles; gm['tileDeg'] = 0.1
 with gzip.open(os.path.join(OUT, 'asm.json.gz'), 'wt', compresslevel=9) as f:
-    json.dump({'meta': gm, 'mot': mot, 'munis': ml, 'zones': zl, 'streets': sl, 'g': G, 'm': Mm}, f, separators=(',', ':'))
-with gzip.open(os.path.join(OUT, 'asm-polys.json.gz'), 'wt', compresslevel=9) as f:
-    json.dump({'groups': len(G), 'scale': 1e6, 'p': polys}, f, separators=(',', ':'))
-log('wrote', os.path.getsize(os.path.join(OUT, 'asm.json.gz')), os.path.getsize(os.path.join(OUT, 'asm-polys.json.gz')), gm)
+    json.dump({'meta': gm, 'mot': mot, 'munis': ml, 'zones': zl, 'streets': sl, 'g': G, 'm': Mm, 'gt': gt}, f, separators=(',', ':'))
+old_single = os.path.join(OUT, 'asm-polys.json.gz')
+if os.path.exists(old_single): os.remove(old_single)
+log('wrote asm.json.gz', os.path.getsize(os.path.join(OUT, 'asm.json.gz')), 'outline tiles', len(tiles), tot, {k: v for k, v in gm.items() if k not in ('tiles', 'cols')})

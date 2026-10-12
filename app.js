@@ -727,6 +727,7 @@ function teardownHTML(p,i){
 async function openDrawer(id,opts){
   if(OGMAP){ OGMAP.remove(); OGMAP=null; }
   if(!P(id).det){ toast('Loading details…'); try{ await Promise.all([loadDetail(P(id).idx), loadGeo(P(id).idx).catch(()=>{})]); }catch(e){ toast('Details did not load. Try again.'); return; } }
+  if(!P(id).geo){ try{ await loadGeo(P(id).idx); }catch(e){} }
   if(!ASM){ try{ await loadAsm(); }catch(e){} }
   if(P(id).c.dsig[I(id)] && !DIST){ try{ await loadDistress(); }catch(e){ toast('Distress details did not load.'); } }
   const p=P(id), i=I(id), c=p.c, folio=getStr(p,'folio',i), addr=getStr(p,'addr',i)||'No street address';

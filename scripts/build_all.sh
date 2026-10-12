@@ -34,4 +34,6 @@ python3 scripts/merge_permits.py "$RAW"        || echo "WARN: permit merge faile
 RAW="$RAW" python3 scripts/build_distress.py data  # -> raw/distress.parquet + data/distress.json.gz
 RAW="$RAW" python3 scripts/build_data.py data   # -> data/meta.json + data/*.bin.gz
 RAW="$RAW" python3 scripts/build_zoning_rules.py data   # -> data/zoning-rules.json + data/extras.json.gz (zone min lot / density / FAR / height, construction, adverse possession)
+python3 scripts/fetch_parcels.py "$RAW" || echo "WARN: parcel polygon fetch failed - assemblages use cached raw/parcels"
+RAW="$RAW" python3 scripts/build_assemblages.py data   # -> data/asm.json.gz (groups) + data/asm-polys.json.gz (map outlines)
 echo "Done. Serve with: python3 -m http.server 8080"

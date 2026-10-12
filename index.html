@@ -95,6 +95,14 @@
       <span class="note" id="lotzNote"></span>
     </div>
 
+    <div class="grp asm" id="asmGrp">
+      <div class="grp-h"><h2>Assemblages</h2><button type="button" class="clr" id="clrAsm">Clear</button></div>
+      <p class="note">Adjoining parcels in the same zoning, held by 2+ different owners, each with a reason to sell. Combine them into one bigger site.</p>
+      <div class="chips"><button type="button" class="chip" id="asmOn" aria-pressed="false">Assemblage parcels <span class="n" id="asmN"></span></button></div>
+      <label class="check"><input type="checkbox" id="asmUp"> Only groups with a combined-site upside</label>
+      <div class="asmrow" id="asmRow" hidden><span id="asmLabel"></span> <button type="button" class="clr" id="asmBack">All groups</button></div>
+      <span class="note" id="asmSrc"></span>
+    </div>
     <div class="grp teardown" id="tdGrp">
       <div class="grp-h"><h2>Teardown</h2><span class="hint">Target use (single family or 2–9 units), land is most of the value, old building. <b>Strong</b> = the lot meets the zone minimum and zoning allows 3× the units (or 3× the floor area by FAR, or 3× the stories). Every number below is yours to change. <span id="tdSrc"></span></span><button class="clr" type="button" id="clrTd">Clear</button></div>
       <div class="seg tier" role="group" aria-label="Teardown tier" id="tierSeg"><button type="button" data-tier="any" class="on">Any</button><button type="button" data-tier="basic">Teardown (basic) <span class="n" id="tcBasic">–</span></button><button type="button" data-tier="strong">Strong teardown <span class="n" id="tcStrong">–</span></button></div>

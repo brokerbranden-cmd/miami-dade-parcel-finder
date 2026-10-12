@@ -107,7 +107,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 /* teardown rule, zone rules (data/zoning-rules.json), construction + adverse possession (data/extras.json.gz) */
@@ -152,6 +152,56 @@ function tierPack(p){
 }
 function zoneOf(p,i){ return ZREC?ZREC[p.c.mz[i]]:null; }
 function tdEval(p,i){ const c=p.c; return TD.evaluate({code:LU_CODE[c.landuse[i]],land:c.land[i],total:c.mkt[i],yb:c.yb[i],lot:c.lot[i],units:c.units[i],stories:c.stories[i],bldg:c.sqft[i]},zoneOf(p,i)||{},S.rules); }
+/* Assemblages (data/asm.json.gz, scripts/build_assemblages.py): adjoining parcels, same zoning, 2+ owners, each with a reason to sell.
+   Loaded on demand (filter / preset / a few seconds after start for card badges); outlines (data/asm-polys.json.gz) only for the map. */
+const ASM_VER='a1';
+let ASM=null, asmP=null, APOLY=null, apolyP=null;
+const gzJSON=async url=>{ const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); const u8=new Uint8Array(await r.arrayBuffer()); return JSON.parse(dec.decode(u8[0]===0x1f&&u8[1]===0x8b?await gunzip(u8):u8)); };
+function asmDecode(o){ const nul=v=>v<0?null:v, groups=[], byFolio=new Map(), byId=new Map();
+  o.g.forEach((a,j)=>{ const g={id:a[0],score:a[1],upside:a[2]===1,owners:a[3],muni:o.munis[a[4]],zone:o.zones[a[5]],lot:a[6],units:nul(a[7]),partsB:nul(a[8]),gain:a[9],sqft:nul(a[10]),sqftGain:a[11],unlock:a[12]===1,below:a[13],minSize:a[14],meets:a[15]===1,streets:a.slice(16).map(x=>o.streets[x]),mem:[]};
+    for(const t of o.m[j].split(',')){ const [f,b,sl]=t.split('.'); g.mem.push([f,parseInt(b,16),+sl]); byFolio.set(f,j); }
+    groups.push(g); byId.set(g.id,j); });
+  return {meta:o.meta,mot:o.mot,groups,byFolio,byId}; }
+function loadAsm(){ return asmP||(asmP=(async()=>{ ASM=asmDecode(await gzJSON('data/asm.json.gz?v='+META.ver+'-'+ASM_VER)); PACKS.forEach(asmIndexPack); return ASM; })().catch(e=>{ asmP=null; throw e; })); }
+function loadPolys(){ return apolyP||(apolyP=gzJSON('data/asm-polys.json.gz?v='+META.ver+'-'+ASM_VER).then(o=>APOLY=o).catch(e=>{ apolyP=null; throw e; })); }
+function asmIndexPack(p){ if(!p||!ASM||p.asmG) return; const f=strCol(p,'folio'), g=new Int32Array(p.n).fill(-1); for(let i=0;i<p.n;i++){ const x=ASM.byFolio.get(f[i]); if(x!==undefined) g[i]=x; } p.asmG=g; }
+const asmOf=(p,i)=>ASM&&p.asmG&&p.asmG[i]>=0?ASM.groups[p.asmG[i]]:null;
+async function ensureAsm(){ if(!S.asm||ASM) return; $('asmSrc').textContent='Loading assemblage groups…'; try{ await loadAsm(); }catch(e){ toast('Assemblage data did not load: '+e.message); S.asm=false; } renderAsmSrc(); }
+function renderAsmSrc(){ if(ASM) $('asmSrc').textContent=`${fmt.format(ASM.meta.groups)} groups (${fmt.format(ASM.meta.members)} parcels), ${fmt.format(ASM.meta.upside)} with a combined-site upside. Built ${ASM.meta.built}.`; }
+function asmMotText(b){ return ASM.mot.filter(([m])=>(b&m)&&!(m===2&&(b&1))).map(x=>x[1]); }
+function asmMix(g){ const sb=new Array(g.owners).fill(0), cnt={}; for(const [,b,sl] of g.mem) sb[sl]|=b; let rec=0; sb.forEach(b=>{ asmMotText(b).forEach(t=>cnt[t]=(cnt[t]||0)+1); if(b&256) rec++; });
+  const ord=Object.fromEntries(ASM.mot.map((m,x)=>[m[1],x])); const out=Object.entries(cnt).sort((x,y)=>y[1]-x[1]||ord[x[0]]-ord[y[0]]); if(rec) out.push(['recent buyer',rec]); return out; }
+function asmReason(g){ const n=g.mem.length, fi=v=>fmt.format(Math.round(v));
+  const where=g.streets.length===1?`${n} lots side by side on ${g.streets[0]}`:g.streets.length>1?`${n} adjoining lots on ${g.streets.join(' & ')}`:`${n} adjoining lots`;
+  const parts=[`${g.owners} owners, ${where} (${g.zone}, ${fi(g.lot)} sf combined).`];
+  if(g.unlock) parts.push(`${g.below} of the lots ${g.below===1?'is':'are'} under the ${fi(g.minSize)} sf zone minimum on ${g.below===1?'its':'their'} own; together they clear it.`);
+  if(!g.meets) parts.push(`Even combined, the site is under the ${fi(g.minSize)} sf zone minimum.`);
+  else if(g.units!=null) parts.push(g.gain>0?`Combined site allows ${fi(g.units)} units vs ${fi(g.partsB)} building the lots separately (+${fi(g.gain)}).`:`Combined site allows ${fi(g.units)} units, the same as separately: the play is one larger site.`);
+  else if(g.sqft!=null) parts.push(`Combined site allows ~${fi(g.sqft)} sf buildable${g.sqftGain>=2500?` (+${fi(g.sqftGain)} vs separately)`:''}.`);
+  parts.push('Owners: '+asmMix(g).map(x=>x[1]+' '+x[0]).join(', ')+'.'); return parts.join(' '); }
+function asmBadge(p,i){ const g=asmOf(p,i); return g?`<button type="button" class="asmb" data-asmshow="${g.id}" title="${esc(asmReason(g))}">Assemblage #${g.id} · ${g.mem.length} lots · ${g.owners} owners · score ${g.score}${g.upside?' · upside':''}</button>`:''; }
+function asmHTML(p,i){ const g=asmOf(p,i); if(!g) return '';
+  const ids=folioIds(g.mem.map(m=>m[0]));
+  const li=g.mem.map(([f,b])=>{ const id=ids.get(f); const a=id!=null?getStr(P(id),'addr',I(id))||'No street address':f; return `<li>${id!=null?`<button type="button" class="lnk" data-asmone="${id}">${esc(a)}</button>`:esc(a)} <small>${esc(asmMotText(b).join(', '))}</small></li>`; }).join('');
+  return `<h3>Assemblage #${g.id}</h3><div class="asmbox"><p>${esc(asmReason(g))}</p><div class="dl"><div class="k">Score</div><div class="v">${g.score} of 100${g.upside?' · combined-site upside':''}</div><div class="k">Combined lot</div><div class="v">${fmt.format(g.lot)} sq ft · ${(g.lot/SQFT_AC).toFixed(2)} acres</div>${g.units!=null?`<div class="k">Units allowed</div><div class="v">${fmt.format(g.units)} combined vs ${fmt.format(g.partsB)} separately</div>`:''}</div><ol class="asmlist">${li}</ol>
+    <div class="links"><button type="button" class="btn" data-asmshow="${g.id}">Show this group</button><button type="button" class="btn" data-asmmap="${g.id}">Group on the map</button></div></div>`; }
+/* map outlines for assemblage members */
+let asmLayer=null;
+const asmHint=t=>{ const el=$('mapHint'); el.textContent=el.textContent.replace(/ · Assemblage:.*$/,'')+' · Assemblage: '+t; };
+async function drawAsmOutlines(){
+  if(!LMAP) return; if(!asmLayer) asmLayer=L.layerGroup().addTo(LMAP); asmLayer.clearLayers();
+  if(!S.asm||!ASM||S.view!=='map') return;
+  try{ await loadPolys(); }catch(e){ asmHint('outlines did not load.'); return; }
+  asmLayer.clearLayers();
+  const b=LMAP.getBounds(), want=new Set();
+  if(S.asmGroup){ const j=ASM.byId.get(S.asmGroup); if(j!=null) want.add(j); }
+  else { if(LMAP.getZoom()<15){ asmHint('zoom in to see group outlines.'); return; }
+    for(let j=0;j<results.length && want.size<1500;j++){ const id=results[j], p=P(id), i=I(id); if(!p.asmG||p.asmG[i]<0||!p.geo) continue; const la=p.geo.lat[i], lo=p.geo.lon[i]; if(la>=b.getSouth()&&la<=b.getNorth()&&lo>=b.getWest()&&lo<=b.getEast()) want.add(p.asmG[i]); } }
+  const sc=APOLY.scale, all=[];
+  for(const j of want){ const g=ASM.groups[j]; for(const enc of APOLY.p[j]||[]){ const ll=[]; let x=0,y=0; for(let k=0;k<enc.length;k+=2){ x+=enc[k]; y+=enc[k+1]; ll.push([y/sc,x/sc]); } if(ll.length>2){ asmLayer.addLayer(L.polygon(ll,{className:'asmpoly',color:'#FC4C02',weight:2,fillColor:g.upside?'#FC4C02':'#00B2BD',fillOpacity:.18}).bindTooltip(`Assemblage #${g.id} · score ${g.score}`)); all.push(...ll); } } }
+  if(S.asmGroup && all.length && drawAsmOutlines.fitted!==S.asmGroup){ drawAsmOutlines.fitted=S.asmGroup; LMAP.fitBounds(L.latLngBounds(all).pad(0.6),{maxZoom:19,animate:false}); }
+  asmHint(`${fmt.format(want.size)} group${want.size===1?'':'s'} outlined${S.asmGroup?'':' in view'}.`);
+}
 /* Send to: tag parcels for the call center / door knocker (this browser only) */
 const SEND_KEY='pf.send.v1';
 const TEAMS=[{k:'cc',label:'Call center',noun:'call center',prefix:'CallCenter'},{k:'dk',label:'Door knock',noun:'door knock',prefix:'DoorKnock'}];
@@ -211,7 +261,7 @@ async function loadPack(i,label){
   const raw=await fetchAll(pk.files,n=>{ got+=n; $('loadBar').style.width=Math.min(100,got/pk.bytes*100).toFixed(1)+'%'; $('loadSub').textContent=(got/1e6).toFixed(1)+' of '+(pk.bytes/1e6).toFixed(1)+' MB'; });
   $('loadMsg').textContent=label;
   $('loadSub').textContent='Unpacking…';
-  PACKS[i]=parsePack(await gunzip(raw),pk.name,i); prepPack(PACKS[i]);
+  PACKS[i]=parsePack(await gunzip(raw),pk.name,i); prepPack(PACKS[i]); if(ASM) asmIndexPack(PACKS[i]);
   $('loadbox').hidden=true;
 }
 const DET=[];
@@ -258,13 +308,13 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.send=[...S.send]; st.mzSel=[...S.mzSel]; return st;
+  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
   NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':(MONEY_IDS.has(id)?fmtAmt(st[id]):st[id]));
   $('mvMin').value=st.mvMin?fmtAmt(st.mvMin):''; $('mvMax').value=st.mvMax?fmtAmt(st.mvMax):'';
-  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.mzSel=new Set(st.mzSel||[]); renderRules();
+  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.asm=!!st.asm; S.asmUp=!!st.asmUp; S.asmGroup=+st.asmGroup||0; S.mzSel=new Set(st.mzSel||[]); renderRules();
   $('mzq').value=st.mzq||''; $('q').value=st.q||''; $('qScope').value=st.qScope||'ao'; $('city').value=st.city||''; $('zips').value=st.zips||''; $('cra').value=st.cra||'';
   $('hideGov').checked=st.hideGov!==false; $('noBldg').checked=!!st.noBldg; $('qualOnly').checked=!!st.qualOnly;
   S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]); S.dsig=new Set((st.dsig||[]).filter(k=>k in DBIT)); $('dsMin').value=DS_STEPS.some(x=>x[0]===+st.dsMin)?String(+st.dsMin):'0';
@@ -318,10 +368,11 @@ function run(){
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
   const tierW=S.tier==='strong'?2:S.tier==='basic'?1:0, tcn=new Uint32Array(3), lzSel=S.lotz, lzc={split:0,minok:0,below:0}, cnSel=S.cons, cnc=new Uint32Array(6);
   const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0;
+  const asmOn=S.asm&&!!ASM, asmUp=S.asmUp, asmJ=S.asmGroup&&ASM?ASM.byId.get(S.asmGroup):undefined, asmSeen=asmOn?new Set():null;
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
-    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), FO=sendSet?strCol(p,'folio'):null;
+    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), FO=sendSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null;
     const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n), PG=c.pcs||new Uint16Array(n);
     if(bb && !gl) continue;
     for(let i=0;i<n;i++){
@@ -330,6 +381,7 @@ function run(){
       if(mine && !mine.has(base+i)) continue;
       if(sendSet && !sendSet.has(FO[i])) continue;
       if(apOnly && !APa[i]) continue;
+      if(asmOn){ const gx=AGa?AGa[i]:-1; if(gx<0) continue; if(asmJ!==undefined && gx!==asmJ) continue; if(asmUp && !ASM.groups[gx].upside) continue; }
       if(vsMin && VS[i]<vsMin) continue;
       if(useOg){ const g=c.og[i]; if(!g || (ogMin && OWN.n[g]<ogMin) || (ogDist && OWN.nd[g]<ogDist) || (exInst && OWN.fl[g])) continue; }
       if(gl){ const la=gl.lat[i], lo=gl.lon[i]; if(!(la>=bb[0]&&la<=bb[2]&&lo>=bb[1]&&lo<=bb[3])) continue; }
@@ -362,11 +414,11 @@ function run(){
       if(nf===0 && !fsg && vg){ for(let b=0;b<VSIG.length;b++) if(vg&(1<<b)) vc[b]++; }
       if(nf===0 && !fsg && !fvs && pg){ for(let b=0;b<PCS.length;b++) if(pg&(1<<b)) pcc[b]++; }
       if(fsg||fvs||fpc) continue;
-      if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; tcn[tv]++; if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; cnc[cv]++; if(APa[i]) apN++; if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
+      if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; tcn[tv]++; if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; cnc[cv]++; if(APa[i]) apN++; if(asmSeen) asmSeen.add(AGa[i]); if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
       else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else if(ft) tcn[tv]++; else if(flz){ if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; } else if(fcn) cnc[cv]++; else kc[kind]++; }
     }
   }
-  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,apN};
+  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,apN,asmGroups:asmSeen?asmSeen.size:0};
   if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status))) r.push(id); } results=Uint32Array.from(r); }
   renderSavedUI();
   doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true);
@@ -377,7 +429,7 @@ const SORTS=[
   ['ds_d','Highest distress score','dscore',-1],['vs_d','Most likely vacant / neglected','vscore',-1],['sv_d','Recently saved','saved',-1],['ogd_d','Owner\'s distressed parcels','ogd',-1],['og_d','Owner\'s portfolio size','ogn',-1],['lot_d','Biggest lot first','lot',-1],['lot_a','Smallest lot first','lot',1],
   ['mv_a','Lowest value first','mkt',1],['mv_d','Highest value first','mkt',-1],
   ['held_d','Owned the longest','sd1',1],['sold_d','Sold most recently','sd1',-1],
-  ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['um_d','Highest unit multiple (zoning ÷ existing)','um',-1],['au_d','Most units allowed by zoning','al',-1],['qm_d','Highest buildable sq ft multiple','qm',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
+  ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['asm_d','Assemblage score (groups together)','asm',-1],['um_d','Highest unit multiple (zoning ÷ existing)','um',-1],['au_d','Most units allowed by zoning','al',-1],['qm_d','Highest buildable sq ft multiple','qm',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
   ['addr_a','Address A–Z','addr',1]];
 const SORT_MAP=Object.fromEntries(SORTS.map(s=>[s[0],s]));
 function doSort(){
@@ -393,7 +445,7 @@ function doSort(){
     for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id), g=c.og[i]; key[j]=(g&&!(OWN.fl[g]&&!inst)?A[g]:(k==='ogn'?1:(c.dsig[i]&4095?1:0)))*256+c.dscore[i]; } }
   else if(k==='saved'){ for(let j=0;j<n;j++){ const id=results[j], it=SV.get(getStr(P(id),'folio',I(id))); key[j]=it?Date.parse(it.savedAt):0; } }
   else for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id);
-    key[j] = (k==='um'||k==='al'||k==='qm') ? (()=>{ const t=P(id).td; const v=t?t[k][i]:NaN; return v===v?v:-1; })() : k==='vscore' ? (c.vscore?c.vscore[i]:0) : k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
+    key[j] = k==='asm' ? (()=>{ const g=asmOf(P(id),i); return g?g.score*1e6+(1e6-g.id):-1; })() : (k==='um'||k==='al'||k==='qm') ? (()=>{ const t=P(id).td; const v=t?t[k][i]:NaN; return v===v?v:-1; })() : k==='vscore' ? (c.vscore?c.vscore[i]:0) : k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
   const idx=new Uint32Array(n); for(let i=0;i<n;i++) idx[i]=i;
   const k2=k==='dscore'?(j=>{ const id=results[j]; return P(id).c.mkt[I(id)]; }):k==='vscore'?(j=>{ const id=results[j]; return P(id).c.dscore[I(id)]; }):null;
   idx.sort((a,b)=>(key[a]-key[b])*dir || (k2?k2(b)-k2(a):0) || a-b);
@@ -426,6 +478,9 @@ function renderChips(){
   const cnc=facet.cnc||[]; $('cnChips').innerHTML=EX?CN_CATS.map(([k,l])=>{ const on=S.cons.has(k), n=cnc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-cn="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join(''):'<span class="note">Construction data did not load.</span>';
   $('apCount').textContent=EX?'('+fmt.format(facet.apN||0)+')':''; $('apOnly').checked=S.ap;
   renderSend();
+  $('asmOn').classList.toggle('on',S.asm); $('asmOn').setAttribute('aria-pressed',S.asm); $('asmUp').checked=S.asmUp;
+  $('asmN').textContent=S.asm&&ASM?fmt.format(facet.asmGroups||0)+' groups':ASM?fmt.format(ASM.meta.groups)+' groups':'';
+  { const g=S.asmGroup&&ASM&&ASM.byId.has(S.asmGroup)?ASM.groups[ASM.byId.get(S.asmGroup)]:null; $('asmRow').hidden=!S.asmGroup; if(g) $('asmLabel').textContent=`Only assemblage #${g.id}: ${asmReason(g)}`; }
   const kc=facet.kc, kAll=kc[0]+kc[1]+kc[2]+kc[3], kN={all:kAll,person:kc[0],corp:kc[1],trust:kc[2]};
   $('ownerKind').innerHTML=OWNER_KINDS.map(([k,l])=>`<button type="button" data-k="${k}" class="${S.owner===k?'on':''}" aria-pressed="${S.owner===k}">${l}<span class="n">${short(kN[k])}</span></button>`).join('');
   renderFacet('zoning'); renderFacet('landuse');
@@ -453,12 +508,13 @@ function renderSummary(){
   if(n) bits.push(`<b>${fmt.format(oos)}</b> out-of-state owners`);
   if(corp) bits.push(`<b>${fmt.format(corp)}</b> owned by companies`);
   let hot=0; for(let j=0;j<n;j++){ const id=results[j]; if(P(id).c.dscore[I(id)]>=50) hot++; } if(hot) bits.push(`<b>${fmt.format(hot)}</b> with a distress score of 50+`);
+  if(S.asm&&ASM) bits.push(`in <b>${fmt.format(facet.asmGroups||0)}</b> assemblage groups`);
   $('summary').innerHTML=bits.join(' · ');
 }
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
+  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
   const tot=k+main; $('onCount').hidden=!tot; $('onCount').textContent=tot+(tot===1?' filter on':' filters on'); $('resetBtn').disabled=!tot;
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
 }
@@ -503,7 +559,7 @@ function cardHTML(id){
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
     ${upLine(p,i)}
     <div class="sendline">${sendBtns(folio)}${sentBadges(folio)}${p.ap&&p.ap[i]?'<span class="hot apb" title="Adverse possession claim noted in the Property Appraiser legal description">Adverse possession</span>':''}</div>
-    <div class="ob">${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
+    <div class="ob">${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
 }
 function tdTag(p,i){ const t=p.td?p.td.tier[i]:0; return t===2?'<span class="tt tds" title="Strong teardown under your rule">Strong teardown</span>':t===1?'<span class="tt tdb" title="Teardown (basic) under your rule">Teardown</span>':''; }
@@ -672,6 +728,7 @@ function teardownHTML(p,i){
 async function openDrawer(id,opts){
   if(OGMAP){ OGMAP.remove(); OGMAP=null; }
   if(!P(id).det){ toast('Loading details…'); try{ await Promise.all([loadDetail(P(id).idx), loadGeo(P(id).idx).catch(()=>{})]); }catch(e){ toast('Details did not load. Try again.'); return; } }
+  if(!ASM){ try{ await loadAsm(); }catch(e){} }
   if(P(id).c.dsig[I(id)] && !DIST){ try{ await loadDistress(); }catch(e){ toast('Distress details did not load.'); } }
   const p=P(id), i=I(id), c=p.c, folio=getStr(p,'folio',i), addr=getStr(p,'addr',i)||'No street address';
   const city=D.city[c.city[i]], zip=D.zip[c.zip[i]], fl=c.flags[i], mv=c.mkt[i], zn=D.zoning[c.zoning[i]], lu=D.landuse[c.landuse[i]];
@@ -701,7 +758,7 @@ async function openDrawer(id,opts){
     ${distressHTML(p,i,folio)}
     ${vacancyHTML(p,i,folio)}
     ${permitsHTML(p,i,folio)}
-    ${teardownHTML(p,i)}
+    ${asmHTML(p,i)}${teardownHTML(p,i)}
     <h3>The property</h3><div class="dl">${rows([
       ['What it is', `${TYPE_LABEL[LU_T[c.landuse[i]]]}<small>${esc(lu)}</small>`],
       ['City zoning', MZ[c.mz[i]] ? `<span class="mzcode">${esc(MZ[c.mz[i]][0])}</span> · ${esc(MZ[c.mz[i]][1])}<small>${esc(mzLabel(c.mz[i]))}${MZ[c.mz[i]][5]?' · min lot '+fmt.format(+MZ[c.mz[i]][5])+' sq ft':''}</small>` : 'Not found on the zoning map'],
@@ -751,7 +808,7 @@ async function ownerIds(g){
 const exportName=(kind,n)=>{ const d=new Date(); return `miami-dade-${kind}-${n}-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`; };
 async function exportIds(ids,kind,btn){
   const lab=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
-  try{ await ensureDetail(); await ensureGeo(); await loadDistress(); await new Promise(r=>setTimeout(r,30));
+  try{ await ensureDetail(); await ensureGeo(); await loadDistress(); await loadAsm().catch(()=>{}); await new Promise(r=>setTimeout(r,30));
     const url=URL.createObjectURL(buildCSV(ids)), a=document.createElement('a'); a.href=url; a.download=exportName(kind,ids.length); document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),60000); toast(fmt.format(ids.length)+' properties exported'); }
   catch(e){ toast('Export failed: '+(e&&e.message||e)); }
@@ -829,7 +886,7 @@ const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
 function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||'')]:['','','','','',''];}
 function buildCSV(ids=results,extra){
-  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','Company/Organization','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Permits (5 yrs)','Last Permit Detail','Open Code Cases','Code Cases (5 yrs)','Code Case Detail','Permit/Code Signals','Permit Data Coverage','Code Data Coverage','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note','Teardown Tier','Teardown Reasons','Zone Min Lot SqFt','Zone Units/Acre','Zone Max Stories','Zone FAR','Units Allowed','Unit Multiple','Buildable SqFt Multiple','Lot vs Zone Minimum','Lot Could Be Split','Construction','Adverse Possession','Call Center Tag','Door Knock Tag'];
+  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','Company/Organization','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Permits (5 yrs)','Last Permit Detail','Open Code Cases','Code Cases (5 yrs)','Code Case Detail','Permit/Code Signals','Permit Data Coverage','Code Data Coverage','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note','Teardown Tier','Teardown Reasons','Zone Min Lot SqFt','Zone Units/Acre','Zone Max Stories','Zone FAR','Units Allowed','Unit Multiple','Buildable SqFt Multiple','Lot vs Zone Minimum','Lot Could Be Split','Construction','Adverse Possession','Call Center Tag','Door Knock Tag','Assemblage Group','Assemblage Score','Assemblage Parcels','Assemblage Owners','Combined Lot SqFt','Combined Units Allowed','Unit Gain vs Separate','Assemblage Upside','Assemblage Reason'];
   if(extra) head.splice(1,0,'Team','List Name');
   const parts=[head.join(',')+'\n']; let buf='';
   for(let j=0;j<ids.length;j++){
@@ -848,11 +905,12 @@ function buildCSV(ids=results,extra){
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
 }
 function tdCSV(p,i){ const z=zoneOf(p,i)||{}, t=p.td, ev=tdEval(p,i), f=getStr(p,'folio',i), nn=v=>v===v&&v!=null?v:'';
-  return [ev.strong?'Strong':ev.basic?'Teardown':'',csvq(ev.reasons.join('; ')),z.min_lot_sf||'',z.upa||'',z.stories||'',z.far||'',t?nn(t.al[i]):'',t?nn(t.um[i]):'',t?nn(t.qm[i]):'',t&&t.below[i]>=0?(t.below[i]?'Under':'Meets'):'',t&&t.split[i]===1?'Y':'',p.cn&&EX?csvq(CN_LABEL[p.cn[i]]):'',p.ap&&p.ap[i]?'Y':'',isTagged(f,'cc')?'Y':'',isTagged(f,'dk')?'Y':'']; }
+  return [ev.strong?'Strong':ev.basic?'Teardown':'',csvq(ev.reasons.join('; ')),z.min_lot_sf||'',z.upa||'',z.stories||'',z.far||'',t?nn(t.al[i]):'',t?nn(t.um[i]):'',t?nn(t.qm[i]):'',t&&t.below[i]>=0?(t.below[i]?'Under':'Meets'):'',t&&t.split[i]===1?'Y':'',p.cn&&EX?csvq(CN_LABEL[p.cn[i]]):'',p.ap&&p.ap[i]?'Y':'',isTagged(f,'cc')?'Y':'',isTagged(f,'dk')?'Y':'',...asmCSV(p,i)]; }
+function asmCSV(p,i){ const g=asmOf(p,i); return g?[g.id,g.score,g.mem.length,g.owners,g.lot,g.units==null?'':g.units,g.gain,g.upside?'Y':'',csvq(asmReason(g))]:['','','','','','','','','']; }
 $('exportBtn').onclick=async()=>{ if(results.length) return exportIds(results,S.saved?'saved':S.ogf?'owner':'properties',$('exportBtn'));
   if(!results.length){ toast('Nothing to export yet.'); return; }
   const btn=$('exportBtn'); btn.disabled=true; btn.textContent='Preparing…';
-  try{ await ensureDetail(); await ensureGeo(); await loadDistress(); }catch(e){ toast('Export data did not load. Try again.'); btn.disabled=false; btn.textContent='Export CSV'; return; }
+  try{ await ensureDetail(); await ensureGeo(); await loadDistress(); await loadAsm().catch(()=>{}); }catch(e){ toast('Export data did not load. Try again.'); btn.disabled=false; btn.textContent='Export CSV'; return; }
   btn.textContent='Building CSV…'; await new Promise(r=>setTimeout(r,30));
   try{
     const d=new Date(), name=`miami-dade-${S.saved?'saved':'properties'}-${results.length}-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`;
@@ -883,7 +941,7 @@ function writeHash(st){
     if(st.sort&&st.sort!=='lot_d') h.set('sort',st.sort); if(st.view&&st.view!=='cards') h.set('view',st.view);
     if(st.bbox) h.set('area',st.bbox.join(','));
     if(st.ogf) h.set('ogf',st.ogf); if(st.ogMin) h.set('ogn',st.ogMin); if(st.ogDist) h.set('ogd','1'); if(st.ogInst) h.set('ogi','1');
-    if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';'));
+    if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';')); if(st.asm) h.set('asm','1'); if(st.asmUp) h.set('asmup','1'); if(st.asmGroup) h.set('asmg',st.asmGroup);
     if(st.rules&&!RULE_KEYS.every(k=>st.rules[k]===TD.DEFAULT_RULES[k])) h.set('tdr',RULE_KEYS.map(k=>k==='enforce_min_lot'?(st.rules[k]?1:0):st.rules[k]).join(','));
     if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
     const str=h.toString(), want=str?'#'+str:'';
@@ -905,7 +963,7 @@ function parseHash(){
   st.sort=h.get('sort')||'lot_d'; st.view=h.get('view')||'cards';
   st.ogf=(h.get('ogf')||'').replace(/\D/g,''); st.ogMin=+h.get('ogn')||0; st.ogDist=h.get('ogd')==='1'; st.ogInst=h.get('ogi')==='1';
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
-  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean);
+  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
   const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length){ st.rules={}; RULE_KEYS.forEach((k,j)=>st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]); }
   const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null;
   return st;
@@ -1033,6 +1091,7 @@ function initMap(){
   base['Simple'].addTo(LMAP); L.control.layers(base,null,{position:'bottomright',collapsed:true}).addTo(LMAP);
   const Dot=makeDotLayer(); mapLayer=new Dot(); mapLayer.addTo(LMAP);
   tipEl=document.createElement('div'); tipEl.className='maptip'; tipEl.hidden=true; $('mapbox').appendChild(tipEl);
+  LMAP.on('moveend',()=>{ if(S.asm) drawAsmOutlines(); });
   LMAP.on('click',onMapClick); LMAP.on('mousemove',onMapMove); LMAP.on('mouseout movestart zoomstart',()=>{ tipEl.hidden=true; });
   $('map').addEventListener('click',e=>{ if(e.target.closest('[data-star]')) return; const b=e.target.closest('.stackopen'); if(b){ LMAP.closePopup(); openDrawer(+b.dataset.id); } });
   toneSetup();
@@ -1057,8 +1116,8 @@ async function showMap(reset){
   if(S.view!=='map') return;
   LMAP.invalidateSize({animate:false});
   if(MAP_FOCUS>=0){ const id=MAP_FOCUS; MAP_FOCUS=-1; const p=P(id), g=p&&p.geo, i=I(id); if(g&&g.lat[i]>20){ lastFitKey=''; LMAP.setView([g.lat[i],g.lon[i]],18,{animate:false}); mapLayer.redraw(); return; } }
-  if(reset) fitResults(false);
-  mapLayer.redraw();
+  if(reset && !(S.asm&&S.asmGroup)) fitResults(false);
+  mapLayer.redraw(); drawAsmOutlines();
 }
 
 /* ideas */
@@ -1082,6 +1141,8 @@ const IDEAS=[
   ['Lots owned from far away', ()=>({...BLANK(), types:['vacant'], lotMin:4000, flags:{absz:'yes'}, sort:'ppl_a'})],
   ['💥 Strong teardowns', ()=>({...BLANK(), tier:'strong', sort:'um_d'})],
   ['Lots that could be split', ()=>({...BLANK(), types:['sf','vacant'], lotz:['split'], sort:'lot_d'})],
+  ['🧩 Assemblages', ()=>({...BLANK(), asm:true, sort:'asm_d'})],
+  ['Assemblages with combined-site upside', ()=>({...BLANK(), asm:true, asmUp:true, sort:'asm_d'})],
   ['Houses on lots under zone minimum', ()=>({...BLANK(), types:['sf'], lotz:['below'], sort:'lp_d'})],
 ];
 const LOT_CHIPS=[[0,'Any'],[5000,'5,000+ sf'],[7500,'7,500+ sf'],[10000,'10,000+ sf'],[21780,'½ acre+'],[43560,'1 acre+'],[217800,'5 acres+']];
@@ -1164,7 +1225,7 @@ async function exportSend(k){ const t=teamOf(k);
   if(!PACKS[1] && Object.keys(SEND.tags).some(f=>SEND.tags[f][k]&&!sentOf(f,k))){ const p0=sendPlan(k); if(p0.missing){ try{ await loadPack(1,'Loading condo units for your list…'); }catch(e){} } }
   const p=sendPlan(k); if(!p.rows.length){ toast(p.tagged?`Nothing new for the ${t.noun}: every tagged property is already sent. Use Re-send on a card to send one again.`:`No properties tagged ${t.label} yet.`); return; }
   const list=$('listName-'+k).value.trim()||defaultList(t), day=dayStr(new Date()), btn=$('sendExp-'+k);
-  btn.disabled=true; try{ await ensureDetail(); await ensureGeo(); await loadDistress(); }catch(e){}
+  btn.disabled=true; try{ await ensureDetail(); await ensureGeo(); await loadDistress(); await loadAsm().catch(()=>{}); }catch(e){}
   download((list.replace(/[^\w.\-]+/g,'_').replace(/^_+|_+$/g,'')||t.prefix)+'.csv', buildCSV(Uint32Array.from(p.rows),{team:t,list}));
   SEND_PENDING={k,folios:p.rows.map(id=>getStr(P(id),'folio',I(id))),list,day}; btn.disabled=false; renderSend(); toast(`Exported ${fmt.format(p.rows.length)} for the ${t.noun}`); }
 /* wiring */
@@ -1216,6 +1277,14 @@ function wire(){
   $('clrCn').onclick=()=>{ S.cons.clear(); clearIdea(); run(); };
   $('apOnly').addEventListener('change',()=>{ S.ap=$('apOnly').checked; clearIdea(); run(); });
   $('sendChips').addEventListener('click',e=>{ const b=e.target.closest('.chip[data-send]'); if(!b) return; const k=b.dataset.send; S.send.has(k)?S.send.delete(k):S.send.add(k); run(); });
+  $('asmOn').onclick=async()=>{ S.asm=!S.asm; if(!S.asm) S.asmGroup=0; else if(S.sort==='lot_d'){ S.sort='asm_d'; $('sortSel').value='asm_d'; } clearIdea(); await ensureAsm(); run(); };
+  $('asmUp').addEventListener('change',async()=>{ S.asmUp=$('asmUp').checked; if(S.asmUp) S.asm=true; clearIdea(); await ensureAsm(); run(); });
+  $('clrAsm').onclick=()=>{ S.asm=false; S.asmUp=false; S.asmGroup=0; clearIdea(); run(); };
+  $('asmBack').onclick=()=>{ S.asmGroup=0; run(); };
+  document.addEventListener('click',async e=>{ const b=e.target.closest('[data-asmshow],[data-asmmap],[data-asmone]'); if(!b) return; e.preventDefault(); e.stopPropagation();
+    if(b.dataset.asmone){ openDrawer(+b.dataset.asmone); return; }
+    await loadAsm().catch(()=>{}); $('drawerHost').innerHTML=''; S.asm=true; S.asmGroup=+(b.dataset.asmshow||b.dataset.asmmap); S.sort='asm_d'; $('sortSel').value='asm_d'; clearIdea();
+    if(b.dataset.asmmap){ S.view='map'; drawAsmOutlines.fitted=0; } run(); if(!b.dataset.asmmap) window.scrollTo(0,0); },true);
   $('clrSend').onclick=()=>{ S.send.clear(); clearIdea(); run(); };
   TEAMS.forEach(t=>{ $('sendExp-'+t.k).onclick=()=>exportSend(t.k); });
   $('sendBar').addEventListener('click',e=>{ const b=e.target.closest('[data-sendmark]'); if(b) sendMark(b.dataset.sendmark==='1'); });
@@ -1228,7 +1297,7 @@ function wire(){
     $(f+'List').addEventListener('change',e=>{ const t=e.target; if(!t.dataset.f) return; const set=f==='zoning'?S.exZ:S.exL, i=+t.dataset.i; t.checked?set.add(i):set.delete(i); schedule(100); });
   });
   $('ideas').innerHTML=IDEAS.map(([l],i)=>`<button type="button" class="chip" data-i="${i}">${l}</button>`).join('');
-  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureCondo(); await ensureOg(); run(); clearIdea(); b.classList.add('on'); });
+  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); clearIdea(); b.classList.add('on'); });
   $('toResults').onclick=()=>{ const r=$('results'); const y=r.getBoundingClientRect().top+window.scrollY-($('stickybar').offsetHeight+16); window.scrollTo({top:y,behavior:'smooth'}); };
   $('resetBtn').onclick=()=>{ applyState({...BLANK(), view:S.view}); clearIdea(); run(); };
   $('sortSel').addEventListener('change',async()=>{ S.sort=$('sortSel').value; if(S.sort.startsWith('og')) await ensureOg(); doSort(); save(); renderResults(true); });
@@ -1238,11 +1307,11 @@ function wire(){
   $('clrArea').onclick=()=>{ S.bbox=null; $('areaRow').hidden=true; clearIdea(); run(); };
   $('mapArea').onclick=()=>{ if(!LMAP) return; const b=LMAP.getBounds(); S.bbox=[+b.getSouth().toFixed(6),+b.getWest().toFixed(6),+b.getNorth().toFixed(6),+b.getEast().toFixed(6)]; $('areaRow').hidden=false; clearIdea(); MAP_NOFIT=true; run(); };
   $('mapFit').onclick=()=>fitResults(true);
-  window.addEventListener('hashchange',()=>{ const st=parseHash(); if(st){ applyState(st); ensureCondo().then(ensureOg).then(run); } });
+  window.addEventListener('hashchange',()=>{ const st=parseHash(); if(st){ applyState(st); ensureAsm().then(ensureCondo).then(ensureOg).then(run); } });
   ['ogMin','ogDist','ogInst'].forEach(id=>$(id).addEventListener('change',async()=>{ clearIdea(); await ensureOg(); run(); }));
   $('clrOg').onclick=()=>{ S.ogf=''; S.og=0; renderOgRow(); clearIdea(); run(); };
   $('showMore').onclick=()=>renderResults(false);
-  $('cards').addEventListener('click',e=>{ if(e.target.closest('[data-star],[data-sendtag],[data-resend]')) return; const c=e.target.closest('.card'); if(c) openDrawer(+c.dataset.id); });
+  $('cards').addEventListener('click',e=>{ if(e.target.closest('[data-star],[data-sendtag],[data-resend],[data-asmshow]')) return; const c=e.target.closest('.card'); if(c) openDrawer(+c.dataset.id); });
   $('cards').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && e.target.classList.contains('card')){ e.preventDefault(); openDrawer(+e.target.dataset.id); } });
   $('tbody').addEventListener('click',e=>{ if(e.target.closest('[data-star]')) return; const tr=e.target.closest('tr[data-id]'); if(tr) openDrawer(+tr.dataset.id); });
   wireSaved();
@@ -1284,7 +1353,7 @@ async function boot(){
     applyState(st);
     const ownLoad=loadOwners().catch(()=>null);
     await loadPack(0,'Loading properties…');
-    await ensureCondo(); if(S.saved||$('vsMine').checked) await ensureSavedPacks(); await ownLoad; await ensureOg();
+    await ensureAsm(); await ensureCondo(); if(S.saved||$('vsMine').checked) await ensureSavedPacks(); await ownLoad; await ensureOg();
     ['results','foot'].forEach(id=>$(id).hidden=false);
     run();
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');
@@ -1296,6 +1365,7 @@ async function boot(){
     IDB.prune(META.ver);
     setTimeout(()=>{ loadDetail(0).catch(()=>{}); },1500);
     setTimeout(()=>{ loadGeo(0).catch(()=>{}); },4000);
+    setTimeout(()=>{ if(!ASM) loadAsm().then(()=>{ renderAsmSrc(); if(S.view==='cards') renderResults(true); renderChips(); }).catch(()=>{}); },6000);
   }catch(e){ $('loadMsg').textContent='The property data did not load.'; $('loadSub').textContent=String(e.message||e)+'. Reload the page to try again.'; }
 }
 boot();

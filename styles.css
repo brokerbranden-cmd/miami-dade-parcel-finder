@@ -534,3 +534,10 @@ body.lending .wrap{display:none}
 .mzc-h{flex-basis:100%}
 .mzc{flex:0 0 auto}
 .mzc[open]{flex-basis:100%}
+/* assemblages */
+.ob .asmb{font-size:11.5px;border-radius:999px;padding:2px 8px;background:color-mix(in srgb,#FC4C02 12%,transparent);border:1px solid color-mix(in srgb,#FC4C02 45%,transparent);color:#FC4C02;font-weight:600;cursor:pointer;font-family:inherit}
+.ob .asmb:hover{background:color-mix(in srgb,#FC4C02 22%,transparent)}
+.asmrow{font-size:12.5px;margin:6px 0;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.asmbox p{margin:0 0 8px;line-height:1.45}
+.asmlist{margin:8px 0;padding-left:20px;font-size:13px}.asmlist small{color:var(--muted)}
+.lnk{background:none;border:0;padding:0;color:var(--accent,#00B2BD);text-decoration:underline;cursor:pointer;font:inherit}

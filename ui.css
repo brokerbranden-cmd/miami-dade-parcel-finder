@@ -50,7 +50,7 @@ body.simple .ideas-more .chip{background:var(--surface)}
   body.simple:not(.legacy) .filtersbtn .n{background:#fff;color:var(--brand);border-radius:999px;padding:0 6px;font-size:12px;font-family:var(--f-mono)}
   body.simple:not(.legacy) #toResults{display:none}
   body.simple:not(.legacy) #panel{display:none}
-  body.simple.sheet-open:not(.legacy) #panel{display:grid;position:fixed;inset:6vh 0 0 0;z-index:60;border-radius:16px 16px 0 0;overflow:auto;overscroll-behavior:contain;padding:0 16px 90px;gap:0;box-shadow:0 -10px 40px rgba(0,0,0,.25);align-content:start}
+  body.simple.sheet-open:not(.legacy) #panel{display:grid;position:fixed;inset:0;z-index:60;border-radius:0;scroll-padding-top:72px;scroll-padding-bottom:20px;overflow:auto;overscroll-behavior:contain;padding:0 16px 90px;gap:0;box-shadow:0 -10px 40px rgba(0,0,0,.25);align-content:start}
   body.simple.sheet-open:not(.legacy)::after{content:"";position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:55}
   body.simple.sheet-open:not(.legacy){overflow:hidden}
   body.simple.sheet-open:not(.legacy) .sheetbar{display:flex;gap:10px;justify-content:space-between;position:sticky;top:0;z-index:2;background:var(--surface);padding:12px 0;border-bottom:1px solid var(--line)}

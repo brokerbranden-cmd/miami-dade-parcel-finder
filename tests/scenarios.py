@@ -369,7 +369,7 @@ with sync_playwright() as pw:
         cur = {'name': f.__name__, 'fails': []}; print(f'== {f.__name__}', flush=True); t = time.time()
         try: f()
         except Exception as e:
-            cur['fails'].append('exception: ' + str(e).split('\n')[0][:200]); print('  EXC', str(e).split('\n')[0][:300])
+            loc = next((l.strip() for l in str(e).split('\n') if 'locator(' in l), ''); cur['fails'].append('exception: ' + str(e).split('\n')[0][:200] + ' ' + loc[:120]); print('  EXC', str(e).split('\n')[0][:300], loc[:200])
             try: pg.keyboard.press('Escape'); pg.evaluate("document.getElementById('lendersPage').hidden||document.getElementById('lpClose').click()")
             except Exception: pass
         results.append((f.__name__, cur['fails'], time.time() - t))

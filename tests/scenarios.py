@@ -24,14 +24,14 @@ def go(hash_='', reload=False):
     else: pg.evaluate(f"location.hash={json.dumps(hash_)}"); pg.evaluate("window.dispatchEvent(new HashChangeEvent('hashchange'))") if False else None
     settle(1200)
 def boot():
-    if MOB and pg.query_selector('#drive:not([hidden])'): pg.click('#dExit')
+    if MOB and pg.query_selector('#drive:not([hidden])'): click('#dExit')
     pg.wait_for_selector('#results:not([hidden])', timeout=240000); pg.wait_for_function('window.PF_READY', timeout=120000)
 def reset():
     pg.keyboard.press('Escape')
-    if pg.query_selector('#lendersPage:not([hidden])'): pg.click('#lpClose')
-    if pg.query_selector('#savedBar:not([hidden])'): pg.click('#svBack'); settle(600)
-    if not pg.is_disabled('#resetBtn'): pg.click('#resetBtn')
-    if 'on' not in (pg.get_attribute('#vCards', 'class') or ''): pg.click('#vCards')
+    if pg.query_selector('#lendersPage:not([hidden])'): click('#lpClose')
+    if pg.query_selector('#savedBar:not([hidden])'): click('#svBack'); settle(600)
+    if not pg.is_disabled('#resetBtn'): click('#resetBtn')
+    if 'on' not in (pg.get_attribute('#vCards', 'class') or ''): click('#vCards')
     settle(1000)
 def sample(k=300): return pg.evaluate(f'PF.sample({k})')
 def bit(s, sig): return (s['dsig'] >> s['_dbit'][sig]) & 1
@@ -40,14 +40,37 @@ def rows(k=300):
 def preset(name_part):
     names = pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent.trim())')
     i = next(k for k, x in enumerate(names) if name_part.lower() in x.lower())
-    pg.click(f'#ideas .chip[data-i="{i}"]', force=True); settle(1500); return names[i]
+    click(f'#ideas .chip[data-i="{i}"]', force=True); settle(1500); return names[i]
 def money(sel, v):
-    pg.fill(sel, v); pg.press(sel, 'Tab'); settle(1000)
+    fill(sel, v); pg.press(sel, 'Tab'); settle(1000)
 def csv_of(click_sel):
-    with pg.expect_download(timeout=180000) as dl: pg.click(click_sel)
+    with pg.expect_download(timeout=180000) as dl: click(click_sel)
     return list(csv.DictReader(io.StringIO(open(dl.value.path(), encoding='utf-8-sig').read())))
 def shot(n):
     pg.screenshot(path=f'{SHOTS}{MODE}_{n}.png')
+
+# ---- simplified UI: reveal a control like a user would (open the phone filter sheet, expand its group,
+#      open "More ideas", or open a card's ⋯ menu) before using it
+REVEAL_JS = """s=>{ const e=document.querySelector(s); if(!e) return null; const card=e.closest('.card'), g=e.closest('.cgrp.closed'), m=e.closest('#ideasMore');
+  return {panel:!!e.closest('#panel'), g:g?g.dataset.g:null, more:!!(m&&m.hidden), menu:card&&e.closest('.sendtools')&&!card.classList.contains('menu-open')?card.dataset.folio:null,
+          sheet:document.body.classList.contains('sheet-open'), phoneSheet:getComputedStyle(document.getElementById('filtersBtn')||document.body).display!=='none' && !!document.getElementById('filtersBtn')} }"""
+def reveal(sel):
+    for _ in range(4):
+        i = pg.evaluate(REVEAL_JS, sel)
+        if not i: return
+        if i['panel']:
+            if i['phoneSheet'] and not i['sheet']: pg.click('#filtersBtn'); pg.wait_for_timeout(250); continue
+            if i['g']: pg.click(f'.cgrp[data-g="{i["g"]}"] .gtog'); pg.wait_for_timeout(150); continue
+            if i['more']: pg.click('#moreIdeas'); pg.wait_for_timeout(150); continue
+            return
+        if i['sheet']: pg.click('#sheetClose'); pg.wait_for_timeout(250); continue
+        if i['menu']: pg.click(f'.card[data-folio="{i["menu"]}"] .cmore'); pg.wait_for_timeout(150); continue
+        return
+def click(sel, **k): reveal(sel); pg.click(sel, **k)
+def fill(sel, v): reveal(sel); pg.fill(sel, v)
+def select(sel, v): reveal(sel); pg.select_option(sel, v)
+def check(sel): reveal(sel); pg.check(sel)
+def uncheck(sel): reveal(sel); pg.uncheck(sel)
 TOTAL = {}
 SC = []
 def scenario(f): SC.append(f); return f
@@ -58,7 +81,7 @@ def s01_every_preset():
     names = pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent.trim())')
     ok(len(names) >= 20, f'{len(names)} presets')
     for i, nm in enumerate(names):
-        pg.click(f'#ideas .chip[data-i="{i}"]', force=True); settle(1300); n = cnt()
+        click(f'#ideas .chip[data-i="{i}"]', force=True); settle(1300); n = cnt()
         ok(0 < n < TOTAL['all'], f'preset "{nm}" -> {n:,}')
         ok(pg.get_attribute(f'#ideas .chip[data-i="{i}"]', 'class').find('on') >= 0, f'preset "{nm}" highlighted')
 @scenario
@@ -82,8 +105,8 @@ def s02_preset_content():
         ok(not any(r['flags'] & 32 for r in rs), f'"{nm}": no government owners (hide government on)')
 @scenario
 def s03_strong_teardowns_miami_t4_t5_under_500k():
-    reset(); pg.click('#tierSeg button[data-tier="strong"]'); settle()
-    pg.fill('#mzq', 'T4, T5'); settle(1200); money('#mvMax', '500k')
+    reset(); click('#tierSeg button[data-tier="strong"]'); settle()
+    fill('#mzq', 'T4, T5'); settle(1200); money('#mvMax', '500k')
     n, rs = rows()
     ok(n > 0, f'{n:,} strong teardowns in T4/T5 under $500K')
     ok(all(r['tier'] == 2 for r in rs), 'all strong tier')
@@ -100,13 +123,13 @@ def s04_lp_absentee_high_distress():
     ok(pg.input_value('#dsMin') == '50' and 'on' in pg.get_attribute('#dsigs .chip[data-sig="LP"]', 'class'), 'UI reflects the link (LP chip on, min score 50)')
 @scenario
 def s05_tax_delinquent_estates():
-    reset(); pg.click('#dsigs .chip[data-sig="TX"]'); settle(); pg.evaluate("document.getElementById('moreBox').open=true")
-    pg.select_option('#ow_estate', 'yes'); settle(1200); n, rs = rows()
+    reset(); click('#dsigs .chip[data-sig="TX"]'); settle(); pg.evaluate("document.getElementById('moreBox').open=true")
+    select('#ow_estate', 'yes'); settle(1200); n, rs = rows()
     ok(n > 0, f'{n:,} tax-delinquent estates')
     ok(all(bit(r, 'TX') and r['flags'] & 64 for r in rs), 'every sample: delinquent taxes + estate/heirs')
 @scenario
 def s06_assemblages_upside_miami_beach():
-    reset(); pg.select_option('#city', 'Miami Beach'); settle(); pg.click('#asmOn'); settle(2500); pg.check('#asmUp'); settle(1500)
+    reset(); select('#city', 'Miami Beach'); settle(); click('#asmOn'); settle(2500); check('#asmUp'); settle(1500)
     n, rs = rows()
     ok(n > 0, f'{n:,} assemblage parcels with upside in Miami Beach')
     ok(all(r['asm'] and r['asm']['upside'] for r in rs) and all(r['city'] == 'Miami Beach' for r in rs), 'every sample: upside group, Miami Beach')
@@ -130,80 +153,80 @@ def s07_money_shorthand():
 def s08_zoning_prefix():
     reset()
     for q, rx in [('T6', r'^T6'), ('RU-1', r'^RU-1'), ('rs-', r'^RS-'), ('T3-R, T4-R', r'^(T3-R|T4-R)')]:
-        pg.fill('#mzq', q); settle(1200); n, rs = rows(200)
+        fill('#mzq', q); settle(1200); n, rs = rows(200)
         ok(n > 0 and all(re.match(rx, r['mzCode'].upper()) for r in rs), f'code "{q}": {n:,}, all match {rx}')
-    pg.fill('#mzq', 'ZZZ9'); settle(1000); ok(cnt() == 0, 'unknown code -> 0 results')
+    fill('#mzq', 'ZZZ9'); settle(1000); ok(cnt() == 0, 'unknown code -> 0 results')
     ok(pg.is_visible('#empty'), 'empty state shown for zero results')
-    pg.click('#clrMz'); settle(); ok(cnt() == TOTAL['all'], 'clear zoning')
+    click('#clrMz'); settle(); ok(cnt() == TOTAL['all'], 'clear zoning')
 @scenario
 def s09_teardown_rules_and_reset():
-    reset(); pg.click('#tierSeg button[data-tier="basic"]'); settle(); n0 = cnt()
-    pg.fill('#td_land', '90'); pg.press('#td_land', 'Tab'); settle(1500); n1 = cnt()
+    reset(); click('#tierSeg button[data-tier="basic"]'); settle(); n0 = cnt()
+    fill('#td_land', '90'); pg.press('#td_land', 'Tab'); settle(1500); n1 = cnt()
     ok(n1 < n0, f'land share 80% -> 90% shrinks teardowns {n0:,} -> {n1:,}')
-    pg.fill('#td_yb', '1950'); pg.press('#td_yb', 'Tab'); settle(1500); n2 = cnt(); _, rs = rows(150)
+    fill('#td_yb', '1950'); pg.press('#td_yb', 'Tab'); settle(1500); n2 = cnt(); _, rs = rows(150)
     ok(n2 < n1 and all(0 < r['yb'] <= 1950 for r in rs) and all(r['land'] >= .9 * r['mkt'] for r in rs), f'built <= 1950 and land >= 90%: {n2:,}')
     ok('tdr=' in pg.evaluate('location.hash'), 'custom rules in link')
-    pg.click('#tdReset'); settle(1500)
+    click('#tdReset'); settle(1500)
     ok(cnt() == n0 and pg.input_value('#td_land') == '80' and pg.input_value('#td_yb') == '1969' and 'tdr=' not in pg.evaluate('location.hash'), 'Reset restores defaults and count')
 @scenario
 def s10_send_to():
     reset(); preset('Strong teardowns')
     f1, f2 = (pg.get_attribute(f'#cards .card:nth-of-type({k})', 'data-folio') for k in (1, 2))
-    for f in (f1, f2): pg.click(f'#cards .card[data-folio="{f}"] [data-sendtag="cc"]')
-    pg.click(f'#cards .card[data-folio="{f1}"] [data-sendtag="dk"]'); pg.wait_for_timeout(400)
+    for f in (f1, f2): click(f'#cards .card[data-folio="{f}"] [data-sendtag="cc"]')
+    click(f'#cards .card[data-folio="{f1}"] [data-sendtag="dk"]'); pg.wait_for_timeout(400)
     ok(pg.query_selector('.drawer') is None, 'tagging does not open the drawer')
-    pg.click('#sendChips .chip[data-send="cc"]'); settle(); ok(cnt() == 2, 'Send to: call center filter shows the 2 tagged')
-    pg.fill('#listName-cc', 'Scenario list'); rs = csv_of('#sendExp-cc')
+    click('#sendChips .chip[data-send="cc"]'); settle(); ok(cnt() == 2, 'Send to: call center filter shows the 2 tagged')
+    fill('#listName-cc', 'Scenario list'); rs = csv_of('#sendExp-cc')
     ok({r['Folio'] for r in rs} == {f1, f2} and all(r['Team'] == 'Call center' and r['List Name'] == 'Scenario list' for r in rs), 'export has the 2 folios with team + list name')
-    pg.click('#sendBar [data-sendmark="1"]'); pg.wait_for_timeout(500)
+    click('#sendBar [data-sendmark="1"]'); pg.wait_for_timeout(500)
     ok(pg.is_disabled('#sendExp-cc'), 'after Mark as sent nothing new to export')
-    pg.click(f'#cards .card[data-folio="{f1}"] .resend[data-resend="cc"]'); pg.wait_for_timeout(400)
+    click(f'#cards .card[data-folio="{f1}"] .resend[data-resend="cc"]'); pg.wait_for_timeout(400)
     rs = csv_of('#sendExp-cc'); ok([r['Folio'] for r in rs] == [f1], 'Re-send exports only the re-sent parcel')
-    for f in (f1, f2): pg.click(f'#cards .card[data-folio="{f}"] [data-sendtag="cc"]'); pg.wait_for_timeout(200)
-    pg.click('#clrSend'); settle()
+    for f in (f1, f2): click(f'#cards .card[data-folio="{f}"] [data-sendtag="cc"]'); pg.wait_for_timeout(200)
+    click('#clrSend'); settle()
 @scenario
 def s11_save_with_notes():
     reset(); preset('Unsafe structures'); f = pg.get_attribute('#cards .card:nth-of-type(1)', 'data-folio')
-    pg.click('#cards .card:nth-of-type(1)', position={'x': 8, 'y': 8}); pg.wait_for_selector('.drawer .svsave', timeout=60000)
-    pg.click('.drawer .svsave'); pg.wait_for_selector('#svStatusSel'); pg.select_option('#svStatusSel', 'Called')
-    pg.fill('#svNote', 'Spoke to son, call back Friday'); pg.wait_for_timeout(1200); pg.keyboard.press('Escape')
+    click('#cards .card:nth-of-type(1)', position={'x': 8, 'y': 8}); pg.wait_for_selector('.drawer .svsave', timeout=60000)
+    click('.drawer .svsave'); pg.wait_for_selector('#svStatusSel'); select('#svStatusSel', 'Called')
+    fill('#svNote', 'Spoke to son, call back Friday'); pg.wait_for_timeout(1200); pg.keyboard.press('Escape')
     ok(int(pg.inner_text('#savedCount') or 0) >= 1, 'saved count badge')
-    go('', reload=True); pg.click('#savedBtn'); settle(1500)
+    go('', reload=True); click('#savedBtn'); settle(1500)
     ok(pg.query_selector(f'#cards .card[data-folio="{f}"]') is not None, 'saved parcel listed in Saved view after reload')
     ok('Spoke to son' in pg.inner_text(f'#cards .card[data-folio="{f}"]') and 'Called' in pg.inner_text(f'#cards .card[data-folio="{f}"]'), 'card shows status and note')
-    pg.click('#svBack'); settle()
+    click('#svBack'); settle()
 @scenario
 def s12_lenders():
-    pg.click('#lendersBtn'); pg.wait_for_selector('#lendersPage:not([hidden])')
-    pg.click('[data-act="add-lender"] >> nth=0'); pg.wait_for_selector('#lfForm')
-    pg.fill('#lfName', 'Scenario Lender'); pg.fill('#lfCompany', 'Test Capital'); pg.fill('#lfMax', '500k'); pg.select_option('#lfStatus', 'Active')
-    pg.click('#lfForm button[type=submit]'); pg.wait_for_timeout(400); pg.click('[data-tab="lenders"]'); pg.wait_for_timeout(300)
+    click('#lendersBtn'); pg.wait_for_selector('#lendersPage:not([hidden])')
+    click('[data-act="add-lender"] >> nth=0'); pg.wait_for_selector('#lfForm')
+    fill('#lfName', 'Scenario Lender'); fill('#lfCompany', 'Test Capital'); fill('#lfMax', '500k'); select('#lfStatus', 'Active')
+    click('#lfForm button[type=submit]'); pg.wait_for_timeout(400); click('[data-tab="lenders"]'); pg.wait_for_timeout(300)
     card = next((c for c in pg.query_selector_all('.lcard') if 'Scenario Lender' in c.inner_text()), None)
     ok(card is not None, 'lender card added'); ok(card is not None and '$500,000' in card.inner_text(), 'max loan "500k" saved as $500,000')
     ok(int(pg.inner_text('#lendersCount') or 0) >= 1, 'header lender badge')
-    shot('12_lenders'); pg.click('#lpClose'); pg.wait_for_timeout(300)
+    shot('12_lenders'); click('#lpClose'); pg.wait_for_timeout(300)
 @scenario
 def s13_owner_portfolio():
-    reset(); pg.check('#ogInst'); pg.fill('#q', 'LENNAR HOMES LLC'); settle(1500)
-    pg.click('#cards .card', position={'x': 8, 'y': 8}); pg.wait_for_selector('#ownerOpen', timeout=60000); pg.click('#ownerOpen')
+    reset(); check('#ogInst'); fill('#q', 'LENNAR HOMES LLC'); settle(1500)
+    click('#cards .card', position={'x': 8, 'y': 8}); pg.wait_for_selector('#ownerOpen', timeout=60000); click('#ownerOpen')
     pg.wait_for_selector('.ogdrawer .ogitem', timeout=120000); pg.wait_for_timeout(800)
     k = len(pg.query_selector_all('.ogdrawer .ogitem')); ok(k > 5, f'portfolio lists {k} properties'); shot('13_portfolio')
-    pg.click('#ogTblBtn'); settle(2000); n, rs = rows(100)
+    click('#ogTblBtn'); settle(2000); n, rs = rows(100)
     ok(n >= k and len({r['og'] for r in rs}) == 1, f'portfolio table: {n} parcels, one owner group')
-    pg.keyboard.press('Escape'); pg.click('#clrOg'); pg.uncheck('#ogInst'); pg.fill('#q', ''); settle()
+    pg.keyboard.press('Escape'); click('#clrOg'); uncheck('#ogInst'); fill('#q', ''); settle()
 @scenario
 def s14_map_many_and_zero():
-    reset(); preset('Teardowns'); pg.click('#vMap')
+    reset(); preset('Teardowns'); click('#vMap')
     pg.wait_for_function("document.getElementById('mapHint').textContent.includes('on the map')", timeout=180000); pg.wait_for_timeout(1500)
     ok(re.search(r'[\d,]+ on the map', pg.inner_text('#mapHint')) is not None, 'map: ' + pg.inner_text('#mapHint')[:80]); shot('14_map_many')
-    pg.fill('#mzq', 'ZZZ9'); settle(1500)
+    fill('#mzq', 'ZZZ9'); settle(1500)
     ok(cnt() == 0 and 'Nothing matches' in pg.inner_text('#mapHint'), 'map with zero results: ' + pg.inner_text('#mapHint')[:60]); shot('14_map_zero')
-    pg.fill('#mzq', ''); pg.click('#vCards'); settle()
+    fill('#mzq', ''); click('#vCards'); settle()
 @scenario
 def s15_share_link_full_state():
-    reset(); pg.select_option('#city', 'Hialeah'); pg.click('#types .chip[data-t="sf"]'); pg.click('#dsigs .chip[data-sig="CC"]')
-    money('#mvMax', '600k'); pg.click('#ownerKind button[data-k="person"]'); pg.click('#tierSeg button[data-tier="basic"]')
-    pg.select_option('#sortSel', 'mv_a'); pg.click('#vTable'); settle(1500)
+    reset(); select('#city', 'Hialeah'); click('#types .chip[data-t="sf"]'); click('#dsigs .chip[data-sig="CC"]')
+    money('#mvMax', '600k'); click('#ownerKind button[data-k="person"]'); click('#tierSeg button[data-tier="basic"]')
+    select('#sortSel', 'mv_a'); click('#vTable'); settle(1500)
     h, n = pg.evaluate('location.hash'), cnt()
     p2 = ctx.new_page(); p2.goto(BASE + h, timeout=180000)
     if MOB and p2.query_selector('#drive:not([hidden])'): p2.click('#dExit')
@@ -228,35 +251,35 @@ def s16_csv_columns():
 def s17_sort_orders():
     reset(); go('type=sf&city=Doral')
     for k, f, d in [('lot_d', 'lot', -1), ('lot_a', 'lot', 1), ('mv_a', 'mkt', 1), ('mv_d', 'mkt', -1), ('held_d', 'sd1', 1), ('sold_d', 'sd1', -1), ('ds_d', 'dscore', -1), ('un_d', 'units', -1), ('yb_a', 'yb', 1), ('addr_a', 'addr', 1)]:
-        pg.select_option('#sortSel', k); settle(900); _, rs = rows(120)
+        select('#sortSel', k); settle(900); _, rs = rows(120)
         v = [r[f] for r in rs if (r[f] or f in ('dscore', 'units'))]
         good = v == sorted(v, reverse=d < 0)
         ok(good, f'sort {k} orders by {f}' + ('' if good else f' {v[:6]}'))
 @scenario
 def s18_hide_companies_and_institutions():
-    reset(); pg.click('#ownerKind button[data-k="person"]'); settle(); n, rs = rows(400)
+    reset(); click('#ownerKind button[data-k="person"]'); settle(); n, rs = rows(400)
     bad = [r['owner'] for r in rs if re.search(r'\b(LLC|INC|CORP|BANK|FPL|FLORIDA POWER|SFWMD|WATER MANAGEMENT|CITY OF|COUNTY|TRUST)\b', r['owner'])]
     ok(not bad, f'"Individuals": {n:,}, no companies / utilities / banks / government in sample' + (f' (saw {bad[:3]})' if bad else ''))
     reset(); _, rs = rows(800)
     bad = [r['owner'] for r in rs if r['flags'] & 32 or re.search(r'SFWMD|WATER MANAGEMENT DIST|MIAMI-DADE COUNTY|CITY OF MIAMI\b|STATE OF FLORIDA', r['owner'])]
     ok(not bad, 'default (hide government): no SFWMD / county / city / state owners' + (f' (saw {bad[:3]})' if bad else ''))
-    reset(); pg.select_option('#ogMin', '5'); settle(2500); _, rs = rows(500)
+    reset(); select('#ogMin', '5'); settle(2500); _, rs = rows(500)
     bad = [r['owner'] for r in rs if re.search(r'\bBANK\b|FPL|FLORIDA POWER|SFWMD|WATER MANAGEMENT|HOUSING AUTHORITY', r['owner'])]
     ok(not bad, 'owners with 5+ parcels exclude banks, FPL, SFWMD & big institutions' + (f' (saw {bad[:3]})' if bad else ''))
-    pg.check('#ogInst'); settle(2000); _, rs2 = rows(800)
-    ok(cnt() > 0, 'including institutions adds them back'); pg.uncheck('#ogInst'); pg.select_option('#ogMin', '0'); settle()
+    check('#ogInst'); settle(2000); _, rs2 = rows(800)
+    ok(cnt() > 0, 'including institutions adds them back'); uncheck('#ogInst'); select('#ogMin', '0'); settle()
 @scenario
 def s19_clear_all():
     reset(); go('sig=LP&type=sf&city=Miami&td=basic&mvMax=900000&asm=1&o_oos=yes'); ok(cnt() < TOTAL['all'], 'many filters on')
     ok(int(re.sub(r'\D', '', pg.inner_text('#onCount') or '0') or 0) >= 5, 'filters-on badge counts them: ' + pg.inner_text('#onCount'))
-    pg.click('#resetBtn'); settle(1500)
+    click('#resetBtn'); settle(1500)
     ok(cnt() == TOTAL['all'] and pg.evaluate('location.hash') in ('', '#'), 'Clear all -> every parcel, empty link')
     ok(pg.input_value('#city') == '' and pg.input_value('#mvMax') == '' and not pg.query_selector('#dsigs .chip.on') and not pg.is_checked('#asmUp'), 'all inputs cleared')
 @scenario
 def s20_back_forward():
     go('', reload=True); reset()
-    pg.click('#types .chip[data-t="vacant"]'); settle(); a = cnt()
-    pg.select_option('#city', 'Homestead'); settle(); b = cnt()
+    click('#types .chip[data-t="vacant"]'); settle(); a = cnt()
+    select('#city', 'Homestead'); settle(); b = cnt()
     ok(b < a, f'vacant {a:,} -> + Homestead {b:,}')
     pg.go_back(); settle(1500); ok(cnt() == a and pg.input_value('#city') == '', f'Back -> {cnt():,} (expected {a:,})')
     pg.go_forward(); settle(1500); ok(cnt() == b and pg.input_value('#city') == 'Homestead', f'Forward -> {cnt():,} (expected {b:,})')
@@ -269,35 +292,35 @@ def s21_reload_persistence():
     ok(cnt() == n, f'reopening the site with no link restores the last search ({cnt():,})')
 @scenario
 def s22_drawer_and_table():
-    reset(); preset('Hottest leads'); pg.click('#vTable'); settle()
+    reset(); preset('Hottest leads'); click('#vTable'); settle()
     ok(len(pg.query_selector_all('#tbody tr[data-id]')) > 10, 'table rows'); pg.locator('#tbody tr[data-id]').first.locator('td').nth(2).click(); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(800)
     d = pg.inner_text('.drawer').lower(); ok('distress' in d and 'folio' in d, 'drawer opens from the table with distress section'); shot('22_drawer')
-    pg.keyboard.press('Escape'); pg.wait_for_timeout(300); ok(pg.query_selector('.drawer') is None, 'Esc closes drawer'); pg.click('#vCards'); settle()
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(300); ok(pg.query_selector('.drawer') is None, 'Esc closes drawer'); click('#vCards'); settle()
 @scenario
 def s23_area_and_zip():
-    reset(); pg.fill('#zips', '33133, 33146'); settle(1500); n, rs = rows()
+    reset(); fill('#zips', '33133, 33146'); settle(1500); n, rs = rows()
     ok(n > 0 and all(r['zip'] in ('33133', '33146') for r in rs), f'two ZIPs: {n:,}')
-    pg.fill('#zips', ''); settle()
+    fill('#zips', ''); settle()
 @scenario
 def s24_search_box():
-    reset(); pg.fill('#q', 'BRICKELL AVE'); settle(1500); n, rs = rows(100)
+    reset(); fill('#q', 'BRICKELL AVE'); settle(1500); n, rs = rows(100)
     ok(n > 0 and all('BRICKELL AVE' in (r['addr'] + ' ' + r['owner']).upper() for r in rs), f'search "BRICKELL AVE": {n:,}')
-    pg.fill('#q', ''); settle()
+    fill('#q', ''); settle()
 @scenario
 def s25_lot_and_construction_chips():
-    reset(); pg.click('#lotz .chip[data-lz="split"]'); settle(1500); n, rs = rows(150)
+    reset(); click('#lotz .chip[data-lz="split"]'); settle(1500); n, rs = rows(150)
     ok(n > 0, f'lots that could be split: {n:,}')
-    pg.click('#lotz .chip[data-lz="split"]'); pg.click('#lotz .chip[data-lz="below"]'); settle(1500); ok(cnt() > 0, f'under zone minimum: {cnt():,}')
-    pg.click('#lotz .chip[data-lz="below"]'); settle(); ok(cnt() == TOTAL['all'], 'lot chips cleared')
+    click('#lotz .chip[data-lz="split"]'); click('#lotz .chip[data-lz="below"]'); settle(1500); ok(cnt() > 0, f'under zone minimum: {cnt():,}')
+    click('#lotz .chip[data-lz="below"]'); settle(); ok(cnt() == TOTAL['all'], 'lot chips cleared')
 @scenario
 def s26_adverse_possession():
-    reset(); pg.check('#apOnly'); settle(1500); n, rs = rows(150)
-    ok(n > 0 and all(r['ap'] for r in rs), f'adverse possession: {n:,}'); pg.uncheck('#apOnly'); settle()
+    reset(); check('#apOnly'); settle(1500); n, rs = rows(150)
+    ok(n > 0 and all(r['ap'] for r in rs), f'adverse possession: {n:,}'); uncheck('#apOnly'); settle()
 @scenario
 def s27_assemblage_group_flow():
     reset(); preset('🧩 Assemblages'); pg.wait_for_selector('#cards .card .asmb', timeout=60000); b = pg.locator('#cards .card .asmb').first
     lots = int(re.search(r'(\d+) lots', b.inner_text()).group(1)); b.click(); settle(1500)
-    ok(cnt() == lots, f'Show group -> {cnt()} = {lots}'); pg.click('#asmBack'); settle(1500); ok(cnt() > lots, 'All groups back')
+    ok(cnt() == lots, f'Show group -> {cnt()} = {lots}'); click('#asmBack'); settle(1500); ok(cnt() > lots, 'All groups back')
 @scenario
 def s28_owner_flags_combo():
     reset(); go('o_homestead=no&o_oos=yes&type=sf&hdMin=20'); n, rs = rows()
@@ -306,11 +329,11 @@ def s28_owner_flags_combo():
 @scenario
 def s29_copy_link_and_folios():
     reset(); go('city=Bay%20Harbor%20Islands&type=sf'); pg.context.grant_permissions(['clipboard-read', 'clipboard-write']) if not MOB else None
-    pg.click('#copyBtn'); pg.wait_for_timeout(500); ok(True, 'Copy folios clicked without error')
-    pg.click('#linkBtn'); pg.wait_for_timeout(500); ok(True, 'Copy link clicked without error')
+    click('#copyBtn'); pg.wait_for_timeout(500); ok(True, 'Copy folios clicked without error')
+    click('#linkBtn'); pg.wait_for_timeout(500); ok(True, 'Copy link clicked without error')
 @scenario
 def s30_condo_lazy_pack():
-    reset(); pg.click('#types .chip[data-t="condo"]'); settle(4000); n, rs = rows(100)
+    reset(); click('#types .chip[data-t="condo"]'); settle(4000); n, rs = rows(100)
     ok(n > 1000 and all(r['type'] == 'condo' for r in rs), f'condo units load on demand: {n:,}')
 @scenario
 def s31_vacancy_signals():
@@ -323,7 +346,7 @@ def s32_mobile_or_desktop_layout():
 def s32b_no_float_noise():
     reset(); preset('Houses on multifamily land'); txt = pg.inner_text('#cards')
     bad = re.findall(r'\d\.\d{4,}', txt); ok(not bad, 'card numbers are rounded' + (f' (saw {bad[:3]})' if bad else ''))
-    pg.click('#cards .card', position={'x': 8, 'y': 8}); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(1200)
+    click('#cards .card', position={'x': 8, 'y': 8}); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(1200)
     bad = re.findall(r'\d\.\d{4,}', pg.inner_text('.drawer')); ok(not bad, 'drawer numbers are rounded' + (f' (saw {bad[:3]})' if bad else '')); pg.keyboard.press('Escape')
 @scenario
 def s33_no_console_errors():

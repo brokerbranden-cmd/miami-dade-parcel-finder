@@ -58,8 +58,7 @@ body.simple .ideas-more .chip{background:var(--surface)}
   body.simple #panel .searchrow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 }
 /* 4. compact cards */
-body.simple:not(.detail) .card .ob>*:nth-child(n+4):not(.obmore){display:none}
-body.simple:not(.detail) .card.ob-all .ob>*{display:inline-flex}
+body.simple:not(.detail) .card:not(.ob-all) .ob>*:nth-child(n+4):not(.obmore){display:none}
 body.simple .obmore{font:inherit;font-size:11.5px;border-radius:999px;padding:2px 8px;background:var(--surface);border:1px dashed var(--line);color:var(--muted);cursor:pointer}
 body.simple.detail .obmore{display:none}
 body.simple:not(.detail) .card .sendline .sendtools{display:none}

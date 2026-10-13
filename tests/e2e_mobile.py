@@ -4,6 +4,7 @@ tap a parcel -> bottom sheet (address / owner / score / signals), one-tap Save +
 Screenshots -> SHOTS/mobile_*.png"""
 import sys, json
 from playwright.sync_api import sync_playwright
+import legacy_ui  # noqa: F401  (simplified UI in legacy mode, see legacy_ui.py)
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
 SHOTS = sys.argv[2] if len(sys.argv) > 2 else '/workspace/parcel-finder/shots/'
 GPS = {'latitude': 25.79905, 'longitude': -80.21695}     # residential block in Allapattah, Miami

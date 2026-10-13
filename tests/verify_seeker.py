@@ -2,6 +2,7 @@
 usage: verify_seeker.py URL OUTDIR"""
 import sys
 from playwright.sync_api import sync_playwright
+import legacy_ui  # noqa: F401  (simplified UI in legacy mode, see legacy_ui.py)
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
 OUT = sys.argv[2] if len(sys.argv) > 2 else '/workspace/parcel-finder/shots/verify/'
 res = []

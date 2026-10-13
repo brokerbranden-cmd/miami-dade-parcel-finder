@@ -2,6 +2,7 @@
 back navigation, show-all table/map with persistent hash, CSV export, institution exclusion). Screenshots -> shots/owners_*.png"""
 import sys, time, csv, io
 from playwright.sync_api import sync_playwright
+import legacy_ui  # noqa: F401  (simplified UI in legacy mode, see legacy_ui.py)
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
 SHOTS = sys.argv[2] if len(sys.argv) > 2 else '/workspace/parcel-finder/shots/'
 errs = []

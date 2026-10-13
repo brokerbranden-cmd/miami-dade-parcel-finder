@@ -2,6 +2,7 @@
 card badges, table columns, drawer breakdown + source links, CSV columns, map coloring by score. Screenshots -> shots/distress_*.png"""
 import sys, time, csv, io
 from playwright.sync_api import sync_playwright
+import legacy_ui  # noqa: F401  (simplified UI in legacy mode, see legacy_ui.py)
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
 SHOTS = '/workspace/parcel-finder/shots/'
 errs = []

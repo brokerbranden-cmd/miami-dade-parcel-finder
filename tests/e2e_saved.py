@@ -3,6 +3,7 @@
 (merge, and into a fresh browser). Screenshots -> shots/saved_*.png"""
 import sys, time, csv, io, json
 from playwright.sync_api import sync_playwright
+import legacy_ui  # noqa: F401  (simplified UI in legacy mode, see legacy_ui.py)
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
 SHOTS = '/workspace/parcel-finder/shots/'
 errs = []

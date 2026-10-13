@@ -43,6 +43,8 @@ with sync_playwright() as pw:
     ok('vacancy & condition' in d.lower() and 'neglect-type code case' in d.lower(), 'drawer shows vacancy breakdown with neglect case')
     ok('Vacancy / neglect hint' in d, 'distress breakdown includes the capped vacancy soft signal')
     ok(pg.query_selector('.drawer .aerial img') is not None, 'aerial thumbnail present')
+    pg.eval_on_selector('.drawer .aerial img', 'i=>i.scrollIntoView()')  # lazy image: the simplified drawer puts property facts first
+    pg.wait_for_function("(()=>{const i=document.querySelector('.drawer .aerial img'); return i&&i.complete&&i.naturalWidth>0})()", timeout=20000)
     nat = pg.eval_on_selector('.drawer .aerial img', 'i=>i.complete?i.naturalWidth:0'); ok(nat > 0, f'aerial image loaded (width {nat})')
     ok(pg.query_selector('.drawer .vlinks a[href*="map_action=pano"]') and pg.query_selector('.drawer .vlinks a[href*="basemap=satellite"]'), 'Street View + satellite links')
     pg.query_selector('.drawer .vlinks').scroll_into_view_if_needed(); pg.wait_for_timeout(300)

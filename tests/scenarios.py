@@ -341,6 +341,46 @@ def s30_condo_lazy_pack():
 def s31_vacancy_signals():
     reset(); preset('Likely vacant'); n, rs = rows(150); ok(n > 0, f'likely vacant: {n:,}')
 @scenario
+def s34_folio_deep_link():
+    reset(); check('#pfOnly'); settle(1500); f = sample(5)['rows'][0]['folio']; uncheck('#pfOnly'); settle()
+    p2 = ctx.new_page(); p2.goto(BASE + ('&' if '?' in BASE else '?') + 'folio=' + f[:2] + '-' + f[2:6] + '-' + f[6:9] + '-' + f[9:], timeout=180000)
+    if MOB and p2.query_selector('#drive:not([hidden])'): p2.click('#dExit')
+    p2.wait_for_selector('.drawer', timeout=120000); t = p2.inner_text('.drawer')
+    ok(re.sub(r'\D', '', t.split('\n')[1] if t.startswith('Close') else t)[:13] == f or f[:2] + '-' + f[2:6] in t, f'?folio= with dashes opens the drawer of {f}')
+    ok(p2.locator('.card.flash').count() == 1, 'the deep-linked card is highlighted'); p2.close()
+@scenario
+def s35_pre_foreclosure_open_lp():
+    reset(); check('#pfOnly'); settle(1500); n, rs = rows(150); c = int(re.sub(r'\D', '', pg.inner_text('#pfCount')) or 0)
+    ok(n > 0 and n == c, f'pre-foreclosure filter {n:,} = its count {c:,}')
+    ok(all(r['pf'] for r in rs), 'every sampled row has an open lis pendens')
+    meta = pg.evaluate('PF.sigMeta()'); ok(all(r['pf'][1] >= meta['pf']['from'] for r in rs), 'recorded inside the covered period')
+    ok(pg.locator('#cards .card .pfb').count() > 0 and 'Verify with the Clerk' in (pg.get_attribute('#cards .card .pfb', 'title') or ''), 'cards carry the Pre-foreclosure tag with the case/CFN tooltip')
+    ok('pf=1' in pg.evaluate('location.hash'), 'filter is in the share link')
+    go(pg.evaluate('location.hash').lstrip('#'), reload=True); ok(cnt() == n, 'share link restores it'); uncheck('#pfOnly'); settle()
+@scenario
+def s36_probate_filed_confidence():
+    reset(); select('#pbSel', 'hm'); settle(1500); n1, r1 = rows(150); select('#pbSel', 'h'); settle(1500); n2, r2 = rows(150)
+    ok(n1 > 0 and 0 < n2 <= n1, f'probate filed: high+medium {n1:,} >= high only {n2:,}')
+    ok(all(r['pb'] for r in r1) and all(r['pb'][4] == 'H' for r in r2), 'rows match the chosen confidence')
+    ok(pg.locator('#cards .card .pbb').count() > 0, 'cards carry the Probate filed tag'); select('#pbSel', ''); settle()
+@scenario
+def s37_auction_max_bid():
+    reset(); go('sig=FC'); n, rs = rows(150); withau = [r for r in rs if r['au']]
+    ok(n > 0 and len(withau) > 0, f'scheduled foreclosure sales carry auction rows ({len(withau)}/{len(rs)})')
+    ok(pg.locator('#cards .auline').count() > 0 and 'max bid' in pg.inner_text('#cards .auline'), 'card shows the auction line with the max bid')
+    pg.click('#cards .card:has(.auline)', position={'x': 8, 'y': 8}); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(800); reveal('.drawer .aumax'); pg.wait_for_selector('.drawer .aumax', timeout=60000)
+    ok('plaintiff max bid' in pg.inner_text('.drawer .aumax').lower(), 'drawer lists the plaintiff max bid'); pg.keyboard.press('Escape'); settle(400)
+@scenario
+def s38_comps_value_estimate():
+    reset(); go('type=sf'); pg.wait_for_function('PF.compsReady()', timeout=180000); settle(800); n, rs = rows(200)
+    e = [r for r in rs if r['comps'] and r['comps']['est']]
+    ok(len(e) >= 0.8 * len(rs), f'single family: {len(e)}/{len(rs)} have a comps estimate')
+    ok(all(r['comps']['n'] >= 3 and r['comps']['lo'] <= r['comps']['est'] <= r['comps']['hi'] and r['comps']['rad'] <= 2 for r in e), 'estimate sits in its range, 3+ comps within 2 mi')
+    t = pg.inner_text('#cards .card .cpline:has(b)'); ok(re.search(r'\$[\d.]+[KM]?–\$[\d.]+[KM]?', t) is not None, f'card shows the value range ({t.strip()[:60]})')
+    ok('last 6 months' in (pg.get_attribute('#cards .card .cpline:has(b) .v span', 'title') or ''), 'range tooltip explains radius / months / land use / financing')
+    cl = pg.locator('#cards .card:has(.cpline b)').first; cl.scroll_into_view_if_needed(); cl.locator('.facts').click(); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(800)
+    reveal('.drawer .cpt'); ok(pg.locator('.drawer .cpt tbody tr').count() >= 3, 'drawer lists the comparable sales'); pg.keyboard.press('Escape'); settle(400)
+@scenario
 def s32_mobile_or_desktop_layout():
     reset(); w = pg.evaluate('document.documentElement.scrollWidth'); vw = pg.evaluate('innerWidth')
     ok(w <= vw + 1, f'no horizontal scroll ({w} <= {vw})'); shot('32_layout')

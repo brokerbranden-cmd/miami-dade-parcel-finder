@@ -403,3 +403,13 @@ Tests:
 - `tests/e2e_simplified.py URL [desktop|mobile]` covers the new UI.
 - The older suites import `tests/legacy_ui.py`, which runs the UI with everything expanded.
 - `tests/scenarios.py` runs in the default (simplified) mode.
+
+## Clerk signals, auction max bid, comps value estimate, folio links (Oct 13, 2026)
+
+- **Folio deep links**: `…/?folio=0131130310040` or `#folio=01-3113-031-0040` opens that property's card and details (condo units load on demand). The drawer has **Copy link**.
+- **Pre-foreclosure (open lis pendens)** filter + card tag (`#pf=1`): lis pendens matched to the folio (see LP above) with no later cancellation / dismissal / certificate of title in the Clerk files we hold (`raw/lp_downloads/{clp,dis,cot}_*.csv` exports or `RAW/clerk/CLP/*.json`), no foreclosure sale held for the case and no recorded transfer of the parcel since. Built by `scripts/build_signals.py` → `data/signals.json.gz`.
+  The Clerk's *daily* Official Records file is a paid Commercial Data Services subscription ($110/month per folder, notarized registration), and the unattended Official Records search is blocked by Cloudflare Turnstile, so freshness comes from the weekly logged-in export step. `build_all.sh` tries a CLP pull (non-fatal) when no cancellation exports exist.
+- **Probate filed** select (`#pb=hm` high + medium match, `#pb=h` high only): Clerk death certificate (estate of), probate & administration, order of distribution and probate cases matched by folio, legal description, address or decedent name vs owner. Obituary / unknown-heir notices are left out (no Clerk match confidence).
+- **Auction max bid**: `fetch_auctions.py` keeps *Plaintiff Max Bid*; cards with a scheduled sale show date · judgment (or opening bid) · max bid (most plaintiffs show **Hidden** until the sale).
+- **Comps value estimate** on cards + a comps table in the drawer: PA-qualified (arm's-length) sales in the last 6 months (`scripts/build_comps.py` → `data/comps.json.gz`, multi-parcel deeds dropped), same land use, building size within ½–2× (lot within 4×; relaxed to ¼–4× if needed), within 0.5 → 1 → 2 mi until 3+ sales, same construction when 3+ share it. Range = middle half of $/sf × this size. Cash vs financed is shown when known; the roll does not carry it (Clerk deed + mortgage join pending the paid daily file). Not an appraisal.
+- Tests: `tests/e2e_clerk.py URL [desktop|mobile]` and scenarios s34–s38.

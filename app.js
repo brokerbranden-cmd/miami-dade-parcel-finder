@@ -191,20 +191,20 @@ function compsOf(p,i){
   const me=getStr(p,'folio',i), cn=p.cn?p.cn[i]:0, la5=la*1e5, lo5=lo*1e5, cx=Math.floor(la5/1000), cy=Math.floor(lo5/1000), cand=[];
   for(let dx=-3;dx<=3;dx++) for(let dy=-3;dy<=3;dy++){ const a=CP.grid.get((cx+dx)*100000+cy+dy); if(!a) continue;
     for(const k of a){ const r=CP.rows[k]; if(r.luN!==lu||r[0]===me) continue; const z=useB?r[5]:r[6]; if(!(z>0)||(useB?false:r[5]>0)) continue;
-      const mi=cpMiles(la,lo,r[1]/1e5,r[2]/1e5); if(mi>CP_STEPS[CP_STEPS.length-1]) continue; cand.push({r,mi,ppsf:r[4]/z,sr:z/size}); } }
+      const mi=cpMiles(la,lo,r[1]/1e5,r[2]/1e5); if(mi>CP_STEPS[CP_STEPS.length-1]) continue; cand.push({r,mi,ppsf:r[4]/z,sr:z/size,lr:useB&&lot>0&&r[6]>0?r[6]/lot:1}); } }
   let use=[], rad=0, band=0;
-  for(const B of CP_SIZE){ for(const R of CP_STEPS){ use=cand.filter(x=>x.mi<=R&&x.sr>=1/B&&x.sr<=B); rad=R; if(use.length>=CP_MIN) break; } band=B; if(use.length>=CP_MIN) break; }
+  for(const B of CP_SIZE){ for(const R of CP_STEPS){ use=cand.filter(x=>x.mi<=R&&x.sr>=1/B&&x.sr<=B&&x.lr>=1/(2*B)&&x.lr<=2*B); rad=R; if(use.length>=CP_MIN) break; } band=B; if(use.length>=CP_MIN) break; }
   let sameCn=false; if(cn&&CNMAP&&use.length>=CP_MIN){ const s2=use.filter(x=>CNMAP.get(+x.r[0])===cn); if(s2.length>=CP_MIN){ use=s2; sameCn=true; } }
   use.sort((a,b)=>a.mi-b.mi);
   const out={n:use.length,rad,band,useB,size,sameCn,comps:use.slice(0,8),cash:use.filter(x=>x.r[8]===1).length,fin:use.filter(x=>x.r[8]===0).length};
   if(use.length<CP_MIN) return out;
   const v=use.map(x=>x.ppsf).sort((a,b)=>a-b); out.med=quant(v,.5); out.lo=Math.round(quant(v,.25)*size/1000)*1000; out.hi=Math.round(quant(v,.75)*size/1000)*1000; out.est=Math.round(out.med*size/1000)*1000; return out; }
-function cpWhy(c){ return `Median ${c.useB?'$ per building sq ft':'$ per lot sq ft'} of ${c.n} arm's-length sales within ${c.rad} mi in the last ${CP.meta.months} months, same land use, ${c.useB?'building':'lot'} size within ${c.band===2?'half to double':'a quarter to 4×'} this one${c.sameCn?', same construction':''} (Property Appraiser qualified sales through ${ymd(CP.meta.newest)}), × this ${c.useB?'building':'lot'} size. Range = middle half of those sales. ${cpCash(c)}`; }
+function cpWhy(c){ return `Median ${c.useB?'$ per building sq ft':'$ per lot sq ft'} of ${c.n} arm's-length sales within ${c.rad} mi in the last ${CP.meta.months} months, same land use, ${c.useB?'building':'lot'} size within ${c.band===2?'half to double':'a quarter to 4×'} this one${c.useB?' (lot within '+(2*c.band)+'×)':''}${c.sameCn?', same construction':''} (Property Appraiser qualified sales through ${ymd(CP.meta.newest)}), × this ${c.useB?'building':'lot'} size. Range = middle half of those sales. ${cpCash(c)}`; }
 function cpCash(c){ const u=c.n-c.cash-c.fin; return u===c.n?'Cash vs financed: not in the roll data.':`${c.cash} cash, ${c.fin} financed${u?', '+u+' unknown':''}.`; }
 function compsInner(p,i){ if(!CP) return '<span class="note">Loading comps…</span>'; if(!p.geo){ loadGeo(p.idx).then(()=>{ if(p.geo) fillComps(); }).catch(()=>{}); return '<span class="note">Loading map points…</span>'; } const c=compsOf(p,i);
   if(!c) return '<span class="note">No comps for this use</span>'; if(!c.est) return `<span class="note" title="${esc(cpWhy(c))}">Not enough comps (${c.n})</span>`;
-  return `<span title="${esc(cpWhy(c))}"><b>${money(c.lo)}–${money(c.hi)}</b> · ${c.n} comps ≤${c.rad} mi${c.hi>2*c.lo?' · wide range':''}</span>`; }
-function compsLine(id){ const p=P(id), i=I(id); return `<div class="line cpline"><span class="k">Value est.</span><span class="v cpbox" data-ci="${id}">${compsInner(p,i)}</span></div>`; }
+  return `<span title="${esc(cpWhy(c))}"><b>${money(c.lo)}–${money(c.hi)}</b> · ${c.n} sales ≤${c.rad} mi${c.hi>2*c.lo?' · wide range':''}</span>`; }
+function compsLine(id){ const p=P(id), i=I(id); return `<div class="line cpline"><span class="k" title="Value estimate from comparable sales">Comps</span><span class="v cpbox" data-ci="${id}">${compsInner(p,i)}</span></div>`; }
 function fillComps(){ document.querySelectorAll('.cpbox').forEach(n=>{ const id=+n.dataset.ci; n.innerHTML=compsInner(P(id),I(id)); }); }
 function compsDrawer(p,i){ if(!CP||!p.geo) return '<div class="note">Comparable sales are loading. Reopen in a moment.</div>'; const c=compsOf(p,i);
   if(!c) return '<div class="note">No comparable sales: this parcel has no size or location for an estimate.</div>';
@@ -1451,7 +1451,7 @@ async function boot(){
       sample:(k=300)=>{ const n=results.length, out=[], step=Math.max(1,Math.floor(n/k)); for(let j=0;j<n&&out.length<k;j+=step){ const id=results[j], p=P(id), i=I(id), c=p.c, mz=D.mzone[c.mz[i]]||[], g=asmOf(p,i);
         out.push({folio:getStr(p,'folio',i), owner:getStr(p,'owner',i), addr:getStr(p,'addr',i), city:D.city[c.city[i]], zip:D.zip[c.zip[i]], lu:D.landuse[c.landuse[i]], type:LU_T[c.landuse[i]], mzCode:mz[0]||'', mzJur:mz[1]||'',
           mkt:c.mkt[i], land:c.land[i], lot:c.lot[i], yb:c.yb[i], units:c.units[i], flags:c.flags[i], dsig:c.dsig[i], dscore:c.dscore[i], sd1:c.sd1[i], sale1:c.sale1[i], og:c.og[i],
-          tier:p.td?p.td.tier[i]:null, ap:p.ap?p.ap[i]:0, sg:p.sg?p.sg[i]:0, pf:PFM.get(getStr(p,'folio',i))||null, pb:PBM.get(getStr(p,'folio',i))||null, au:AUM.get(getStr(p,'folio',i))||null, comps:(()=>{ const x=compsOf(p,i); return x?{n:x.n,rad:x.rad,lo:x.lo||0,hi:x.hi||0,est:x.est||0}:null; })(), asm:g?{id:g.id,upside:g.upside,muni:g.muni}:null}); } return {n, rows:out, dbit:DBIT, sort:S.sort}; },
+          tier:p.td?p.td.tier[i]:null, ap:p.ap?p.ap[i]:0, sg:p.sg?p.sg[i]:0, pf:PFM.get(getStr(p,'folio',i))||null, pb:PBM.get(getStr(p,'folio',i))||null, au:AUM.get(getStr(p,'folio',i))||null, comps:(()=>{ const x=compsOf(p,i); return x?{n:x.n,rad:x.rad,band:x.band,useB:x.useB,size:x.size,sameCn:x.sameCn,lo:x.lo||0,hi:x.hi||0,est:x.est||0}:null; })(), asm:g?{id:g.id,upside:g.upside,muni:g.muni}:null}); } return {n, rows:out, dbit:DBIT, sort:S.sort}; },
       sigMeta:()=>SIG&&SIG.meta, compsMeta:()=>CP&&CP.meta, compsReady:()=>!!CP&&PACKS.every(p=>!p||!!p.geo), ensureComps};
     document.dispatchEvent(new Event('pf:ready')); window.PF_READY=true;
     if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{});

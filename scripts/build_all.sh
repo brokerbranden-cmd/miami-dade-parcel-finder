@@ -32,6 +32,14 @@ python3 scripts/fetch_county_permits.py "$RAW" || echo "WARN: county permit laye
 python3 scripts/fetch_energov.py "$RAW"        || echo "WARN: a Tyler EnerGov portal fetch failed - using cached raw/permits/energov/*.jsonl for that city (~20-40 min, ~1 req/s)"
 python3 scripts/merge_permits.py "$RAW"        || echo "WARN: permit merge failed - vacancy hint falls back to City of Miami / County aggregates, municipal code cases skipped"
 RAW="$RAW" python3 scripts/build_distress.py data  # -> raw/distress.parquet + data/distress.json.gz
+# Pre-foreclosure "open" check: the same browser step can drop Clerk exports of CANCELLATION OF LIS PENDENS / dismissals / CERTIFICATE OF TITLE
+# into raw/lp_downloads/{clp,dis,cot}_YYYYMMDD_YYYYMMDD.csv; without them the unattended CLP search is tried (Turnstile usually blocks it, non-fatal).
+# (The Clerk's daily Official Records file is a paid Commercial Data Services subscription, so it is not pulled here.)
+if ! ls raw/lp_downloads/clp_*.csv raw/lp_downloads/cot_*.csv >/dev/null 2>&1; then
+  timeout 900 python3 scripts/fetch_clerk.py "$RAW" --days 120 --types CLP || echo "WARN: Clerk CLP search blocked - open check uses auctions + roll transfers only"
+fi
+RAW="$RAW" python3 scripts/build_signals.py data   # -> data/signals.json.gz (open pre-foreclosure, probate filed + confidence, auction max bid)
+RAW="$RAW" python3 scripts/build_comps.py data     # -> data/comps.json.gz (6 months of PA-qualified sales for the card value estimate)
 RAW="$RAW" python3 scripts/build_data.py data   # -> data/meta.json + data/*.bin.gz
 RAW="$RAW" python3 scripts/build_zoning_rules.py data   # -> data/zoning-rules.json + data/extras.json.gz (zone min lot / density / FAR / height, construction, adverse possession)
 python3 scripts/fetch_parcels.py "$RAW" || echo "WARN: parcel polygon fetch failed - assemblages use cached raw/parcels"

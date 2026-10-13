@@ -752,6 +752,7 @@ async function openDrawer(id,opts){
       <a href="https://www.google.com/maps/search/?api=1&query=${hasG&&!getStr(p,'addr',i)?la.toFixed(6)+','+lo.toFixed(6):gq}" target="_blank" rel="noopener">Google Maps ↗</a>
       ${hasG?`<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${la.toFixed(6)},${lo.toFixed(6)}" target="_blank" rel="noopener">Street View ↗</a>`:''}
       <button class="btn" type="button" id="copyFolio">Copy folio</button>
+      <button class="btn" type="button" id="copyLink" title="Link that opens this property directly">Copy link</button>
       <button class="btn" type="button" id="onMap">Show on map</button>
     </div>
     <div class="sendline dsend">${sendBtns(folio)}${sentBadges(folio)}</div>
@@ -791,7 +792,7 @@ async function openDrawer(id,opts){
       ['Portfolio', og&&OWN? `<b>${fmt.format(OWN.n[og])} properties</b> · ${money(OWN.mv[og]*1000)} total · ${fmt.format(OWN.nd[og])} with distress records <button type="button" class="lnk" id="ownerOpen">Open owner portfolio</button>${ogFlags(OWN.fl[og]).length?`<small>Flagged: ${ogFlags(OWN.fl[og]).join(', ')} (left out of portfolio filters unless included)</small>`:''}<small>Grouped by owner name${OWN.nv[og]>1?' ('+OWN.nv[og]+' spellings/entities)':''} and shared mailing address.</small>` : 'Only property under this owner']])}</div>
   </aside>`;
   const close=()=>{ $('drawerHost').innerHTML=''; MAP_SEL=-1; if(mapLayer) mapLayer.redraw(); };
-  $('scrim').onclick=close; $('closeD').onclick=close; $('copyFolio').onclick=()=>copy(folio,'Folio copied'); $('closeD').focus();
+  $('scrim').onclick=close; $('closeD').onclick=close; $('copyFolio').onclick=()=>copy(folio,'Folio copied'); $('copyLink').onclick=()=>copy(folioLink(folio),'Link copied'); $('closeD').focus();
   $('onMap').onclick=()=>{ close(); MAP_SEL=id; MAP_FOCUS=id; S.view='map'; save(); renderResults(true); };
   if($('ownerOpen')) $('ownerOpen').onclick=()=>openOwner(og,id);
   if(opts&&opts.backOwner){ const b=document.createElement('button'); b.type='button'; b.className='btn back'; b.textContent='← Owner portfolio'; b.style.float='right'; b.onclick=()=>openOwner(opts.backOwner); $('closeD').after(b); }
@@ -1127,6 +1128,17 @@ async function showMap(reset){
 
 /* ideas */
 const BLANK=()=>({hideGov:true,sort:'lot_d',flags:{},owner:'all'});
+/* folio deep links: ?folio=0131130310040 or #folio=01-3113-031-0040 opens that property's card + details */
+function deepFolio(){ const m=/[?&#]folio=([\d\-\s%20]+)/i.exec(location.search+location.hash); if(!m) return ''; const d=decodeURIComponent(m[1]).replace(/\D/g,''); return d.length>=4?d:''; }
+const folioLink=f=>location.origin+location.pathname+'?folio='+f;
+async function openDeep(f){
+  const find=()=>{ for(let j=0;j<results.length;j++){ const id=results[j]; if(getStr(P(id),'folio',I(id)).replace(/\D/g,'').endsWith(f.length>=13?f:f.padStart(13,'0'))) return id; } return results.length===1?results[0]:-1; };
+  let id=find(); if(id<0 && !S.types.has('condo')){ S.types=new Set(['condo']); await ensureCondo(); run(); id=find(); }
+  if(id<0){ toast('Folio '+f+' was not found in this roll.'); return; }
+  S.view='cards'; renderResults(true);
+  const card=document.querySelector('.card[data-id="'+id+'"]'); if(card){ card.scrollIntoView({block:'center'}); card.classList.add('flash'); }
+  openDrawer(id);
+}
 const IDEAS=[
   ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
   ['Pre-foreclosure & auctions', ()=>({...BLANK(), dsig:['LP','FC'], sort:'ds_d'})],
@@ -1355,7 +1367,7 @@ async function boot(){
     if(EX&&EX.cn.meta) $('cnSrc').textContent=`${fmt.format(EX.cn.meta.folios||0)} folios have a recorded category (${EX.cn.meta.source||''}).`;
     $('lotzNote').textContent='Lot vs the zone minimum lot size; “could be split” = single-family zone and lot ≥ your split factor × the minimum.';
     wire(); renderRules();
-    let st=parseHash(), fresh=false; if(!st){ try{ st=JSON.parse(localStorage.getItem('mdpf.v2')||'null'); }catch(e){} }
+    const dlF=deepFolio(); let st=dlF?{...BLANK(),q:dlF,hideGov:false,view:'cards'}:parseHash(), fresh=false; if(!st){ try{ st=JSON.parse(localStorage.getItem('mdpf.v2')||'null'); }catch(e){} }
     if(!st){ st=IDEAS[0][1](); fresh=true; }
     applyState(st);
     const ownLoad=loadOwners().catch(()=>null);
@@ -1364,6 +1376,7 @@ async function boot(){
     ['results','foot'].forEach(id=>$(id).hidden=false);
     run();
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');
+    if(dlF) await openDeep(dlF);
     /* small internal API for drive.js / lenders.js (same page, nothing leaves the browser) */
     window.PF={META,D,PACKS,P,I,getStr,LU_T,TYPE_LABEL,SV,esc,money,fmt,dollars,dateStr,monYr,folioFmt,today,toast,savedInfo,loadGeo,loadLeaflet,openDrawer,scoreBadge,vacBadge,sigBadges,ensureSavedPacks,savedIdx,stKey,svDate,download,stamp,csvq,
       setSaved:on=>{ S.saved=!!on; run(); }, rerun:()=>run(),

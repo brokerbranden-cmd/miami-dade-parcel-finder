@@ -78,3 +78,4 @@ body.simple .dtog::after{content:"";margin-left:auto;width:8px;height:8px;border
 body.simple .dsec.closed .dtog::after{transform:rotate(-45deg)}
 body.simple .dsec.closed>*:not(h3){display:none!important}
 body.simple .dsec>*:last-child{margin-bottom:12px}
+.card.flash{outline:3px solid #FC4C02;outline-offset:2px;transition:outline-color 2s}

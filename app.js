@@ -1318,7 +1318,7 @@ function wire(){
   ['ogMin','ogDist','ogInst'].forEach(id=>$(id).addEventListener('change',async()=>{ clearIdea(); await ensureOg(); run(); }));
   $('clrOg').onclick=()=>{ S.ogf=''; S.og=0; renderOgRow(); clearIdea(); run(); };
   $('showMore').onclick=()=>renderResults(false);
-  $('cards').addEventListener('click',e=>{ if(e.target.closest('[data-star],[data-sendtag],[data-resend],[data-asmshow]')) return; const c=e.target.closest('.card'); if(c) openDrawer(+c.dataset.id); });
+  $('cards').addEventListener('click',e=>{ if(e.target.closest('[data-star],[data-sendtag],[data-resend],[data-asmshow],.cmore,.obmore')) return; const c=e.target.closest('.card'); if(c) openDrawer(+c.dataset.id); });
   $('cards').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && e.target.classList.contains('card')){ e.preventDefault(); openDrawer(+e.target.dataset.id); } });
   $('tbody').addEventListener('click',e=>{ if(e.target.closest('[data-star]')) return; const tr=e.target.closest('tr[data-id]'); if(tr) openDrawer(+tr.dataset.id); });
   wireSaved();

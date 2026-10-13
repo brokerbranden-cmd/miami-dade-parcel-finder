@@ -18,6 +18,6 @@ with sync_playwright() as pw:
             cardBadges:(document.querySelector('#cards .card')||document.body).querySelectorAll('.ob > *').length}}""")
         print(tag,json.dumps(m))
         pg.evaluate("document.getElementById('cards').scrollIntoView()"); pg.wait_for_timeout(500); pg.screenshot(path=f'{OUT}{PRE}_{tag}_cards.png')
-        pg.click('#cards .card',position={'x':8,'y':8}); pg.wait_for_selector('.drawer',timeout=60000); pg.wait_for_timeout(2000); pg.screenshot(path=f'{OUT}{PRE}_{tag}_drawer.png')
+        pg.click('#cards .card h3'); pg.wait_for_selector('.drawer',timeout=60000); pg.wait_for_timeout(2000); pg.screenshot(path=f'{OUT}{PRE}_{tag}_drawer.png')
         print(tag,'drawer sections',pg.eval_on_selector_all('.drawer h3','e=>e.map(x=>x.textContent.trim().slice(0,40))'), 'drawerH', pg.evaluate("document.querySelector('.drawer').scrollHeight"))
         ctx.close()

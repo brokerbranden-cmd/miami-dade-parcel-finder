@@ -1,0 +1,81 @@
+/* Simplified layout (ui.js). Brand: --brand #FC4C02 (orange), --brand-2 #00B2BD (teal), --accent for text/selected. */
+/* 1. results first: filters in a sticky sidebar on wide screens */
+@media (min-width:1100px){
+  body.simple .wrap{grid-template-columns:340px minmax(0,1fr);column-gap:22px;max-width:1640px;align-items:start}
+  body.simple .wrap>header.top,body.simple .wrap>.stickybar{grid-column:1/-1}
+  body.simple .wrap>#panel{grid-column:1;grid-row:3/span 20;position:sticky;top:86px;max-height:calc(100vh - 98px);overflow:auto;overscroll-behavior:contain;padding:12px 14px;gap:0;scrollbar-width:thin}
+  body.simple .wrap>*:not(header):not(.stickybar):not(#panel){grid-column:2;min-width:0}
+  body.simple #toResults{display:none}
+  body.simple .cards{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
+  /* search box stacked in the narrow sidebar (was 3 columns) */
+  body.simple #panel .searchrow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  body.simple #panel .searchrow .big{grid-column:1/-1}
+  body.simple #panel .mzrow{grid-template-columns:minmax(0,1fr)}
+}
+@media (min-width:900px) and (max-width:1099px){ body.simple #panel{gap:0} }
+/* 2. collapsible filter groups with an active-filter badge */
+body.simple #panel>.grp,body.simple #panel .cgrp{padding:10px 0;border-bottom:1px solid var(--line);gap:8px}
+body.simple #panel .cgrp:last-of-type{border-bottom:0}
+body.simple .cgrp>.grp-h{flex-wrap:nowrap;align-items:center}
+body.simple .cgrp>.grp-h .hint{display:none}
+body.simple .cgrp:not(.closed)>.grp-h+.hint-show{display:block}
+body.simple .gtog{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;font:inherit;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);padding:4px 0}
+body.simple .gtog:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+body.simple .gtog .gact{background:var(--brand);color:#fff;border-radius:999px;font-size:11px;letter-spacing:0;padding:1px 7px;font-family:var(--f-mono)}
+body.simple .gtog .gchev{margin-left:auto;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .15s;margin-right:4px}
+body.simple .cgrp.closed .gtog .gchev{transform:rotate(-45deg)}
+body.simple .cgrp>.grp-h h2{flex:1;margin:0}
+body.simple .cgrp.closed>*:not(.grp-h){display:none!important}
+body.simple .cgrp.closed>.grp-h .clr{display:none}
+body.simple .cgrp .note{font-size:12.5px}
+body.simple #panel>.grp .grp{padding:0;border:0}
+/* 5. one neutral chip style; orange only when selected */
+body.simple #panel .chip{background:var(--sunk);border-color:var(--line);color:var(--ink)}
+body.simple #panel .chip:hover{border-color:var(--brand)}
+body.simple #panel .chip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+body.simple #panel .chip.on .n{color:#fff}
+body.simple #panel .chip{font-size:13.5px;padding:5px 11px}
+/* 3. presets: 8 + More ideas */
+body.simple #ideas .morechip{background:transparent;border-style:dashed;color:var(--accent);font-weight:600}
+body.simple .ideas-more{flex-basis:100%;display:grid;gap:8px;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--sunk)}
+body.simple .ideas-more[hidden]{display:none}
+body.simple .icat-h{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+body.simple .ideas-more .chip{background:var(--surface)}
+/* phone: filters in a bottom sheet */
+.sheetbar{display:none}
+.filtersbtn{display:none}
+@media (max-width:899px){
+  body.simple:not(.legacy) .filtersbtn{display:inline-flex;align-items:center;gap:6px;background:var(--brand);border-color:var(--brand);color:#fff;font-weight:700}
+  body.simple:not(.legacy) .filtersbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2}
+  body.simple:not(.legacy) .filtersbtn .n{background:#fff;color:var(--brand);border-radius:999px;padding:0 6px;font-size:12px;font-family:var(--f-mono)}
+  body.simple:not(.legacy) #toResults{display:none}
+  body.simple:not(.legacy) #panel{display:none}
+  body.simple.sheet-open:not(.legacy) #panel{display:grid;position:fixed;inset:6vh 0 0 0;z-index:60;border-radius:16px 16px 0 0;overflow:auto;overscroll-behavior:contain;padding:0 16px 90px;gap:0;box-shadow:0 -10px 40px rgba(0,0,0,.25);align-content:start}
+  body.simple.sheet-open:not(.legacy)::after{content:"";position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:55}
+  body.simple.sheet-open:not(.legacy){overflow:hidden}
+  body.simple.sheet-open:not(.legacy) .sheetbar{display:flex;gap:10px;justify-content:space-between;position:sticky;top:0;z-index:2;background:var(--surface);padding:12px 0;border-bottom:1px solid var(--line)}
+  body.simple .sheetbar #sheetDone{flex:1}
+  body.simple #panel .searchrow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+/* 4. compact cards */
+body.simple:not(.detail) .card .ob>*:nth-child(n+4):not(.obmore){display:none}
+body.simple:not(.detail) .card.ob-all .ob>*{display:inline-flex}
+body.simple .obmore{font:inherit;font-size:11.5px;border-radius:999px;padding:2px 8px;background:var(--surface);border:1px dashed var(--line);color:var(--muted);cursor:pointer}
+body.simple.detail .obmore{display:none}
+body.simple:not(.detail) .card .sendline .sendtools{display:none}
+body.simple:not(.detail) .card.menu-open .sendline .sendtools{display:inline-flex}
+body.simple:not(.detail) .card .sendline:not(:has(.sentb,.apb)){display:none}
+body.simple:not(.detail) .card.menu-open .sendline{display:flex}
+body.simple .cmore{font:inherit;font-size:18px;line-height:1;background:none;border:1px solid transparent;border-radius:6px;color:var(--muted);cursor:pointer;padding:0 6px 4px}
+body.simple .cmore:hover,body.simple .card.menu-open .cmore{border-color:var(--line);color:var(--ink)}
+body.simple.detail .cmore{display:none}
+body.simple:not(.detail) .card .line .k{min-width:52px}
+body.simple:not(.detail) .card{gap:8px}
+/* 6. drawer sections */
+body.simple .dsec{border-top:1px solid var(--line)}
+body.simple .dsec>h3{margin:0}
+body.simple .dtog{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;padding:12px 0;font:inherit;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+body.simple .dtog::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin-right:4px}
+body.simple .dsec.closed .dtog::after{transform:rotate(-45deg)}
+body.simple .dsec.closed>*:not(h3){display:none!important}
+body.simple .dsec>*:last-child{margin-bottom:12px}

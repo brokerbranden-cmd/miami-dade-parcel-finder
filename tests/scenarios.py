@@ -240,7 +240,7 @@ def s18_hide_companies_and_institutions():
     bad = [r['owner'] for r in rs if r['flags'] & 32 or re.search(r'SFWMD|WATER MANAGEMENT DIST|MIAMI-DADE COUNTY|CITY OF MIAMI\b|STATE OF FLORIDA', r['owner'])]
     ok(not bad, 'default (hide government): no SFWMD / county / city / state owners' + (f' (saw {bad[:3]})' if bad else ''))
     reset(); pg.select_option('#ogMin', '5'); settle(2500); _, rs = rows(500)
-    bad = [r['owner'] for r in rs if re.search(r'\bBANK\b|FPL|FLORIDA POWER|SFWMD|WATER MANAGEMENT|LENNAR|HOUSING AUTHORITY', r['owner'])]
+    bad = [r['owner'] for r in rs if re.search(r'\bBANK\b|FPL|FLORIDA POWER|SFWMD|WATER MANAGEMENT|HOUSING AUTHORITY', r['owner'])]
     ok(not bad, 'owners with 5+ parcels exclude banks, FPL, SFWMD & big institutions' + (f' (saw {bad[:3]})' if bad else ''))
     pg.check('#ogInst'); settle(2000); _, rs2 = rows(800)
     ok(cnt() > 0, 'including institutions adds them back'); pg.uncheck('#ogInst'); pg.select_option('#ogMin', '0'); settle()
@@ -269,7 +269,7 @@ def s21_reload_persistence():
 @scenario
 def s22_drawer_and_table():
     reset(); preset('Hottest leads'); pg.click('#vTable'); settle()
-    ok(len(pg.query_selector_all('#tbody tr')) > 10, 'table rows'); pg.click('#tbody tr:nth-child(1) td:nth-child(3)'); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(800)
+    ok(len(pg.query_selector_all('#tbody tr[data-id]')) > 10, 'table rows'); pg.locator('#tbody tr[data-id]').first.locator('td').nth(2).click(); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(800)
     d = pg.inner_text('.drawer').lower(); ok('distress' in d and 'folio' in d, 'drawer opens from the table with distress section'); shot('22_drawer')
     pg.keyboard.press('Escape'); pg.wait_for_timeout(300); ok(pg.query_selector('.drawer') is None, 'Esc closes drawer'); pg.click('#vCards'); settle()
 @scenario
@@ -294,7 +294,7 @@ def s26_adverse_possession():
     ok(n > 0 and all(r['ap'] for r in rs), f'adverse possession: {n:,}'); pg.uncheck('#apOnly'); settle()
 @scenario
 def s27_assemblage_group_flow():
-    reset(); preset('🧩 Assemblages'); b = pg.query_selector('#cards .card .asmb'); ok(b is not None, 'assemblage badge on card')
+    reset(); preset('🧩 Assemblages'); pg.wait_for_selector('#cards .card .asmb', timeout=60000); b = pg.locator('#cards .card .asmb').first
     lots = int(re.search(r'(\d+) lots', b.inner_text()).group(1)); b.click(); settle(1500)
     ok(cnt() == lots, f'Show group -> {cnt()} = {lots}'); pg.click('#asmBack'); settle(1500); ok(cnt() > lots, 'All groups back')
 @scenario

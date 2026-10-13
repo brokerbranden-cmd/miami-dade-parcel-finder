@@ -154,6 +154,7 @@ function zoneOf(p,i){ return ZREC?ZREC[p.c.mz[i]]:null; }
 function tdEval(p,i){ const c=p.c; return TD.evaluate({code:LU_CODE[c.landuse[i]],land:c.land[i],total:c.mkt[i],yb:c.yb[i],lot:c.lot[i],units:c.units[i],stories:c.stories[i],bldg:c.sqft[i]},zoneOf(p,i)||{},S.rules); }
 /* Assemblages (data/asm.json.gz, scripts/build_assemblages.py): adjoining parcels, same zoning, 2+ owners, each with a reason to sell.
    Loaded on demand (filter / preset / a few seconds after start for card badges); outlines (data/asm-polys.json.gz) only for the map. */
+const HIST={last:0,url:null,restoring:false};
 const ASM_VER='a2';
 let ASM=null, asmP=null; const APOLY=new Map(), apolyP=new Map();
 const gzJSON=async url=>{ const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); const u8=new Uint8Array(await r.arrayBuffer()); return JSON.parse(dec.decode(u8[0]===0x1f&&u8[1]===0x8b?await gunzip(u8):u8)); };
@@ -946,7 +947,10 @@ function writeHash(st){
     if(st.rules&&!RULE_KEYS.every(k=>st.rules[k]===TD.DEFAULT_RULES[k])) h.set('tdr',RULE_KEYS.map(k=>k==='enforce_min_lot'?(st.rules[k]?1:0):st.rules[k]).join(','));
     if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
     const str=h.toString(), want=str?'#'+str:'';
-    if(location.hash!==want) history.replaceState(null,'',want||(location.pathname+location.search));
+    // a new history entry once the search has been still for a moment (so Back undoes a filter step, not each keystroke)
+    if(location.hash!==want){ const now=Date.now(), push=!HIST.restoring && now-HIST.last>1200; HIST.last=now;
+      history[push?'pushState':'replaceState'](null,'',want||(location.pathname+location.search)); }
+    HIST.url=location.hash;
   }catch(e){}
 }
 function parseHash(){
@@ -1308,7 +1312,9 @@ function wire(){
   $('clrArea').onclick=()=>{ S.bbox=null; $('areaRow').hidden=true; clearIdea(); run(); };
   $('mapArea').onclick=()=>{ if(!LMAP) return; const b=LMAP.getBounds(); S.bbox=[+b.getSouth().toFixed(6),+b.getWest().toFixed(6),+b.getNorth().toFixed(6),+b.getEast().toFixed(6)]; $('areaRow').hidden=false; clearIdea(); MAP_NOFIT=true; run(); };
   $('mapFit').onclick=()=>fitResults(true);
-  window.addEventListener('hashchange',()=>{ const st=parseHash(); if(st){ applyState(st); ensureAsm().then(ensureCondo).then(ensureOg).then(run); } });
+  const fromUrl=()=>{ if(location.hash===HIST.url) return; HIST.url=location.hash; const st=parseHash()||{...BLANK(), view:S.view}; HIST.restoring=true; applyState(st); clearIdea();
+    ensureAsm().then(ensureCondo).then(ensureOg).then(()=>{ run(); HIST.restoring=false; HIST.last=Date.now(); }); };
+  window.addEventListener('hashchange',fromUrl); window.addEventListener('popstate',fromUrl);
   ['ogMin','ogDist','ogInst'].forEach(id=>$(id).addEventListener('change',async()=>{ clearIdea(); await ensureOg(); run(); }));
   $('clrOg').onclick=()=>{ S.ogf=''; S.og=0; renderOgRow(); clearIdea(); run(); };
   $('showMore').onclick=()=>renderResults(false);

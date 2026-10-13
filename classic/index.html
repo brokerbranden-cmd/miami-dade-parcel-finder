@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Prop Hunters · Miami-Dade Parcel Finder</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 20 20%22%3E%3Ccircle cx=%2210%22 cy=%2210%22 r=%227%22 fill=%22none%22 stroke=%22%23FC4C02%22 stroke-width=%222%22/%3E%3Cpath d=%22M10 0v5M10 15v5M0 10h5M15 10h5%22 stroke=%22%23FC4C02%22 stroke-width=%222%22/%3E%3C/svg%3E">
+<meta name="description" content="Search every property on the Miami-Dade Property Appraiser roll: vacant lots, teardowns, out-of-state owners, estates, small multifamily, city zoning codes and more.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="preload" href="../data/meta.json" as="fetch" crossorigin>
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="theme-color" content="#0C0E10">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parcel Finder">
+</head>
+<body><div style="background:#1f1f1f;color:#fff;font:13px system-ui;padding:6px 12px;text-align:center">Classic layout (saved v-classic-2026-10-12). <a style="color:#FC4C02" href="../">Back to the current version</a></div>
+<div class="wrap">
+  <header class="top">
+    <div><a class="brandbar" href="https://prop-hunters.com" target="_blank" rel="noopener" aria-label="Prop Hunters"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="#FC4C02" stroke-width="1.6"/><line x1="10" y1="0" x2="10" y2="5" stroke="#FC4C02" stroke-width="1.6"/><line x1="10" y1="15" x2="10" y2="20" stroke="#FC4C02" stroke-width="1.6"/><line x1="0" y1="10" x2="5" y2="10" stroke="#FC4C02" stroke-width="1.6"/><line x1="15" y1="10" x2="20" y2="10" stroke="#FC4C02" stroke-width="1.6"/></svg>Prop<span>Hunters</span></a>
+    <h1>Miami-Dade <span>Parcel Finder</span></h1></div>
+    <div class="src" id="srcLine">Every property on the Miami-Dade Property Appraiser roll, <b>updated <span id="srcDate">…</span></b>. <b id="srcCount">…</b> properties, farmland removed.</div>
+  </header>
+
+  <div class="stickybar" id="stickybar">
+    <div class="sb-count"><span class="sb-num" id="liveCount">–</span><span class="sb-lab">properties match</span><span class="on-count" id="onCount" hidden>0 filters on</span></div>
+    <div class="sb-act">
+      <button class="btn drivebtn" type="button" id="driveBtn" aria-pressed="false" title="Drive for dollars: map around your GPS location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span class="lbl">Drive</span></button>
+      <button class="btn lendersbtn" type="button" id="lendersBtn" aria-pressed="false" title="Lenders, deals and funding dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M17 6.5c-.8-1.5-2.7-2.5-5-2.5-2.8 0-5 1.5-5 3.6 0 4.9 10 2.6 10 7.4 0 2.1-2.2 3.5-5 3.5-2.4 0-4.4-1-5.2-2.7"/></svg><span class="lbl">Lenders</span> <span class="badge-n" id="lendersCount">0</span></button>
+      <button class="btn savedbtn" type="button" id="savedBtn" aria-pressed="false" aria-label="Saved properties" title="Show only your saved properties"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg><span class="lbl">Saved</span> <span class="badge-n" id="savedCount">0</span></button>
+      <button class="btn reset" type="button" id="resetBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>Clear all filters
+      </button>
+      <button class="btn primary" type="button" id="toResults">See results ↓</button>
+    </div>
+  </div>
+
+  <section class="panel" id="panel">
+    <div class="grp ideas">
+      <div class="grp-h"><h2>Start with an idea</h2><span class="hint">One tap sets the filters for you. Adjust anything after.</span></div>
+      <div class="chips" id="ideas"></div>
+    </div>
+
+    <div class="searchrow">
+      <div class="big">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+        <input type="search" id="q" placeholder="Search an address, owner name or folio number" autocomplete="off" aria-label="Search">
+      </div>
+      <select id="city" aria-label="City"><option value="">All cities</option></select>
+      <input type="text" id="zips" placeholder="ZIP codes" inputmode="numeric" aria-label="ZIP codes">
+    </div>
+    <div class="areachip" id="areaRow" hidden><span>Limited to an area you picked on the map</span><button class="clr" type="button" id="clrArea">Remove area</button></div>
+
+    <div class="grp distress">
+      <div class="grp-h"><h2>Distress signals</h2><span class="hint">Foreclosures, tax deeds, unpaid taxes, code cases, liens and probate matched to each folio. Pick signals to see parcels with any of them. <span id="dsSrc"></span></span><button class="clr" type="button" id="clrDs">Clear</button></div>
+      <div class="dsrow"><div class="chips" id="dsigs"></div>
+        <label class="dsmin">Min score <select id="dsMin" aria-label="Minimum distress score"></select></label></div>
+    </div>
+
+    <div class="grp permits">
+      <div class="grp-h"><h2>Permits &amp; code cases</h2><span class="hint">Building permit history and city / county code cases matched to each folio. Pick any to see parcels with at least one. “No permit” is only used for cities whose permit history is public and 5+ years long. <span id="pcSrc"></span></span><button class="clr" type="button" id="clrPc">Clear</button></div>
+      <div class="chips" id="pcsigs"></div>
+      <details class="pccov"><summary>Permit &amp; code data coverage by city</summary><div id="pcCov"></div></details>
+    </div>
+
+    <div class="grp vacancy">
+      <div class="grp-h"><h2>Vacancy &amp; condition</h2><span class="hint">A "likely vacant / neglected" hint built only from public records: homestead and mailing address, neglect code cases, unsafe structures, expired or missing permits, tax delinquency and values. No utility data is published, so none is used. <span id="vsSrc"></span></span><button class="clr" type="button" id="clrVs">Clear</button></div>
+      <div class="dsrow"><div class="chips" id="vsigs"></div>
+        <label class="dsmin">Vacancy hint <select id="vsMin" aria-label="Minimum vacancy hint score"></select></label></div>
+      <label class="check"><input type="checkbox" id="vsMine"> Only saved properties I marked "looks vacant / damaged"</label>
+    </div>
+
+    <div class="grp">
+      <div class="grp-h"><h2>What's on the property</h2><span class="hint">Pick one or more. Condo units are only searched when you pick Condo units.</span><button class="clr" type="button" id="clrType">Clear</button></div>
+      <div class="chips" id="types"></div>
+    </div>
+
+    <div class="grp">
+      <div class="grp-h"><h2>City zoning code</h2><span class="hint">The actual code from the city or county zoning map. Type one or more codes; "T6" also finds T6-8-O, T6-36A-L and so on.</span><button class="clr" type="button" id="clrMz">Clear</button></div>
+      <input type="search" id="mzq" placeholder="e.g. T4, T5-O, RU-2, BU-1A" autocomplete="off" aria-label="City zoning codes" style="max-width: 420px;">
+      <div class="mzrow"><span class="mzlab">Miami 21</span><div class="chips" id="mzMiami"></div></div>
+      <div class="mzrow"><span class="mzlab">County</span><div class="chips" id="mzCounty"></div></div>
+      <div class="mzcities" id="mzCities" aria-label="Zoning codes by city"></div>
+    </div>
+
+    <div class="grp">
+      <div class="grp-h"><h2>Zoning type</h2><span class="hint">Plain-language groups that work the same in every city.</span><button class="clr" type="button" id="clrZone">Clear</button></div>
+      <div class="chips" id="zones"></div>
+      <div class="chips lotz" id="lotz" role="group" aria-label="Lot compared with the zone minimum"></div>
+      <span class="note" id="lotzNote"></span>
+    </div>
+
+    <div class="grp asm" id="asmGrp">
+      <div class="grp-h"><h2>Assemblages</h2><button type="button" class="clr" id="clrAsm">Clear</button></div>
+      <p class="note">Adjoining parcels in the same zoning, held by 2+ different owners, each with a reason to sell. Combine them into one bigger site.</p>
+      <div class="chips"><button type="button" class="chip" id="asmOn" aria-pressed="false">Assemblage parcels <span class="n" id="asmN"></span></button></div>
+      <label class="check"><input type="checkbox" id="asmUp"> Only groups with a combined-site upside</label>
+      <div class="asmrow" id="asmRow" hidden><span id="asmLabel"></span> <button type="button" class="clr" id="asmBack">All groups</button></div>
+      <span class="note" id="asmSrc"></span>
+    </div>
+    <div class="grp teardown" id="tdGrp">
+      <div class="grp-h"><h2>Teardown</h2><span class="hint">Target use (single family or 2–9 units), land is most of the value, old building. <b>Strong</b> = the lot meets the zone minimum and zoning allows 3× the units (or 3× the floor area by FAR, or 3× the stories). Every number below is yours to change. <span id="tdSrc"></span></span><button class="clr" type="button" id="clrTd">Clear</button></div>
+      <div class="seg tier" role="group" aria-label="Teardown tier" id="tierSeg"><button type="button" data-tier="any" class="on">Any</button><button type="button" data-tier="basic">Teardown (basic) <span class="n" id="tcBasic">–</span></button><button type="button" data-tier="strong">Strong teardown <span class="n" id="tcStrong">–</span></button></div>
+      <div class="tdrules" id="tdRules">
+        <label>Min land share <span class="u"><input type="text" inputmode="decimal" id="td_land" aria-label="Minimum land share percent"> % of total value</span></label>
+        <label>Max year built <span class="u"><input type="text" inputmode="numeric" id="td_yb" aria-label="Maximum year built"> built in or before</span></label>
+        <label>Min unit multiple <span class="u"><input type="text" inputmode="decimal" id="td_um" aria-label="Minimum unit multiple"> × existing units</span></label>
+        <label>Min sq ft multiple <span class="u"><input type="text" inputmode="decimal" id="td_qm" aria-label="Minimum square foot multiple"> × building (if no density)</span></label>
+        <label>Min story multiple <span class="u"><input type="text" inputmode="decimal" id="td_sm" aria-label="Minimum story multiple"> × stories (if neither)</span></label>
+        <label>Lot split at <span class="u"><input type="text" inputmode="decimal" id="td_split" aria-label="Lot split factor"> × zone min lot</span></label>
+        <label class="check"><input type="checkbox" id="td_minlot"> Lot under the zone minimum can't be strong</label>
+        <button class="btn sm" type="button" id="tdReset">Reset to defaults</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="grp-h"><h2>Who owns it</h2><span class="hint">Sorted by the owner's name. Companies &amp; organizations include LLCs, corporations, LPs, banks and lenders, utilities, associations, churches, schools and other non-government organizations. Government owners (counties, cities, water-management and other districts, authorities, school boards, state and federal) have their own filter.</span></div>
+      <div class="seg owners" role="group" aria-label="Owner type" id="ownerKind"></div>
+      <div class="ogrow">
+        <label class="ogsel" for="ogMin">Owner holds <select id="ogMin"><option value="0">any number of</option><option value="2">2+</option><option value="3">3+</option><option value="5">5+</option><option value="10">10+</option><option value="25">25+</option></select> properties</label>
+        <label class="check"><input type="checkbox" id="ogDist"> Owner has 2+ distressed parcels</label>
+        <label class="check"><input type="checkbox" id="ogInst"> Include banks, government &amp; big institutions</label>
+      </div>
+      <span class="note" id="ogSrc"></span>
+      <div class="areachip" id="ogRow" hidden><span id="ogLabel"></span><button class="clr" type="button" id="clrOg">Remove</button></div>
+    </div>
+
+    <div class="row2">
+      <div class="grp">
+        <div class="grp-h"><h2>Lot size</h2><span class="hint">1 acre = 43,560 sq ft</span></div>
+        <div class="chips" id="lotChips"></div>
+        <div class="range"><input type="text" inputmode="decimal" id="lotMin" placeholder="Min sq ft" aria-label="Minimum lot sq ft"><span>to</span><input type="text" inputmode="decimal" id="lotMax" placeholder="Max sq ft" aria-label="Maximum lot sq ft"></div>
+      </div>
+      <div class="grp">
+        <div class="grp-h"><h2>Market value</h2><span class="hint">Property Appraiser's 2026 value. Type 500k or 1.2m.</span></div>
+        <div class="range"><input type="text" inputmode="decimal" id="mvMin" placeholder="No min" aria-label="Minimum value"><span>to</span><input type="text" inputmode="decimal" id="mvMax" placeholder="No max" aria-label="Maximum value"></div>
+        <label class="check"><input type="checkbox" id="hideGov" checked=""> Hide government-owned property</label>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="grp">
+        <div class="grp-h"><h2>Construction</h2><span class="hint">Main building, from the Property Appraiser's building details. Pick one or more. Unknown = no building data or not recorded. <span id="cnSrc"></span></span><button class="clr" type="button" id="clrCn">Clear</button></div>
+        <div class="chips" id="cnChips"></div>
+      </div>
+      <div class="grp">
+        <div class="grp-h"><h2>Title flags</h2><span class="hint">Adverse possession: a claim (F.S. 95.18, DR-452) noted in the Property Appraiser's legal description.</span></div>
+        <label class="check"><input type="checkbox" id="apOnly"> Adverse possession claim <span class="n" id="apCount"></span></label>
+      </div>
+    </div>
+
+    <div class="grp sendto" id="sendGrp">
+      <div class="grp-h"><h2>Send to</h2><span class="hint">Tag properties on a card for the call center or the door knocker. Tags are saved in this browser. Export builds the list (only parcels not already sent to that team), then you can mark them as sent so they are not exported twice.</span><button class="clr" type="button" id="clrSend">Clear</button></div>
+      <div class="chips" id="sendChips"></div>
+      <div class="sendrow">
+        <div class="sendbox"><button class="btn" type="button" id="sendExp-cc">Export call center list</button><input type="text" id="listName-cc" aria-label="Call center list name" placeholder="List name"><span class="note" id="sendInfo-cc"></span></div>
+        <div class="sendbox"><button class="btn" type="button" id="sendExp-dk">Export door knock list</button><input type="text" id="listName-dk" aria-label="Door knock list name" placeholder="List name"><span class="note" id="sendInfo-dk"></span></div>
+      </div>
+      <div class="sendbar" id="sendBar" hidden></div>
+    </div>
+
+    <details class="more" id="moreBox" open="">
+      <summary>More filters <span class="badge-n" id="advCount" hidden="">0 on</span></summary>
+      <div class="adv">
+        <div class="field"><span class="lab">Owner</span>
+          <div class="owner-grid" id="ownerGrid"></div>
+          <span class="note">Owner types are guessed from names and mailing addresses.</span>
+        </div>
+        <div class="grp" style="gap:14px">
+          <div class="field"><label for="hdMin">Years since last sale</label>
+            <div class="range"><input type="number" id="hdMin" placeholder="Min" min="0"><span>to</span><input type="number" id="hdMax" placeholder="Max" min="0"></div>
+            <span class="note">Properties with no sale on record count as owned 50+ years.</span></div>
+          <div class="field"><label for="spMin">Last sale price ($)</label>
+            <div class="range"><input type="text" inputmode="decimal" id="spMin" placeholder="Min" min="0"><span>to</span><input type="text" inputmode="decimal" id="spMax" placeholder="Max" min="0"></div></div>
+          <label class="check"><input type="checkbox" id="qualOnly"> Only real market sales (skip $100 transfers)</label>
+        </div>
+        <div class="grp" style="gap:14px">
+          <div class="field"><label for="ybMin">Year built</label>
+            <div class="range"><input type="number" id="ybMin" placeholder="From" min="1800"><span>to</span><input type="number" id="ybMax" placeholder="To" min="1800"></div></div>
+          <div class="field"><label for="sfMin">Building size (living sq ft)</label>
+            <div class="range"><input type="text" inputmode="decimal" id="sfMin" placeholder="Min" min="0"><span>to</span><input type="text" inputmode="decimal" id="sfMax" placeholder="Max" min="0"></div></div>
+          <label class="check"><input type="checkbox" id="noBldg"> Only land with no building</label>
+        </div>
+        <div class="grp" style="gap:14px">
+          <div class="field"><label for="unMin">Number of units</label>
+            <div class="range"><input type="number" id="unMin" placeholder="Min" min="0"><span>to</span><input type="number" id="unMax" placeholder="Max" min="0"></div></div>
+          <div class="range" style="grid-template-columns:1fr 1fr">
+            <div class="field"><label for="bdMin">Bedrooms, at least</label><input type="number" id="bdMin" min="0"></div>
+            <div class="field"><label for="stMax">Stories, at most</label><input type="number" id="stMax" min="0"></div>
+          </div>
+          <div class="field"><label for="lsMin">Land as % of total value</label>
+            <div class="range"><input type="number" id="lsMin" placeholder="Min %" min="0" max="100"><span>to</span><input type="number" id="lsMax" placeholder="Max %" min="0" max="100"></div>
+            <span class="note">80% or more usually means the building adds little value (teardown).</span></div>
+        </div>
+        <div class="grp" style="gap:14px">
+          <div class="field"><label for="cra">Redevelopment area (CRA)</label><select id="cra"><option value="">Any</option></select></div>
+          <div class="field"><label for="qScope">Search box looks in</label>
+            <select id="qScope"><option value="ao">Address and owner name</option><option value="mail">Owner mailing address</option><option value="legal">Legal description</option></select></div>
+        </div>
+        <div class="field"><span class="lab">Exact zoning codes</span>
+          <input type="search" id="zoningFind" placeholder="Find a code, e.g. 3800" autocomplete="off">
+          <div class="facet-list" id="zoningList"></div></div>
+        <div class="field"><span class="lab">Exact land use codes</span>
+          <input type="search" id="landuseFind" placeholder="Find a code or word" autocomplete="off">
+          <div class="facet-list" id="landuseList"></div></div>
+      </div>
+    </details>
+  </section>
+
+  <div class="loadbox" id="loadbox">
+    <strong id="loadMsg">Loading properties…</strong>
+    <div class="note" id="loadSub">Starting…</div>
+    <div class="bar"><i id="loadBar"></i></div>
+  </div>
+
+  <section id="results" hidden>
+    <div class="savedbar" id="savedBar" hidden>
+      <div class="sv-h"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg>Saved properties</h2><span class="note" id="svInfo"></span><span class="hint">Search filters are paused while your saved list is showing.</span></div>
+      <div class="chips" id="svStatus" role="group" aria-label="Filter saved by status"></div>
+      <div class="sv-act">
+        <button class="btn" type="button" id="svExportJson" title="Download your saved list with notes and statuses (to move it to another browser)">Export saved (JSON)</button>
+        <button class="btn" type="button" id="svExportCsv">Export saved (CSV)</button>
+        <label class="btn" for="svImport" tabindex="0" role="button" id="svImportLbl" title="Merge a saved-list JSON file from another browser">Import saved (JSON)</label><input type="file" id="svImport" accept=".json,application/json" class="sr">
+        <button class="btn" type="button" id="svBack">Back to search</button>
+      </div>
+      <p class="note">Your saved list lives in this browser only. Use Export / Import to move it between computers; importing merges by folio and keeps the most recent edit.</p>
+    </div>
+    <div class="resbar">
+      <div>
+        <div class="count"><span id="sCount">–</span><small>properties match</small></div>
+        <div class="summary" id="summary"></div>
+      </div>
+      <div class="actions">
+        <select id="sortSel" aria-label="Sort by"></select>
+        <div class="seg" role="group" aria-label="View"><button type="button" id="vCards" class="on">Cards</button><button type="button" id="vTable">Table</button><button type="button" id="vMap">Map</button></div>
+        <button class="btn" id="copyBtn" type="button">Copy folios</button>
+        <button class="btn" id="linkBtn" type="button" title="Copy a link that reopens this exact search">Copy link</button>
+        <button class="btn primary" id="exportBtn" type="button">Export CSV</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="cards" id="cards"></div>
+  <div class="more-row" id="moreRow"><button class="btn" type="button" id="showMore">Show more (15,095 left)</button></div>
+  <div class="tablebox" id="tablebox" hidden="">
+    <div class="scroller" id="scroller"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
+  </div>
+  <div class="mapbox" id="mapbox" hidden>
+    <div id="map" aria-label="Map of matching properties"></div>
+    <div class="maptools">
+      <button class="btn" type="button" id="mapArea">Search this map area</button>
+      <button class="btn" type="button" id="mapFit">Zoom to results</button>
+      <select id="mapColor" aria-label="Color dots by"><option value="type">Color: property type</option><option value="score">Color: distress score</option></select>
+    </div>
+    <div class="maplegend" id="mapLegend"></div>
+    <div class="maphint" id="mapHint"></div>
+  </div>
+  <div class="empty" id="empty" hidden="">Nothing matches all of these filters. Try removing one, or tap <b>Start over</b>.</div>
+  <p class="foot" id="foot" hidden>Tap any property for the full record, a link to its Property Appraiser page and Google Maps. <b>City zoning</b> is the code from the county's municipal and unincorporated zoning maps at the parcel's location point; <b>zoning type</b> comes from the Property Appraiser's zoning category. Both can lag recent rezonings, so confirm with the city before you plan around it. Data: Miami-Dade County GIS and Property Appraiser public records. <span id="footData"></span></p>
+</div>
+<div id="drawerHost"></div>
+
+<div class="drive" id="drive" hidden role="region" aria-label="Drive for dollars map">
+  <div class="dtop"><span class="dbrand"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="#FC4C02" stroke-width="1.8"/><path d="M10 0v5M10 15v5M0 10h5M15 10h5" stroke="#FC4C02" stroke-width="1.8"/></svg>Drive</span>
+    <span class="dgps" id="dGps" role="status" aria-live="polite">GPS off</span>
+    <button type="button" class="dbtn dexit" id="dExit">List &amp; filters</button></div>
+  <div id="dmap" class="dmap"></div>
+  <div class="dhint" id="dHint" hidden></div>
+  <div class="dlegend" aria-hidden="true"><span><i style="background:var(--s0)"></i>none</span><span><i style="background:var(--s2)"></i>20+</span><span><i style="background:var(--s3)"></i>35+</span><span><i style="background:var(--s4)"></i>50+</span><span><i class="ring"></i>saved</span></div>
+  <button type="button" class="dbtn dlocate on" id="dLocate" aria-label="Center on my location">◎</button>
+  <button type="button" class="dbtn dhere" id="dHere">📍 Save where I am</button>
+  <div class="dsheet" id="dSheet" hidden></div>
+</div>
+<div class="lpage" id="lendersPage" hidden role="region" aria-label="Lenders and funding">
+  <div class="lp-wrap">
+    <div class="lp-head"><div><span class="lp-kicker">Prop Hunters</span><h1>Lenders <span>&amp; funding</span></h1></div>
+      <button type="button" class="btn" id="lpClose">← Back to properties</button></div>
+    <p class="lp-priv">🔒 Lenders and deals are stored only in this browser (nothing is uploaded). Use Export to back up or move them to another device. Login and cloud sync (Supabase) are planned for later.</p>
+    <div class="lp-bar"><div class="lptabs" id="lpTabs" role="tablist"></div>
+      <div class="lp-io"><button type="button" class="btn sm" id="lpExportJson">Export JSON</button><button type="button" class="btn sm" id="lpExportLCsv">Lenders CSV</button><button type="button" class="btn sm" id="lpExportDCsv">Deals CSV</button>
+        <label class="btn sm" id="lpImportLbl" tabindex="0" role="button">Import JSON / CSV<input type="file" id="lpImport" accept=".json,.csv,application/json,text/csv" hidden></label></div></div>
+    <div id="lpBody"></div>
+  </div>
+  <dialog id="lpDialog" class="lpdialog" aria-label="Lender or deal form"></dialog>
+</div>
+<script src="saved.js"></script>
+<script src="lenders.js"></script>
+<script src="teardown.js"></script>
+<script src="app.js"></script>
+<script src="drive.js"></script>
+<script src="lenders-page.js"></script>
+</body>
+</html>

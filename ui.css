@@ -83,3 +83,4 @@ body.simple .dsec>*:last-child{margin-bottom:12px}
 .cpline .v b{color:var(--ink)}
 .cpt td,.cpt th{font-size:12px;padding:3px 6px;white-space:nowrap}
 .dlist.clerk{margin-top:6px}
+body.simple:not(.detail) .card .uline{display:none} /* compact cards: the type tag already says the use; full use in Detailed cards + drawer */

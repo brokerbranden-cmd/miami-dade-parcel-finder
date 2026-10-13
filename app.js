@@ -612,7 +612,7 @@ function cardHTML(id){
       <div><div class="k">Value</div><div class="v">${mv?money(mv):'–'}</div><div class="s">${mv&&c.land[i]?Math.round(c.land[i]/mv*100)+'% is land':'&nbsp;'}</div></div>
     </div>
     <div class="line"><span class="k">Zoning</span><span class="v" title="${esc(zn)}">${mzHTML(c.mz[i]) || esc(nice(zn)||'Not listed')}</span></div>
-    <div class="line"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
+    <div class="line uline"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
     ${upLine(p,i)}

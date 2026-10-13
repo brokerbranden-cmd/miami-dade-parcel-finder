@@ -380,3 +380,26 @@ The score starts from the sell signals (number of owners, strong teardowns, esta
 - **Boosted:** urban residential infill. Single-family zoning gets +12, townhouse +15, and duplex, multifamily or mixed zoning +18. Groups whose median lot is ≤10,000 sf get another +8, and another +5 if it is ≤7,500 sf. Infill groups that clear the zone minimum or add units get +8.
 - **Penalized:** agricultural groups (AU/GU zoning, appraiser zoning 9000, or mostly ag/acreage land use) get −45. Civic/parks/special, interim, PUD or unclassified zoning gets −30. Combined sites over 2 acres get −45, and over 5 acres −70.
 - Scores are clamped to 1–100. Ties are broken by the unclamped score, then unit gain, then the smaller site.
+
+## Simplified layout (Oct 2026) and the classic version
+
+`ui.js` + `ui.css` give a results-first layout. They're presentation only, and every control is still the same element:
+- **Desktop:** filters sit in a sticky left sidebar. **Phone:** they open from a **Filters** button as a bottom sheet.
+- Filter groups collapse. Each one shows an orange badge with its number of active filters and remembers whether you left it open.
+- 8 presets are shown up front; **More ideas** lists the rest by strategy.
+- All chips use one neutral style, with brand orange only when selected.
+- Compact cards show 3 labels plus **+N**, with Call center / Door knock behind **⋯**. **Detailed cards** shows everything.
+- The property drawer opens with the overview, property facts, values and owner. The other sections are collapsible.
+- Preferences are stored in localStorage `pf.ui.v1`.
+
+**Classic version:** the previous layout is saved as the git tag `v-classic-2026-10-12` and the branch `classic-ui`. A working copy runs at `/classic/` (rebuild it with `scripts/make_classic.sh`). It uses the live `data/`, so nothing is duplicated.
+
+To roll the main site back:
+
+    git checkout main && git revert --no-edit <first-simplify-commit>^..HEAD   # or:
+    git checkout v-classic-2026-10-12 -- index.html app.js styles.css sw.js && git rm ui.js ui.css && git commit -m "Restore classic UI" && git push
+
+Tests:
+- `tests/e2e_simplified.py URL [desktop|mobile]` covers the new UI.
+- The older suites import `tests/legacy_ui.py`, which runs the UI with everything expanded.
+- `tests/scenarios.py` runs in the default (simplified) mode.

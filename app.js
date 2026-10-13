@@ -1359,7 +1359,12 @@ async function boot(){
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');
     /* small internal API for drive.js / lenders.js (same page, nothing leaves the browser) */
     window.PF={META,D,PACKS,P,I,getStr,LU_T,TYPE_LABEL,SV,esc,money,fmt,dollars,dateStr,monYr,folioFmt,today,toast,savedInfo,loadGeo,loadLeaflet,openDrawer,scoreBadge,vacBadge,sigBadges,ensureSavedPacks,savedIdx,stKey,svDate,download,stamp,csvq,
-      setSaved:on=>{ S.saved=!!on; run(); }, rerun:()=>run()};
+      setSaved:on=>{ S.saved=!!on; run(); }, rerun:()=>run(),
+      // test hook: total + an evenly spaced sample of the current results with the raw fields filters use
+      sample:(k=300)=>{ const n=results.length, out=[], step=Math.max(1,Math.floor(n/k)); for(let j=0;j<n&&out.length<k;j+=step){ const id=results[j], p=P(id), i=I(id), c=p.c, mz=D.mzone[c.mz[i]]||[], g=asmOf(p,i);
+        out.push({folio:getStr(p,'folio',i), owner:getStr(p,'owner',i), addr:getStr(p,'addr',i), city:D.city[c.city[i]], zip:D.zip[c.zip[i]], lu:D.landuse[c.landuse[i]], type:LU_T[c.landuse[i]], mzCode:mz[0]||'', mzJur:mz[1]||'',
+          mkt:c.mkt[i], land:c.land[i], lot:c.lot[i], yb:c.yb[i], units:c.units[i], flags:c.flags[i], dsig:c.dsig[i], dscore:c.dscore[i], sd1:c.sd1[i], sale1:c.sale1[i], og:c.og[i],
+          tier:p.td?p.td.tier[i]:null, ap:p.ap?p.ap[i]:0, asm:g?{id:g.id,upside:g.upside,muni:g.muni}:null}); } return {n, rows:out, dbit:DBIT, sort:S.sort}; }};
     document.dispatchEvent(new Event('pf:ready')); window.PF_READY=true;
     if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{});
     IDB.prune(META.ver);

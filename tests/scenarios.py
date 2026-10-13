@@ -31,6 +31,7 @@ def reset():
     if pg.query_selector('#lendersPage:not([hidden])'): pg.click('#lpClose')
     if pg.query_selector('#savedBar:not([hidden])'): pg.click('#svBack'); settle(600)
     if not pg.is_disabled('#resetBtn'): pg.click('#resetBtn')
+    if 'on' not in (pg.get_attribute('#vCards', 'class') or ''): pg.click('#vCards')
     settle(1000)
 def sample(k=300): return pg.evaluate(f'PF.sample({k})')
 def bit(s, sig): return (s['dsig'] >> s['_dbit'][sig]) & 1
@@ -262,7 +263,7 @@ def s20_back_forward():
 @scenario
 def s21_reload_persistence():
     reset(); go('type=mf29&city=Miami&sort=mv_a&view=table'); n = cnt()
-    go('', reload=False); pg.reload(); boot(); settle(1500)
+    pg.reload(); boot(); settle(1500)
     ok(cnt() == n and pg.input_value('#sortSel') == 'mv_a', f'reload with link keeps {n:,} and sort')
     pg.goto(BASE, timeout=180000); boot(); settle(1500)
     ok(cnt() == n, f'reopening the site with no link restores the last search ({cnt():,})')
@@ -318,6 +319,12 @@ def s31_vacancy_signals():
 def s32_mobile_or_desktop_layout():
     reset(); w = pg.evaluate('document.documentElement.scrollWidth'); vw = pg.evaluate('innerWidth')
     ok(w <= vw + 1, f'no horizontal scroll ({w} <= {vw})'); shot('32_layout')
+@scenario
+def s32b_no_float_noise():
+    reset(); preset('Houses on multifamily land'); txt = pg.inner_text('#cards')
+    bad = re.findall(r'\d\.\d{4,}', txt); ok(not bad, 'card numbers are rounded' + (f' (saw {bad[:3]})' if bad else ''))
+    pg.click('#cards .card', position={'x': 8, 'y': 8}); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(1200)
+    bad = re.findall(r'\d\.\d{4,}', pg.inner_text('.drawer')); ok(not bad, 'drawer numbers are rounded' + (f' (saw {bad[:3]})' if bad else '')); pg.keyboard.press('Escape')
 @scenario
 def s33_no_console_errors():
     ok(not errs, 'no console errors / page errors during the whole run' + (f': {errs[:3]}' if errs else ''))

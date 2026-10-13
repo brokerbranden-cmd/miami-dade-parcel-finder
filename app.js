@@ -564,7 +564,7 @@ function cardHTML(id){
   </article>`;
 }
 function tdTag(p,i){ const t=p.td?p.td.tier[i]:0; return t===2?'<span class="tt tds" title="Strong teardown under your rule">Strong teardown</span>':t===1?'<span class="tt tdb" title="Teardown (basic) under your rule">Teardown</span>':''; }
-function upLine(p,i){ const t=p.td; if(!t) return ''; const b=[]; const al=t.al[i], um=t.um[i], qm=t.qm[i], sp=t.split[i];
+function upLine(p,i){ const t=p.td; if(!t) return ''; const b=[]; const r1=v=>Math.round(v*10)/10, al=t.al[i], um=r1(t.um[i]), qm=r1(t.qm[i]), sp=t.split[i];
   if(al===al) b.push(`<b>${fmt.format(al)}</b> units allowed${um===um?` (${um}×)`:''}`); else if(qm===qm) b.push(`buildable <b>${qm}×</b> the building`);
   if(t.below[i]===1) b.push('<span class="warmt">lot under zone min</span>'); else if(sp===1) b.push('<span class="okt">could be split</span>');
   return b.length?`<div class="line"><span class="k">Upside</span><span class="v">${b.join(' · ')}</span></div>`:''; }
@@ -907,7 +907,7 @@ function buildCSV(ids=results,extra){
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
 }
 function tdCSV(p,i){ const z=zoneOf(p,i)||{}, t=p.td, ev=tdEval(p,i), f=getStr(p,'folio',i), nn=v=>v===v&&v!=null?v:'';
-  return [ev.strong?'Strong':ev.basic?'Teardown':'',csvq(ev.reasons.join('; ')),z.min_lot_sf||'',z.upa||'',z.stories||'',z.far||'',t?nn(t.al[i]):'',t?nn(t.um[i]):'',t?nn(t.qm[i]):'',t&&t.below[i]>=0?(t.below[i]?'Under':'Meets'):'',t&&t.split[i]===1?'Y':'',p.cn&&EX?csvq(CN_LABEL[p.cn[i]]):'',p.ap&&p.ap[i]?'Y':'',isTagged(f,'cc')?'Y':'',isTagged(f,'dk')?'Y':'',...asmCSV(p,i)]; }
+  return [ev.strong?'Strong':ev.basic?'Teardown':'',csvq(ev.reasons.join('; ')),z.min_lot_sf||'',z.upa||'',z.stories||'',z.far||'',t?nn(t.al[i]):'',t?nn(Math.round(t.um[i]*10)/10):'',t?nn(Math.round(t.qm[i]*10)/10):'',t&&t.below[i]>=0?(t.below[i]?'Under':'Meets'):'',t&&t.split[i]===1?'Y':'',p.cn&&EX?csvq(CN_LABEL[p.cn[i]]):'',p.ap&&p.ap[i]?'Y':'',isTagged(f,'cc')?'Y':'',isTagged(f,'dk')?'Y':'',...asmCSV(p,i)]; }
 function asmCSV(p,i){ const g=asmOf(p,i); return g?[g.id,g.score,g.mem.length,g.owners,g.lot,g.units==null?'':g.units,g.gain,g.upside?'Y':'',csvq(asmReason(g))]:['','','','','','','','','']; }
 $('exportBtn').onclick=async()=>{ if(results.length) return exportIds(results,S.saved?'saved':S.ogf?'owner':'properties',$('exportBtn'));
   if(!results.length){ toast('Nothing to export yet.'); return; }

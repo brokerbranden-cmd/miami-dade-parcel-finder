@@ -112,7 +112,7 @@ with sync_playwright() as pw:
     ok(apn > 50 and cnt(pg) == apn and 'Adverse possession' in pg.inner_text('#cards .card'), f'adverse possession {apn} == results')
     pg.uncheck('#apOnly'); wait(pg, 1200)
     # ---- presets ----
-    names = pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent)')
+    names = pg.eval_on_selector_all('#ideas .chip[data-i]', 'e=>e.sort((a,b)=>a.dataset.i-b.dataset.i).map(x=>x.textContent)')
     ok(any('Strong teardowns' in n for n in names) and any('could be split' in n for n in names), 'new presets present')
     i = [k for k, n in enumerate(names) if 'Strong teardowns' in n][0]
     pg.click(f'#ideas .chip[data-i="{i}"]'); wait(pg, 1500)

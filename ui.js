@@ -84,7 +84,7 @@
     if(!e.target.closest('.sendline')) document.querySelectorAll('.card.menu-open').forEach(x=>x.classList.remove('menu-open')); },true);
 
   /* ---- drawer: overview first, other sections collapsible ---- */
-  const DOPEN=new Set(['the property']);
+  const DOPEN=new Set(['the property','owner']);
   function sectionDrawer(d){
     if(d.dataset.sx) return; d.dataset.sx='1';
     const kids=[...d.children]; let sec=null, secs=[];
@@ -112,7 +112,7 @@
     window.addEventListener('hashchange',()=>{ first=true; sched(); });
     $('resetBtn').addEventListener('click',()=>setTimeout(sched,200));
     const cards=$('cards'); compactCards(cards); new MutationObserver(()=>compactCards(cards)).observe(cards,{childList:true});
-    const dh=$('drawerHost'); new MutationObserver(()=>{ const d=dh.querySelector('aside.drawer'); if(d) sectionDrawer(d); }).observe(dh,{childList:true});
+    const dh=$('drawerHost'); new MutationObserver(()=>{ const d=dh.querySelector('aside.drawer:not(.ogdrawer)'); if(d) sectionDrawer(d); }).observe(dh,{childList:true});
     window.PFUI={prefs:P, setOpen:(k,o)=>{ const g=groups.find(x=>x.dataset.g===k.toLowerCase()); if(g) setOpen(g,o); }, refresh:refreshBadges};
   }
   if(window.PF_READY) init(); else document.addEventListener('pf:ready',init,{once:true});

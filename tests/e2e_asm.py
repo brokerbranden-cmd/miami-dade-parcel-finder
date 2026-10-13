@@ -80,7 +80,7 @@ with sync_playwright() as pw:
     ok(all(r['Assemblage Group'] and r['Assemblage Upside'] == 'Y' and int(r['Assemblage Parcels']) >= 2 and 'owners' in r['Assemblage Reason'] for r in rows[:200]), 'CSV assemblage columns filled')
     # presets + hash reload
     pg.click('#resetBtn'); pg.wait_for_timeout(1000)
-    names = pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent)')
+    names = pg.eval_on_selector_all('#ideas .chip[data-i]', 'e=>e.sort((a,b)=>a.dataset.i-b.dataset.i).map(x=>x.textContent)')
     i = next(k for k, x in enumerate(names) if 'Assemblages with' in x); pg.click(f'#ideas .chip[data-i="{i}"]', force=True); pg.wait_for_timeout(1500)
     ok(cnt(pg) == n_up, f'preset Assemblages with upside -> {cnt(pg)}')
     i = next(k for k, x in enumerate(names) if x.strip().endswith('Assemblages')); pg.click(f'#ideas .chip[data-i="{i}"]', force=True); pg.wait_for_timeout(1500)

@@ -19,7 +19,7 @@ with sync_playwright() as pw:
     page.evaluate("document.getElementById('results').scrollIntoView()"); time.sleep(0.5)
     page.screenshot(path=SHOTS + '02_cards.png')
     page.evaluate("window.scrollTo(0,0)")
-    ideas = page.query_selector_all('#ideas .chip')
+    ideas = page.query_selector_all('#ideas .chip[data-i]')
     for k in range(len(ideas)):
         page.click(f'#ideas .chip[data-i="{k}"]'); page.wait_for_timeout(1200)
         print('preset', page.inner_text(f'#ideas .chip[data-i="{k}"]'), '->', page.inner_text('#sCount'), '| first card:', (page.inner_text('#cards .card h3') if page.query_selector('#cards .card h3') else '-'))

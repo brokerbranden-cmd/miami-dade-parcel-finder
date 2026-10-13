@@ -38,7 +38,7 @@ def bit(s, sig): return (s['dsig'] >> s['_dbit'][sig]) & 1
 def rows(k=300):
     s = sample(k); [r.__setitem__('_dbit', s['dbit']) for r in s['rows']]; return s['n'], s['rows']
 def preset(name_part):
-    names = pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent.trim())')
+    names = pg.eval_on_selector_all('#ideas .chip[data-i]', 'e=>e.sort((a,b)=>a.dataset.i-b.dataset.i).map(x=>x.textContent.trim())')
     i = next(k for k, x in enumerate(names) if name_part.lower() in x.lower())
     click(f'#ideas .chip[data-i="{i}"]', force=True); settle(1500); return names[i]
 def money(sel, v):
@@ -51,12 +51,14 @@ def shot(n):
 
 # ---- simplified UI: reveal a control like a user would (open the phone filter sheet, expand its group,
 #      open "More ideas", or open a card's ⋯ menu) before using it
-REVEAL_JS = """s=>{ const e=document.querySelector(s); if(!e) return null; const card=e.closest('.card'), g=e.closest('.cgrp.closed'), m=e.closest('#ideasMore');
+REVEAL_JS = """s=>{ const e=document.querySelector(s); if(!e) return null; const ds=e.closest('.dsec.closed'); if(ds){ ds.querySelector('.dtog').click(); } const card=e.closest('.card'), g=e.closest('.cgrp.closed'), m=e.closest('#ideasMore');
   return {panel:!!e.closest('#panel'), g:g?g.dataset.g:null, more:!!(m&&m.hidden), menu:card&&e.closest('.sendtools')&&!card.classList.contains('menu-open')?card.dataset.folio:null,
           sheet:document.body.classList.contains('sheet-open'), phoneSheet:getComputedStyle(document.getElementById('filtersBtn')||document.body).display!=='none' && !!document.getElementById('filtersBtn')} }"""
 def reveal(sel):
+    if '>>' in sel: return
     for _ in range(4):
-        i = pg.evaluate(REVEAL_JS, sel)
+        try: i = pg.evaluate(REVEAL_JS, sel)
+        except Exception: return
         if not i: return
         if i['panel']:
             if i['phoneSheet'] and not i['sheet']: pg.click('#filtersBtn'); pg.wait_for_timeout(250); continue
@@ -78,7 +80,7 @@ def scenario(f): SC.append(f); return f
 # ---------------------------------------------------------------- scenarios
 @scenario
 def s01_every_preset():
-    names = pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent.trim())')
+    names = pg.eval_on_selector_all('#ideas .chip[data-i]', 'e=>e.sort((a,b)=>a.dataset.i-b.dataset.i).map(x=>x.textContent.trim())')
     ok(len(names) >= 20, f'{len(names)} presets')
     for i, nm in enumerate(names):
         click(f'#ideas .chip[data-i="{i}"]', force=True); settle(1300); n = cnt()
@@ -208,7 +210,7 @@ def s12_lenders():
 @scenario
 def s13_owner_portfolio():
     reset(); check('#ogInst'); fill('#q', 'LENNAR HOMES LLC'); settle(1500)
-    click('#cards .card', position={'x': 8, 'y': 8}); pg.wait_for_selector('#ownerOpen', timeout=60000); click('#ownerOpen')
+    click('#cards .card', position={'x': 8, 'y': 8}); pg.wait_for_selector('.drawer .dsec', timeout=60000); click('#ownerOpen')
     pg.wait_for_selector('.ogdrawer .ogitem', timeout=120000); pg.wait_for_timeout(800)
     k = len(pg.query_selector_all('.ogdrawer .ogitem')); ok(k > 5, f'portfolio lists {k} properties'); shot('13_portfolio')
     click('#ogTblBtn'); settle(2000); n, rs = rows(100)

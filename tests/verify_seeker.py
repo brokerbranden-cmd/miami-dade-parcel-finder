@@ -20,7 +20,7 @@ with sync_playwright() as pw:
         pg.click('#resetBtn'); pg.wait_for_timeout(2000); tot = cnt(pg); ok(tot > 400000, f'{tag}: all {tot}')
         sh = lambda n, sel: (pg.query_selector(sel).scroll_into_view_if_needed(), pg.screenshot(path=f'{OUT}{tag}_{n}.png'))
         # presets
-        names = pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent)')
+        names = pg.eval_on_selector_all('#ideas .chip[data-i]', 'e=>e.sort((a,b)=>a.dataset.i-b.dataset.i).map(x=>x.textContent)')
         for want in ['Teardowns', '💥 Strong teardowns', 'Lots that could be split']:
             i = names.index(want); pg.click(f'#ideas .chip[data-i="{i}"]'); pg.wait_for_timeout(2000); ok(cnt(pg) > 0, f'{tag}: preset {want} -> {cnt(pg)}')
         sh('01_preset', '#ideas')

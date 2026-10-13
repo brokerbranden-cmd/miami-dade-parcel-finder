@@ -81,7 +81,7 @@
     $('lpDialog').innerHTML = `<form method="dialog" id="lfForm" class="lform"><h2>${id ? 'Edit lender' : 'Add lender'}</h2>
       <div class="lgrid">${field('lfName', 'Name', `<input id="lfName" name="name" value="${v('name')}" autocomplete="off">`)}${field('lfCompany', 'Company', `<input id="lfCompany" name="company" value="${v('company')}" autocomplete="off">`)}
       ${field('lfPhone', 'Phone', `<input id="lfPhone" name="phone" type="tel" value="${v('phone')}">`)}${field('lfEmail', 'Email', `<input id="lfEmail" name="email" type="email" value="${v('email')}">`)}
-      ${field('lfRate', 'Rate / points', `<input id="lfRate" name="rate" value="${v('rate')}" placeholder="11%, 2 pts">`)}${field('lfMax', 'Max loan size ($)', `<input id="lfMax" name="maxLoan" inputmode="numeric" value="${l.maxLoan || ''}" placeholder="750000">`)}
+      ${field('lfRate', 'Rate / points', `<input id="lfRate" name="rate" value="${v('rate')}" placeholder="11%, 2 pts">`)}${field('lfMax', 'Max loan size ($)', `<input id="lfMax" name="maxLoan" inputmode="decimal" placeholder="750k or 1.2m" value="${l.maxLoan || ''}" placeholder="750000">`)}
       ${field('lfGeo', 'Geography', `<input id="lfGeo" name="geography" value="${v('geography')}" placeholder="Miami-Dade, Broward">`)}${field('lfStatus', 'Status', `<select id="lfStatus" name="status">${LS.LSTATUS.map(s => `<option ${s === (l.status || 'Prospect') ? 'selected' : ''}>${s}</option>`).join('')}</select>`)}
       ${field('lfLast', 'Last contacted', `<input id="lfLast" name="lastContacted" type="date" value="${v('lastContacted')}">`)}</div>
       ${field('lfTerms', 'Terms', `<textarea id="lfTerms" name="terms" rows="2" placeholder="12-month interest-only, 75% LTV, 65% ARV…">${v('terms')}</textarea>`)}

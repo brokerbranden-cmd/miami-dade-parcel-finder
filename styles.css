@@ -541,3 +541,4 @@ body.lending .wrap{display:none}
 .asmbox p{margin:0 0 8px;line-height:1.45}
 .asmlist{margin:8px 0;padding-left:20px;font-size:13px}.asmlist small{color:var(--muted)}
 .lnk{background:none;border:0;padding:0;color:var(--accent,#00B2BD);text-decoration:underline;cursor:pointer;font:inherit}
+input[aria-invalid="true"]{border-color:var(--danger)!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--danger) 25%,transparent)}

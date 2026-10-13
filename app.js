@@ -514,7 +514,8 @@ function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
   const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
-  const tot=k+main; $('onCount').hidden=!tot; $('onCount').textContent=tot+(tot===1?' filter on':' filters on'); $('resetBtn').disabled=!tot;
+  let badBox=0; HASH_NUM.forEach(id=>{ const el=$(id), v=el.value.trim(), bad=!!v && parseAmt(v)==null; if(bad) badBox++; if(bad) { el.setAttribute('aria-invalid','true'); el.title='Not a number. Try 500k, 1.2m or 750000'; } else if(el.hasAttribute('aria-invalid')){ el.removeAttribute('aria-invalid'); el.title=''; } });
+  const tot=k+main; $('onCount').hidden=!tot; $('resetBtn').disabled=!tot&&!badBox; $('onCount').textContent=tot+(tot===1?' filter on':' filters on');
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
 }
 function renderFacet(f){

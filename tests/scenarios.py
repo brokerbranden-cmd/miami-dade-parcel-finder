@@ -27,7 +27,11 @@ def boot():
     if MOB and pg.query_selector('#drive:not([hidden])'): pg.click('#dExit')
     pg.wait_for_selector('#results:not([hidden])', timeout=240000); pg.wait_for_function('window.PF_READY', timeout=120000)
 def reset():
-    pg.keyboard.press('Escape'); pg.click('#resetBtn'); settle(1200)
+    pg.keyboard.press('Escape')
+    if pg.query_selector('#lendersPage:not([hidden])'): pg.click('#lpClose')
+    if pg.query_selector('#savedBar:not([hidden])'): pg.click('#svBack'); settle(600)
+    if not pg.is_disabled('#resetBtn'): pg.click('#resetBtn')
+    settle(1000)
 def sample(k=300): return pg.evaluate(f'PF.sample({k})')
 def bit(s, sig): return (s['dsig'] >> s['_dbit'][sig]) & 1
 def rows(k=300):
@@ -172,8 +176,9 @@ def s12_lenders():
     pg.click('#lendersBtn'); pg.wait_for_selector('#lendersPage:not([hidden])')
     pg.click('[data-act="add-lender"] >> nth=0'); pg.wait_for_selector('#lfForm')
     pg.fill('#lfName', 'Scenario Lender'); pg.fill('#lfCompany', 'Test Capital'); pg.fill('#lfMax', '500k'); pg.select_option('#lfStatus', 'Active')
-    pg.click('#lfForm button[type=submit]'); pg.wait_for_timeout(400)
-    ok(any('Scenario Lender' in c.inner_text() for c in pg.query_selector_all('.lcard')), 'lender card added')
+    pg.click('#lfForm button[type=submit]'); pg.wait_for_timeout(400); pg.click('[data-tab="lenders"]'); pg.wait_for_timeout(300)
+    card = next((c for c in pg.query_selector_all('.lcard') if 'Scenario Lender' in c.inner_text()), None)
+    ok(card is not None, 'lender card added'); ok(card is not None and '$500,000' in card.inner_text(), 'max loan "500k" saved as $500,000')
     ok(int(pg.inner_text('#lendersCount') or 0) >= 1, 'header lender badge')
     shot('12_lenders'); pg.click('#lpClose'); pg.wait_for_timeout(300)
 @scenario
@@ -326,7 +331,9 @@ with sync_playwright() as pw:
     pg.on('console', lambda m: m.type == 'error' and not re.search(r'arcgisonline|tile|ERR_|net::|Failed to load resource', m.text) and errs.append('console: ' + m.text))
     pg.on('pageerror', lambda e: errs.append('pageerror: ' + str(e)))
     pg.goto(BASE, timeout=180000); boot(); reset(); TOTAL['all'] = cnt(); print(f'[{MODE}] {URL} all parcels {TOTAL["all"]:,}')
+    import os; only = [x for x in os.environ.get('ONLY', '').split(',') if x]
     for f in SC:
+        if only and not any(f.__name__.startswith(o) for o in only) and f.__name__ != 's33_no_console_errors': continue
         cur = {'name': f.__name__, 'fails': []}; print(f'== {f.__name__}', flush=True); t = time.time()
         try: f()
         except Exception as e:

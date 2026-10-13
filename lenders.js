@@ -20,7 +20,9 @@
   const now = () => new Date().toISOString();
   const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const str = (v, n) => String(v == null ? '' : v).slice(0, n).trim();
-  const money = v => { const n = Math.round(Number(String(v == null ? '' : v).replace(/[^\d.]/g, '')) || 0); return n > 0 && n < 1e11 ? n : 0; };
+  // accepts 750000, $750,000, 750k, 1.2m (same shorthand as the search money boxes)
+  const money = v => { const s = String(v == null ? '' : v).trim().toLowerCase().replace(/[$,\s]/g, ''); const m = /^(\d*\.?\d+)([km]?)/.exec(s);
+    const n = m ? Math.round(parseFloat(m[1]) * (m[2] === 'k' ? 1e3 : m[2] === 'm' ? 1e6 : 1)) : Math.round(Number(s.replace(/[^\d.]/g, '')) || 0); return n > 0 && n < 1e11 ? n : 0; };
   const iso = v => (typeof v === 'string' && v && !isNaN(Date.parse(v))) ? new Date(v).toISOString() : null;
   const day = v => { const s = str(v, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; };
   const folioOf = f => { const s = String(f == null ? '' : f).replace(/\D/g, ''); return s ? s.padStart(13, '0').slice(-13) : ''; };

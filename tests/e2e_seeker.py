@@ -152,7 +152,9 @@ with sync_playwright() as pw:
     pg.add_style_tag(content='#stickybar{position:static !important}')
     top = pg.evaluate("document.querySelector('#mzq').closest('.grp').getBoundingClientRect().top+scrollY")
     bot = pg.evaluate("document.querySelector('#sendGrp').getBoundingClientRect().bottom+scrollY")
-    pg.screenshot(path=SHOTS + 'seeker_features.png', full_page=True, clip={'x': 0, 'y': top - 10, 'width': 1360, 'height': min(bot - top + 20, 3200)})
+    # the filters now live in a scrolling sidebar, so capture the filter groups element by element range instead of a page clip
+    try: pg.screenshot(path=SHOTS + 'seeker_features.png', full_page=True, clip={'x': 0, 'y': max(0, top - 10), 'width': 1360, 'height': min(bot - top + 20, 3200)})
+    except Exception: pg.query_selector('#tdGrp').screenshot(path=SHOTS + 'seeker_features.png')
     pg.click('#resetBtn'); wait(pg, 600)
     b.close()
 print('\n'.join(errs) if errs else 'ALL PASS')

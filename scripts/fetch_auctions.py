@@ -4,7 +4,7 @@
 Source: https://www.miamidade.realforeclose.com  (public, no login; Miami-Dade runs BOTH foreclosure and tax-deed
 sales on this one site, miamidade.realtaxdeed.com answers 403). Scraped politely: the calendar page for the current
 month + 3 ahead, then each sale day's preview list (the page's own AJAX 'UPDATE/LOAD' JSON), ~1 request/second.
-Output: RAW/auctions.json  [{date, type, case, cert, folio, address, city, judgment, opening_bid, assessed, status, aid, url}]
+Output: RAW/auctions.json  [{date, type, case, cert, folio, address, city, judgment, opening_bid, assessed, max_bid, status, aid, url}]
 """
 import json, re, sys, time, html, datetime as dt, requests
 
@@ -60,6 +60,7 @@ def items(day):
                 res.append({'date': day, 'type': f.get('Auction Type', ''), 'case': f.get('Case #', ''), 'cert': f.get('Certificate #', ''),
                             'folio': folio, 'address': f.get('Property Address', ''), 'city': cityrow[0].strip() if cityrow else '',
                             'judgment': f.get('Final Judgment Amount', ''), 'opening_bid': f.get('Opening Bid', ''), 'assessed': f.get('Assessed Value', ''),
+                            'max_bid': f.get('Plaintiff Max Bid', ''),  # '' when the site hides it until the sale
                             'status': 'scheduled' if area == 'W' else (re.sub('<[^>]+>', '', st[0]).strip() if st else 'closed'),
                             'aid': m.group(1), 'url': f'{B}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={day}'})
             if not new: break

@@ -107,7 +107,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { pf:false, pb:'', asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 /* teardown rule, zone rules (data/zoning-rules.json), construction + adverse possession (data/extras.json.gz) */
@@ -155,6 +155,62 @@ function tdEval(p,i){ const c=p.c; return TD.evaluate({code:LU_CODE[c.landuse[i]
 /* Assemblages (data/asm.json.gz, scripts/build_assemblages.py): adjoining parcels, same zoning, 2+ owners, each with a reason to sell.
    Loaded on demand (filter / preset / a few seconds after start for card badges); outlines (data/asm-polys.json.gz) only for the map. */
 const HIST={last:0,url:null,restoring:false};
+/* Clerk / auction signals (data/signals.json.gz, scripts/build_signals.py): open pre-foreclosure, probate filed (+match confidence), auction max bid */
+const SIG_VER='s1'; let SIG=null, sigP=null; const PFM=new Map(), PBM=new Map(), AUM=new Map();
+const PB_DOC={PRO:'Probate order of distribution',PAD:'Probate & administration filed',DCE:'Death certificate (estate of) recorded',CP:'Probate case filed'};
+const ymd=n=>n?String(n).replace(/^(\d{4})(\d\d)(\d\d)$/,'$1-$2-$3'):'';
+const mdy=n=>{ const t=String(n); return t.slice(4,6)+'/'+t.slice(6,8)+'/'+t.slice(0,4); };
+function loadSignals(){ return sigP||(sigP=(async()=>{ const o=await gzJSON('data/signals.json.gz?v='+META.ver+'-'+SIG_VER);
+  o.pf.forEach(r=>PFM.set(r[0],r)); o.pb.forEach(r=>PBM.set(r[0],r)); o.au.forEach(r=>{ const a=AUM.get(r[0])||[]; a.push(r); a.sort((x,y)=>x[1]-y[1]); AUM.set(r[0],a); }); SIG=o; PACKS.forEach(sigIndexPack); return o; })().catch(e=>{ sigP=null; throw e; })); }
+function sigIndexPack(p){ if(!p||!SIG||p.sg) return; const f=strCol(p,'folio'), g=new Uint8Array(p.n); for(let i=0;i<p.n;i++){ const k=f[i]; let v=0; if(PFM.has(k)) v|=1; const b=PBM.get(k); if(b) v|=b[4]==='H'?2:4; if(AUM.has(k)) v|=8; g[i]=v; } p.sg=g; }
+const PF_KIND={H:'HOA / condo lien foreclosure',M:'Mortgage foreclosure',O:'Other lis pendens'};
+function pfTip(r){ return `Lis pendens recorded ${ymd(r[1])}${r[3]?', case '+r[3]:''}${r[2]?' (Clerk CFN '+r[2]+')':''}. ${PF_KIND[r[5]]||''}. Match: ${r[4]==='H'?'high':'medium'} confidence. No later cancellation, dismissal or certificate of title in the Clerk files we hold, no foreclosure sale held for the case and no transfer of the parcel since. Verify with the Clerk before acting.`; }
+function pbTip(r){ return `${PB_DOC[r[2]]||r[2]}${r[5]?' ('+r[5]+')':''} recorded ${ymd(r[1])}${r[3]?' (Clerk '+r[3]+')':''}. Match: ${r[4]==='H'?'high':'medium'} confidence (folio, legal description, address or decedent name vs owner). Verify with the Clerk before acting.`; }
+function clerkBadges(folio){ if(!SIG) return ''; let h=''; const a=PFM.get(folio), b=PBM.get(folio);
+  if(a) h+=`<span class="hot pfb" title="${esc(pfTip(a))}">Pre-foreclosure ${ymd(a[1])}</span>`;
+  if(b) h+=`<span class="warm pbb" title="${esc(pbTip(b))}">${b[2]==='PRO'?'Order of distribution':'Probate filed'} ${ymd(b[1])}${b[4]==='M'?' (medium match)':''}</span>`;
+  return h; }
+const auMax=r=>r[6]>0?dollars(r[6]):r[7]===1?'Hidden':r[2]==='T'?'n/a (tax deed)':'Not posted';
+function auLine(folio){ const a=AUM.get(folio); if(!a) return ''; const r=a[0];
+  return `<div class="line auline"><span class="k">Auction</span><span class="v" title="${esc((r[2]==='F'?'Foreclosure sale':'Tax deed sale')+' '+mdy(r[1])+', case '+r[3]+'. Plaintiff max bid is what the lender will bid up to; most plaintiffs hide it until the sale. Source: miamidade.realforeclose.com')}">${mdy(r[1])} · ${r[2]==='F'?'judgment '+(r[4]?money(r[4]):'–'):'opening '+(r[5]?money(r[5]):'–')} · max bid <b>${esc(auMax(r))}</b></span></div>`; }
+function clerkHTML(folio){ if(!SIG) return ''; const a=PFM.get(folio), b=PBM.get(folio), au=AUM.get(folio)||[]; if(!a&&!b&&!au.length) return '';
+  const li=[]; if(a) li.push(`<li><span class="dtag hot">Pre-foreclosure</span> <b>Open lis pendens</b> · ${ymd(a[1])}${a[3]?`<br><span class="mono">${esc(a[3])}</span>`:''}<small>${esc(pfTip(a))}</small></li>`);
+  if(b) li.push(`<li><span class="dtag warm">Probate filed</span> <b>${esc(PB_DOC[b[2]]||b[2])}</b> · ${ymd(b[1])} · ${b[4]==='H'?'high':'medium'} match<small>${esc(pbTip(b))}</small></li>`);
+  au.forEach(r=>li.push(`<li class="aumax"><span class="dtag hot">Auction</span> <b>${r[2]==='F'?'Foreclosure sale':'Tax deed sale'} ${mdy(r[1])}</b> · ${r[2]==='F'?'final judgment '+(r[4]?dollars(r[4]):'–'):'opening bid '+(r[5]?dollars(r[5]):'–')} · plaintiff max bid <b>${esc(auMax(r))}</b><br><span class="mono">${esc(r[3])}</span> <a href="https://www.miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=${mdy(r[1])}" target="_blank" rel="noopener">auction day ↗</a></li>`));
+  return `<ul class="dlist clerk">${li.join('')}</ul><div class="note">Clerk records through ${ymd(SIG.meta.pf.to)}, auctions pulled ${esc(String(SIG.meta.auctionsPulled||'').replace('T',' '))}.</div>`; }
+/* comps value estimate (data/comps.json.gz, scripts/build_comps.py): PA-qualified sales in the last 6 months, same land use, nearby */
+const COMP_VER='c1', CP_STEPS=[0.5,1,2], CP_SIZE=[2,4], CP_MIN=3; let CP=null, cpP=null;
+function loadComps(){ return cpP||(cpP=(async()=>{ const o=await gzJSON('data/comps.json.gz?v='+META.ver+'-'+COMP_VER), grid=new Map();
+  o.rows.forEach((r,k)=>{ const key=Math.floor(r[1]/1000)*100000+Math.floor(r[2]/1000); let a=grid.get(key); if(!a) grid.set(key,a=[]); a.push(k); r.luN=parseInt(r[7],10); });
+  o.grid=grid; CP=o; return o; })().catch(e=>{ cpP=null; throw e; })); }
+const cpMiles=(la1,lo1,la2,lo2)=>{ const dy=(la2-la1)*69.05, dx=(lo2-lo1)*69.05*Math.cos(la1*Math.PI/180); return Math.sqrt(dx*dx+dy*dy); };
+const quant=(a,q)=>{ const x=(a.length-1)*q, b=Math.floor(x); return a[b]+(a[Math.min(b+1,a.length-1)]-a[b])*(x-b); };
+function compsOf(p,i){
+  if(!CP||!p.geo) return null; const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!isFinite(la)||la<20) return null;
+  const c=p.c, lu=LU_CODE?LU_CODE[c.landuse[i]]:parseInt(D.landuse[c.landuse[i]],10), sf=c.sqft[i], lot=c.lot[i], useB=sf>0, size=useB?sf:lot; if(!(size>0)||!(lu>0)) return null;
+  const me=getStr(p,'folio',i), cn=p.cn?p.cn[i]:0, la5=la*1e5, lo5=lo*1e5, cx=Math.floor(la5/1000), cy=Math.floor(lo5/1000), cand=[];
+  for(let dx=-3;dx<=3;dx++) for(let dy=-3;dy<=3;dy++){ const a=CP.grid.get((cx+dx)*100000+cy+dy); if(!a) continue;
+    for(const k of a){ const r=CP.rows[k]; if(r.luN!==lu||r[0]===me) continue; const z=useB?r[5]:r[6]; if(!(z>0)||(useB?false:r[5]>0)) continue;
+      const mi=cpMiles(la,lo,r[1]/1e5,r[2]/1e5); if(mi>CP_STEPS[CP_STEPS.length-1]) continue; cand.push({r,mi,ppsf:r[4]/z,sr:z/size}); } }
+  let use=[], rad=0, band=0;
+  for(const B of CP_SIZE){ for(const R of CP_STEPS){ use=cand.filter(x=>x.mi<=R&&x.sr>=1/B&&x.sr<=B); rad=R; if(use.length>=CP_MIN) break; } band=B; if(use.length>=CP_MIN) break; }
+  let sameCn=false; if(cn&&CNMAP&&use.length>=CP_MIN){ const s2=use.filter(x=>CNMAP.get(+x.r[0])===cn); if(s2.length>=CP_MIN){ use=s2; sameCn=true; } }
+  use.sort((a,b)=>a.mi-b.mi);
+  const out={n:use.length,rad,band,useB,size,sameCn,comps:use.slice(0,8),cash:use.filter(x=>x.r[8]===1).length,fin:use.filter(x=>x.r[8]===0).length};
+  if(use.length<CP_MIN) return out;
+  const v=use.map(x=>x.ppsf).sort((a,b)=>a-b); out.med=quant(v,.5); out.lo=Math.round(quant(v,.25)*size/1000)*1000; out.hi=Math.round(quant(v,.75)*size/1000)*1000; out.est=Math.round(out.med*size/1000)*1000; return out; }
+function cpWhy(c){ return `Median ${c.useB?'$ per building sq ft':'$ per lot sq ft'} of ${c.n} arm's-length sales within ${c.rad} mi in the last ${CP.meta.months} months, same land use, ${c.useB?'building':'lot'} size within ${c.band===2?'half to double':'a quarter to 4×'} this one${c.sameCn?', same construction':''} (Property Appraiser qualified sales through ${ymd(CP.meta.newest)}), × this ${c.useB?'building':'lot'} size. Range = middle half of those sales. ${cpCash(c)}`; }
+function cpCash(c){ const u=c.n-c.cash-c.fin; return u===c.n?'Cash vs financed: not in the roll data.':`${c.cash} cash, ${c.fin} financed${u?', '+u+' unknown':''}.`; }
+function compsInner(p,i){ if(!CP) return '<span class="note">Loading comps…</span>'; if(!p.geo){ loadGeo(p.idx).then(()=>{ if(p.geo) fillComps(); }).catch(()=>{}); return '<span class="note">Loading map points…</span>'; } const c=compsOf(p,i);
+  if(!c) return '<span class="note">No comps for this use</span>'; if(!c.est) return `<span class="note" title="${esc(cpWhy(c))}">Not enough comps (${c.n})</span>`;
+  return `<span title="${esc(cpWhy(c))}"><b>${money(c.lo)}–${money(c.hi)}</b> · ${c.n} comps ≤${c.rad} mi${c.hi>2*c.lo?' · wide range':''}</span>`; }
+function compsLine(id){ const p=P(id), i=I(id); return `<div class="line cpline"><span class="k">Value est.</span><span class="v cpbox" data-ci="${id}">${compsInner(p,i)}</span></div>`; }
+function fillComps(){ document.querySelectorAll('.cpbox').forEach(n=>{ const id=+n.dataset.ci; n.innerHTML=compsInner(P(id),I(id)); }); }
+function compsDrawer(p,i){ if(!CP||!p.geo) return '<div class="note">Comparable sales are loading. Reopen in a moment.</div>'; const c=compsOf(p,i);
+  if(!c) return '<div class="note">No comparable sales: this parcel has no size or location for an estimate.</div>';
+  const rows=c.comps.map(x=>{ const r=x.r; return `<tr><td>${esc(r[10]||folioFmt(r[0]))}</td><td>${ymd(r[3])}</td><td>${dollars(r[4])}</td><td>$${(x.ppsf).toFixed(x.ppsf<10?2:0)}</td><td>${x.mi.toFixed(2)} mi</td><td>${r[8]===1?'Cash':r[8]===0?'Financed':'–'}</td></tr>`; }).join('');
+  return `<div class="dl">${c.est?`<div class="k">Estimate</div><div class="v"><b>${dollars(c.est)}</b><small>Range ${dollars(c.lo)} – ${dollars(c.hi)}</small></div>`:`<div class="k">Estimate</div><div class="v">Not enough comps (${c.n} of ${CP_MIN} needed within ${CP_STEPS[CP_STEPS.length-1]} mi)</div>`}<div class="k">Financing</div><div class="v">${esc(cpCash(c))}</div></div>
+    ${rows?`<table class="covt cpt"><thead><tr><th>Sale</th><th>Date</th><th>Price</th><th>$/sf</th><th>Away</th><th>Cash</th></tr></thead><tbody>${rows}</tbody></table>`:''}<div class="note">${esc(c.est?cpWhy(c):'Sales: Property Appraiser qualified (arm\'s-length) sales, last '+CP.meta.months+' months, same land use.')} Not an appraisal.</div>`; }
 const ASM_VER='a2';
 let ASM=null, asmP=null; const APOLY=new Map(), apolyP=new Map();
 const gzJSON=async url=>{ const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); const u8=new Uint8Array(await r.arrayBuffer()); return JSON.parse(dec.decode(u8[0]===0x1f&&u8[1]===0x8b?await gunzip(u8):u8)); };
@@ -308,13 +364,13 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; return st;
+  st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
   NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':(MONEY_IDS.has(id)?fmtAmt(st[id]):st[id]));
   $('mvMin').value=st.mvMin?fmtAmt(st.mvMin):''; $('mvMax').value=st.mvMax?fmtAmt(st.mvMax):'';
-  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.asm=!!st.asm; S.asmUp=!!st.asmUp; S.asmGroup=+st.asmGroup||0; S.mzSel=new Set(st.mzSel||[]); renderRules();
+  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.pf=!!st.pf; S.pb=['hm','h'].includes(st.pb)?st.pb:''; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.asm=!!st.asm; S.asmUp=!!st.asmUp; S.asmGroup=+st.asmGroup||0; S.mzSel=new Set(st.mzSel||[]); renderRules();
   $('mzq').value=st.mzq||''; $('q').value=st.q||''; $('qScope').value=st.qScope||'ao'; $('city').value=st.city||''; $('zips').value=st.zips||''; $('cra').value=st.cra||'';
   $('hideGov').checked=st.hideGov!==false; $('noBldg').checked=!!st.noBldg; $('qualOnly').checked=!!st.qualOnly;
   S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]); S.dsig=new Set((st.dsig||[]).filter(k=>k in DBIT)); $('dsMin').value=DS_STEPS.some(x=>x[0]===+st.dsMin)?String(+st.dsMin):'0';
@@ -367,12 +423,12 @@ function run(){
   const mine=st.vsMine?new Set([...savedIdx()].filter(([f])=>{ const x=SV.get(f); return x&&x.vacant; }).map(([,id])=>id)):null;
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
   const tierW=S.tier==='strong'?2:S.tier==='basic'?1:0, tcn=new Uint32Array(3), lzSel=S.lotz, lzc={split:0,minok:0,below:0}, cnSel=S.cons, cnc=new Uint32Array(6);
-  const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0;
+  const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0; const pfOn=S.pf, pbMask=S.pb==='h'?2:S.pb?6:0; let pfN=0, pbN=0;
   const asmOn=S.asm&&!!ASM, asmUp=S.asmUp, asmJ=S.asmGroup&&ASM?ASM.byId.get(S.asmGroup):undefined, asmSeen=asmOn?new Set():null;
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
-    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), FO=sendSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null;
+    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), SGa=(sigIndexPack(p),p.sg||new Uint8Array(p.n)), FO=sendSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null;
     const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n), PG=c.pcs||new Uint16Array(n);
     if(bb && !gl) continue;
     for(let i=0;i<n;i++){
@@ -381,6 +437,7 @@ function run(){
       if(mine && !mine.has(base+i)) continue;
       if(sendSet && !sendSet.has(FO[i])) continue;
       if(apOnly && !APa[i]) continue;
+      if(pfOn && !(SGa[i]&1)) continue; if(pbMask && !(SGa[i]&pbMask)) continue;
       if(asmOn){ const gx=AGa?AGa[i]:-1; if(gx<0) continue; if(asmJ!==undefined && gx!==asmJ) continue; if(asmUp && !ASM.groups[gx].upside) continue; }
       if(vsMin && VS[i]<vsMin) continue;
       if(useOg){ const g=c.og[i]; if(!g || (ogMin && OWN.n[g]<ogMin) || (ogDist && OWN.nd[g]<ogDist) || (exInst && OWN.fl[g])) continue; }
@@ -414,11 +471,11 @@ function run(){
       if(nf===0 && !fsg && vg){ for(let b=0;b<VSIG.length;b++) if(vg&(1<<b)) vc[b]++; }
       if(nf===0 && !fsg && !fvs && pg){ for(let b=0;b<PCS.length;b++) if(pg&(1<<b)) pcc[b]++; }
       if(fsg||fvs||fpc) continue;
-      if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; tcn[tv]++; if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; cnc[cv]++; if(APa[i]) apN++; if(asmSeen) asmSeen.add(AGa[i]); if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
+      if(nf===0){ kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; tcn[tv]++; if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; cnc[cv]++; if(APa[i]) apN++; if(SGa[i]&1) pfN++; if(SGa[i]&6) pbN++; if(asmSeen) asmSeen.add(AGa[i]); if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
       else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else if(ft) tcn[tv]++; else if(flz){ if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; } else if(fcn) cnc[cv]++; else kc[kind]++; }
     }
   }
-  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,apN,asmGroups:asmSeen?asmSeen.size:0};
+  results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,apN,pfN,pbN,asmGroups:asmSeen?asmSeen.size:0};
   if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status))) r.push(id); } results=Uint32Array.from(r); }
   renderSavedUI();
   doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true);
@@ -476,7 +533,7 @@ function renderChips(){
   $('tierSeg').querySelectorAll('button').forEach(b=>{ const on=b.dataset.tier===S.tier; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); });
   const lzc=facet.lzc||{}; $('lotz').innerHTML=LOTZ.map(([k,l])=>{ const on=S.lotz.has(k), n=lzc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-lz="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
   const cnc=facet.cnc||[]; $('cnChips').innerHTML=EX?CN_CATS.map(([k,l])=>{ const on=S.cons.has(k), n=cnc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-cn="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join(''):'<span class="note">Construction data did not load.</span>';
-  $('apCount').textContent=EX?'('+fmt.format(facet.apN||0)+')':''; $('apOnly').checked=S.ap;
+  $('apCount').textContent=EX?'('+fmt.format(facet.apN||0)+')':''; $('apOnly').checked=S.ap; $('pfCount').textContent=SIG?'('+fmt.format(facet.pfN||0)+')':''; $('pbCount').textContent=SIG?'('+fmt.format(facet.pbN||0)+')':''; $('pfOnly').checked=S.pf; $('pbSel').value=S.pb;
   renderSend();
   $('asmOn').classList.toggle('on',S.asm); $('asmOn').setAttribute('aria-pressed',S.asm); $('asmUp').checked=S.asmUp;
   $('asmN').textContent=S.asm&&ASM?fmt.format(facet.asmGroups||0)+' groups':ASM?fmt.format(ASM.meta.groups)+' groups':'';
@@ -514,7 +571,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
+  const main=(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.pf?1:0)+(S.pb?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
   let badBox=0; HASH_NUM.forEach(id=>{ const el=$(id), v=el.value.trim(), bad=!!v && parseAmt(v)==null; if(bad) badBox++; if(bad) { el.setAttribute('aria-invalid','true'); el.title='Not a number. Try 500k, 1.2m or 750000'; } else if(el.hasAttribute('aria-invalid')){ el.removeAttribute('aria-invalid'); el.title=''; } });
   const tot=k+main; $('onCount').hidden=!tot; $('resetBtn').disabled=!tot&&!badBox; $('onCount').textContent=tot+(tot===1?' filter on':' filters on');
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
@@ -559,8 +616,9 @@ function cardHTML(id){
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
     ${upLine(p,i)}
+    ${compsLine(id)}${auLine(folio)}
     <div class="sendline">${sendBtns(folio)}${sentBadges(folio)}${p.ap&&p.ap[i]?'<span class="hot apb" title="Adverse possession claim noted in the Property Appraiser legal description">Adverse possession</span>':''}</div>
-    <div class="ob">${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
+    <div class="ob">${clerkBadges(folio)}${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
 }
 function tdTag(p,i){ const t=p.td?p.td.tier[i]:0; return t===2?'<span class="tt tds" title="Strong teardown under your rule">Strong teardown</span>':t===1?'<span class="tt tdb" title="Teardown (basic) under your rule">Teardown</span>':''; }
@@ -731,6 +789,7 @@ async function openDrawer(id,opts){
   if(!P(id).det){ toast('Loading details…'); try{ await Promise.all([loadDetail(P(id).idx), loadGeo(P(id).idx).catch(()=>{})]); }catch(e){ toast('Details did not load. Try again.'); return; } }
   if(!P(id).geo){ try{ await loadGeo(P(id).idx); }catch(e){} }
   if(!ASM){ try{ await loadAsm(); }catch(e){} }
+  if(!CP){ try{ await loadComps(); }catch(e){} }
   if(P(id).c.dsig[I(id)] && !DIST){ try{ await loadDistress(); }catch(e){ toast('Distress details did not load.'); } }
   const p=P(id), i=I(id), c=p.c, folio=getStr(p,'folio',i), addr=getStr(p,'addr',i)||'No street address';
   const city=D.city[c.city[i]], zip=D.zip[c.zip[i]], fl=c.flags[i], mv=c.mkt[i], zn=D.zoning[c.zoning[i]], lu=D.landuse[c.landuse[i]];
@@ -758,7 +817,7 @@ async function openDrawer(id,opts){
     <div class="sendline dsend">${sendBtns(folio)}${sentBadges(folio)}</div>
     <div id="savedBox" data-folio="${folio}" data-id="${id}">${savedBoxHTML(id,folio)}</div>
     <div id="finBox">${finHTML(folio)}</div>
-    ${distressHTML(p,i,folio)}
+    ${distressHTML(p,i,folio)}${clerkHTML(folio)}
     ${vacancyHTML(p,i,folio)}
     ${permitsHTML(p,i,folio)}
     ${asmHTML(p,i)}${teardownHTML(p,i)}
@@ -780,6 +839,7 @@ async function openDrawer(id,opts){
       ['Value per lot sq ft', (mv&&c.lot[i])?'$'+(mv/c.lot[i]).toFixed(2):''],['Value per building sq ft', (mv&&c.sqft[i])?'$'+Math.round(mv/c.sqft[i]):''],
       ['Last year\'s value', prv? dollars(prv)+(chg!==null?`<small class="${chg>=0?'up':'down'}">${chg>=0?'+':''}${chg}% this year</small>`:''):''],
       ['Last sale vs today', (c.sale1[i]>1000&&mv&&c.sq1[i]===1&&!multi)? `Value is ${(mv/c.sale1[i]).toFixed(1)}× the last market sale price` : '']])}</div>
+    <h3>Value estimate (comps)</h3>${compsDrawer(p,i)}
     <h3>Sales</h3><div class="dl">${rows([
       ['Last sale', c.sd1[i]? dateStr(c.sd1[i])+' for '+dollars(c.sale1[i])+(c.sq1[i]===1?'<small>Market sale</small>':c.sq1[i]===2?'<small>Not a market sale (family transfer, deed fix, etc.)</small>':'') : 'None on record'],
       ['Owned for', c.sd1[i]? ((today-c.sd1[i])/365.25).toFixed(1)+' years':''],
@@ -946,7 +1006,7 @@ function writeHash(st){
     if(st.ogf) h.set('ogf',st.ogf); if(st.ogMin) h.set('ogn',st.ogMin); if(st.ogDist) h.set('ogd','1'); if(st.ogInst) h.set('ogi','1');
     if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';')); if(st.asm) h.set('asm','1'); if(st.asmUp) h.set('asmup','1'); if(st.asmGroup) h.set('asmg',st.asmGroup);
     if(st.rules&&!RULE_KEYS.every(k=>st.rules[k]===TD.DEFAULT_RULES[k])) h.set('tdr',RULE_KEYS.map(k=>k==='enforce_min_lot'?(st.rules[k]?1:0):st.rules[k]).join(','));
-    if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
+    if(st.pf) h.set('pf','1'); if(st.pb) h.set('pb',st.pb); if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
     const str=h.toString(), want=str?'#'+str:'';
     // a new history entry once the search has been still for a moment (so Back undoes a filter step, not each keystroke)
     if(location.hash!==want){ const now=Date.now(), push=!HIST.restoring && now-HIST.last>1200; HIST.last=now;
@@ -969,7 +1029,7 @@ function parseHash(){
   st.sort=h.get('sort')||'lot_d'; st.view=h.get('view')||'cards';
   st.ogf=(h.get('ogf')||'').replace(/\D/g,''); st.ogMin=+h.get('ogn')||0; st.ogDist=h.get('ogd')==='1'; st.ogInst=h.get('ogi')==='1';
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
-  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
+  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.pf=h.get('pf')==='1'; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
   const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length){ st.rules={}; RULE_KEYS.forEach((k,j)=>st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]); }
   const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null;
   return st;
@@ -1257,7 +1317,11 @@ async function ensureOg(){
   S.og=g||-1; renderOgRow();
 }
 function renderOgRow(){ $('ogRow').hidden=!S.ogf; if(S.ogf) $('ogLabel').textContent=S.og>0&&OWN?`Only properties of ${OWN.name[S.og]} (${fmt.format(OWN.n[S.og])})`:'Only one owner\'s properties'; }
-async function ensureCondo(){ if(S.types.has('condo') && !PACKS[1]){ try{ await loadPack(1,'Loading condo units…'); }catch(e){ S.types.delete('condo'); toast(e.message); } } }
+async function ensureSig(){ if(SIG) return; try{ await loadSignals(); renderSigSrc(); }catch(e){ toast('Clerk signal data did not load: '+e.message); } }
+function renderSigSrc(){ if(!SIG) return; const m=SIG.meta; $('sigSrc').textContent=`${fmt.format(m.pf.n)} open pre-foreclosures (lis pendens ${ymd(m.pf.from)} – ${ymd(m.pf.to)}), ${fmt.format(m.pb.n)} probate filings (${fmt.format(m.pb.high)} high, ${fmt.format(m.pb.medium)} medium match), ${fmt.format(m.au.n)} upcoming auctions. Built ${m.built}.`; }
+/* comps: card value estimate needs the comp sales + parcel points; loaded in the background after the first results */
+let cpBusy=false; async function ensureComps(){ if(cpBusy) return; cpBusy=true; try{ await loadComps(); fillComps(); for(const p of PACKS) if(p&&!p.geo){ await loadGeo(p.idx).catch(()=>{}); } fillComps(); }catch(e){} cpBusy=false; }
+async function ensureCondo(){ if(S.types.has('condo') && !PACKS[1]){ try{ await loadPack(1,'Loading condo units…'); if(CP) setTimeout(ensureComps,0); }catch(e){ S.types.delete('condo'); toast(e.message); } } }
 const clearIdea=()=>document.querySelectorAll('#ideas .chip').forEach(b=>b.classList.remove('on'));
 function wire(){
   $('panel').addEventListener('input',e=>{ if(!e.target.closest('#ideas')) clearIdea(); });
@@ -1293,6 +1357,8 @@ function wire(){
   $('cnChips').addEventListener('click',e=>{ const b=e.target.closest('.chip[data-cn]'); if(!b) return; const k=+b.dataset.cn; S.cons.has(k)?S.cons.delete(k):S.cons.add(k); run(); });
   $('clrCn').onclick=()=>{ S.cons.clear(); clearIdea(); run(); };
   $('apOnly').addEventListener('change',()=>{ S.ap=$('apOnly').checked; clearIdea(); run(); });
+  $('pfOnly').addEventListener('change',async()=>{ S.pf=$('pfOnly').checked; clearIdea(); if(S.pf) await ensureSig(); run(); });
+  $('pbSel').addEventListener('change',async()=>{ S.pb=$('pbSel').value; clearIdea(); if(S.pb) await ensureSig(); run(); });
   $('sendChips').addEventListener('click',e=>{ const b=e.target.closest('.chip[data-send]'); if(!b) return; const k=b.dataset.send; S.send.has(k)?S.send.delete(k):S.send.add(k); run(); });
   $('asmOn').onclick=async()=>{ S.asm=!S.asm; if(!S.asm) S.asmGroup=0; else if(S.sort==='lot_d'){ S.sort='asm_d'; $('sortSel').value='asm_d'; } clearIdea(); await ensureAsm(); run(); };
   $('asmUp').addEventListener('change',async()=>{ S.asmUp=$('asmUp').checked; if(S.asmUp) S.asm=true; clearIdea(); await ensureAsm(); run(); });
@@ -1372,11 +1438,12 @@ async function boot(){
     applyState(st);
     const ownLoad=loadOwners().catch(()=>null);
     await loadPack(0,'Loading properties…');
-    await ensureAsm(); await ensureCondo(); if(S.saved||$('vsMine').checked) await ensureSavedPacks(); await ownLoad; await ensureOg();
+    await ensureSig(); await ensureAsm(); await ensureCondo(); if(S.saved||$('vsMine').checked) await ensureSavedPacks(); await ownLoad; await ensureOg();
     ['results','foot'].forEach(id=>$(id).hidden=false);
     run();
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');
     if(dlF) await openDeep(dlF);
+    setTimeout(ensureComps,300);
     /* small internal API for drive.js / lenders.js (same page, nothing leaves the browser) */
     window.PF={META,D,PACKS,P,I,getStr,LU_T,TYPE_LABEL,SV,esc,money,fmt,dollars,dateStr,monYr,folioFmt,today,toast,savedInfo,loadGeo,loadLeaflet,openDrawer,scoreBadge,vacBadge,sigBadges,ensureSavedPacks,savedIdx,stKey,svDate,download,stamp,csvq,
       setSaved:on=>{ S.saved=!!on; run(); }, rerun:()=>run(),
@@ -1384,7 +1451,8 @@ async function boot(){
       sample:(k=300)=>{ const n=results.length, out=[], step=Math.max(1,Math.floor(n/k)); for(let j=0;j<n&&out.length<k;j+=step){ const id=results[j], p=P(id), i=I(id), c=p.c, mz=D.mzone[c.mz[i]]||[], g=asmOf(p,i);
         out.push({folio:getStr(p,'folio',i), owner:getStr(p,'owner',i), addr:getStr(p,'addr',i), city:D.city[c.city[i]], zip:D.zip[c.zip[i]], lu:D.landuse[c.landuse[i]], type:LU_T[c.landuse[i]], mzCode:mz[0]||'', mzJur:mz[1]||'',
           mkt:c.mkt[i], land:c.land[i], lot:c.lot[i], yb:c.yb[i], units:c.units[i], flags:c.flags[i], dsig:c.dsig[i], dscore:c.dscore[i], sd1:c.sd1[i], sale1:c.sale1[i], og:c.og[i],
-          tier:p.td?p.td.tier[i]:null, ap:p.ap?p.ap[i]:0, asm:g?{id:g.id,upside:g.upside,muni:g.muni}:null}); } return {n, rows:out, dbit:DBIT, sort:S.sort}; }};
+          tier:p.td?p.td.tier[i]:null, ap:p.ap?p.ap[i]:0, sg:p.sg?p.sg[i]:0, pf:PFM.get(getStr(p,'folio',i))||null, pb:PBM.get(getStr(p,'folio',i))||null, au:AUM.get(getStr(p,'folio',i))||null, comps:(()=>{ const x=compsOf(p,i); return x?{n:x.n,rad:x.rad,lo:x.lo||0,hi:x.hi||0,est:x.est||0}:null; })(), asm:g?{id:g.id,upside:g.upside,muni:g.muni}:null}); } return {n, rows:out, dbit:DBIT, sort:S.sort}; },
+      sigMeta:()=>SIG&&SIG.meta, compsMeta:()=>CP&&CP.meta, compsReady:()=>!!CP&&PACKS.every(p=>!p||!!p.geo), ensureComps};
     document.dispatchEvent(new Event('pf:ready')); window.PF_READY=true;
     if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{});
     IDB.prune(META.ver);

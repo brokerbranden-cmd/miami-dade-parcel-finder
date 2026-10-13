@@ -61,6 +61,11 @@
       <div class="grp-h"><h2>Distress signals</h2><span class="hint">Foreclosures, tax deeds, unpaid taxes, code cases, liens and probate matched to each folio. Pick signals to see parcels with any of them. <span id="dsSrc"></span></span><button class="clr" type="button" id="clrDs">Clear</button></div>
       <div class="dsrow"><div class="chips" id="dsigs"></div>
         <label class="dsmin">Min score <select id="dsMin" aria-label="Minimum distress score"></select></label></div>
+      <div class="sigrow">
+        <label class="check" title="Open lis pendens matched to the parcel: no later cancellation, dismissal or certificate of title in the Clerk files we hold, no foreclosure sale held for the case and no transfer since. Hover a card's tag for the case and CFN."><input type="checkbox" id="pfOnly"> Pre-foreclosure (open lis pendens) <span class="n" id="pfCount"></span></label>
+        <label class="dsmin" title="Clerk probate filings (death certificate of estate, probate &amp; administration, order of distribution, probate case) matched to the parcel by folio, legal description, address or decedent name vs owner.">Probate filed <select id="pbSel" aria-label="Probate filed"><option value="">Any or none</option><option value="hm">Filed (high + medium match)</option><option value="h">Filed (high match only)</option></select> <span class="n" id="pbCount"></span></label>
+      </div>
+      <div class="note" id="sigSrc"></div>
     </div>
 
     <div class="grp permits">

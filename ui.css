@@ -79,3 +79,7 @@ body.simple .dsec.closed .dtog::after{transform:rotate(-45deg)}
 body.simple .dsec.closed>*:not(h3){display:none!important}
 body.simple .dsec>*:last-child{margin-bottom:12px}
 .card.flash{outline:3px solid #FC4C02;outline-offset:2px;transition:outline-color 2s}
+.sigrow{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;margin-top:8px}
+.cpline .v b{color:var(--ink)}
+.cpt td,.cpt th{font-size:12px;padding:3px 6px;white-space:nowrap}
+.dlist.clerk{margin-top:6px}

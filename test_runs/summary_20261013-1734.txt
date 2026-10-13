@@ -1,0 +1,45 @@
+# pass 1 17:34:55
+PASS p1_e2e
+PASS p1_e2e_distress
+PASS p1_e2e_lenders
+PASS p1_e2e_mobile
+PASS p1_e2e_ownerkind
+PASS p1_e2e_owners
+PASS p1_e2e_permits
+PASS p1_e2e_saved
+PASS p1_e2e_seeker
+PASS p1_e2e_vacancy
+PASS p1_e2e_asm
+PASS p1_clerk_desktop
+PASS p1_simplified_desktop
+PASS p1_scenarios_desktop
+PASS p1_clerk_mobile
+PASS p1_simplified_mobile
+PASS p1_scenarios_mobile
+# pass 2 17:58:23
+PASS p2_e2e
+PASS p2_e2e_distress
+PASS p2_e2e_lenders
+PASS p2_e2e_mobile
+PASS p2_e2e_ownerkind
+PASS p2_e2e_owners
+PASS p2_e2e_permits
+PASS p2_e2e_saved
+PASS p2_e2e_seeker
+PASS p2_e2e_vacancy
+PASS p2_e2e_asm
+PASS p2_clerk_desktop
+PASS p2_simplified_desktop
+PASS p2_scenarios_desktop
+PASS p2_clerk_mobile
+PASS p2_simplified_mobile
+PASS p2_scenarios_mobile
+# all green, pushing 18:21:47
+pushed 668faab
+PASS live_scenarios_desktop
+PASS live_clerk_desktop
+PASS live_simplified_desktop
+PASS live_scenarios_mobile
+PASS live_clerk_mobile
+PASS live_simplified_mobile
+# DONE 18:37:09

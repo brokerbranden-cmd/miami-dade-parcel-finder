@@ -81,7 +81,7 @@ with sync_playwright() as pw:
     st = {dict(zip(hdr, r))['Folio'].replace('-', '') for r in rows[1:]}; ok(f1 in st, 'CSV includes saved card 1')
     # map: filter to one property, click it -> popup with star
     pg.click('#svStatus .chip[data-st="Called"]'); pg.click('#vMap'); pg.wait_for_function("document.getElementById('mapHint').textContent.includes('on the map')", timeout=180000); pg.wait_for_timeout(1500)
-    box = pg.query_selector('#map').bounding_box(); pg.mouse.click(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2); pg.wait_for_timeout(600)
+    pg.evaluate("document.getElementById('map').scrollIntoView({block:'center'})"); pg.wait_for_timeout(400); box = pg.query_selector('#map').bounding_box(); pg.mouse.click(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2); pg.wait_for_timeout(600)
     has_pop = pg.query_selector('.stackpop .star.on') is not None; ok(has_pop, 'map popup shows a filled star for the saved property')
     ok('Saved' in pg.inner_text('#mapLegend'), 'map legend lists Saved ring')
     pg.click('#svStatus .chip[data-st=""]'); pg.wait_for_timeout(1500)

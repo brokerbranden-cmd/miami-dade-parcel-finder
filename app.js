@@ -1001,12 +1001,31 @@ async function copy(text,ok){
 const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
 function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||'')]:['','','','','',''];}
+/* export rows: Folio always dashed 13-digit (Excel keeps it as text); Address never blank. When the roll has no site address
+   (mostly vacant land), use the street of the nearest parcel that has one (geo pack), else a short legal description. */
+let ADDR_GRID=null;
+function addrGrid(){ if(ADDR_GRID) return ADDR_GRID; if(PACKS.some(p=>p&&!p.geo)) return null; const g=new Map();
+  for(const p of PACKS){ if(!p) continue; for(let i=0;i<p.n;i++){ const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!(la>20)) continue; const a=getStr(p,'addr',i); if(!a||!/^\d+[A-Z]?\s+\S/.test(a)) continue;
+    const k=Math.floor(la*200)*100000+Math.floor(-lo*200); let b=g.get(k); if(!b) g.set(k,b=[]); b.push(la,lo,p.idx*16777216+i); } }
+  return ADDR_GRID=g; }
+function nearStreet(p,i){ const g=addrGrid(); if(!g) return ''; const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!(la>20)) return '';
+  const cx=Math.floor(la*200), cy=Math.floor(-lo*200); let best=1e9, id=-1;
+  for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){ const b=g.get((cx+dx)*100000+cy+dy); if(!b) continue; for(let k=0;k<b.length;k+=3){ const d=(b[k]-la)**2+((b[k+1]-lo)*0.9)**2; if(d<best){ best=d; id=b[k+2]; } } }
+  return id<0?'':getStr(P(id),'addr',I(id)).replace(/^\d+[A-Z]?(-\d+)?\s+/,''); }
+const folio13=f=>{ const d=String(f||'').replace(/\D/g,''); return d?folioFmt(d.padStart(13,'0')):''; };
+const EXPSTAT={real:0,near:0,legal:0,use:0};
+function exportAddr(p,i){ const a=getStr(p,'addr',i).trim(); if(a){ EXPSTAT.real++; return a; }
+  const use=TYPE_LABEL[LU_T[p.c.landuse[i]]]||'Parcel', st=nearStreet(p,i); if(st){ EXPSTAT.near++; return `No site address – ${use}, near ${st}`; }
+  const lg=(p.det?getStr(p,'legal',i):'').replace(/\s+/g,' ').trim(); if(lg){ EXPSTAT.legal++; return `No site address – ${use}, ${lg.length>48?lg.slice(0,48)+'…':lg}`; }
+  EXPSTAT.use++; return `No site address – ${use}`; }
+function exportRow(p,i){ const c=p.c; return [csvq(exportAddr(p,i)),csvq(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; ')),csvq(getStr(p,'mail',i)),folio13(getStr(p,'folio',i)),'Miami-Dade',csvq(D.city[c.city[i]]||'')].join(','); }
+const EXP_HEAD='Address,Owner Name,Mailing Address,Folio,County,City\n';
 function buildCSV(ids=results){
   // export = contact list only (main export and Send to lists): Address, Owner Name, Mailing Address, Folio, County, City
-  const parts=['Address,Owner Name,Mailing Address,Folio,County,City\n']; let buf='';
+  const parts=[EXP_HEAD]; let buf=''; for(const k in EXPSTAT) EXPSTAT[k]=0;
   for(let j=0;j<ids.length;j++){
-    const id=ids[j], p=P(id), i=I(id), c=p.c;
-    buf+=[csvq(getStr(p,'addr',i)),csvq(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; ')),csvq(getStr(p,'mail',i)),getStr(p,'folio',i),'Miami-Dade',csvq(D.city[c.city[i]]||'')].join(',')+'\n';
+    const id=ids[j], p=P(id), i=I(id);
+    buf+=exportRow(p,i)+'\n';
     if(buf.length>1e6){ parts.push(buf); buf=''; }
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
@@ -1302,10 +1321,11 @@ function refreshFolio(folio){
 function download(name,blob){ const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
 const stamp=()=>{ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); };
 function savedListCSV(){
-  const ids=savedIdx(), head=['Folio','Address','City','ZIP','Status','Note','Marked Vacant/Damaged','Condition Note','Date Saved','Last Edited','Distress Score','Vacancy Hint','Market Value','Owner','Property Appraiser Link'];
-  const rows=SV.list().map(x=>{ const id=ids.get(x.folio), p=id!=null?P(id):null, i=id!=null?I(id):0;
-    return [x.folio,csvq(p?getStr(p,'addr',i):x.addr),csvq(p?D.city[p.c.city[i]]:x.city),p?D.zip[p.c.zip[i]]:x.zip,csvq(x.status),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||''),x.savedAt,x.updatedAt,p?p.c.dscore[i]:'',p&&p.c.vscore?p.c.vscore[i]:'',p?p.c.mkt[i]:'',csvq(p?getStr(p,'owner',i):''),'https://apps.miamidadepa.gov/propertysearch/#/?folio='+x.folio].join(','); });
-  return new Blob([head.join(',')+'\n'+rows.join('\n')+'\n'],{type:'text/csv'});
+  // same contact-only columns as every property export: Address, Owner Name, Mailing Address, Folio, County, City
+  const ids=savedIdx(); for(const k in EXPSTAT) EXPSTAT[k]=0; const rows=SV.list().map(x=>{ const id=ids.get(x.folio);
+    if(id!=null) return exportRow(P(id),I(id)); EXPSTAT.real++;
+    return [csvq(x.addr||'No site address'),csvq(x.owner||''),csvq(x.mail||''),folio13(x.folio),'Miami-Dade',csvq(x.city||'')].join(','); });
+  return new Blob([EXP_HEAD+rows.join('\n')+(rows.length?'\n':'')],{type:'text/csv'});
 }
 function wireSaved(){
   document.addEventListener('click',e=>{ const b=e.target.closest('[data-star]'); if(!b) return; e.preventDefault(); e.stopPropagation();
@@ -1320,7 +1340,7 @@ function wireSaved(){
   $('svBack').onclick=()=>{ S.saved=false; run(); };
   $('svStatus').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const s=b.dataset.st; if(!s) S.svSt.clear(); else S.svSt.has(s)?S.svSt.delete(s):S.svSt.add(s); run(); });
   $('svExportJson').onclick=()=>{ download(`parcel-finder-saved-${stamp()}.json`,new Blob([JSON.stringify(SV.exportJSON(),null,1)],{type:'application/json'})); toast(fmt.format(SV.count())+' saved properties exported'); };
-  $('svExportCsv').onclick=()=>{ download(`parcel-finder-saved-${stamp()}.csv`,savedListCSV()); toast(fmt.format(SV.count())+' saved properties exported'); };
+  $('svExportCsv').onclick=async()=>{ await ensureSavedPacks(); try{ await ensureDetail(); await ensureGeo(); }catch(e){} download(`parcel-finder-saved-${stamp()}.csv`,savedListCSV()); toast(fmt.format(SV.count())+' saved properties exported'); };
   $('svImportLbl').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $('svImport').click(); } });
   $('svImport').addEventListener('change',async e=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
     try{ const r=SV.importJSON(JSON.parse(await f.text())); toast(`Imported: ${r.added} added, ${r.updated} updated, ${r.same} already up to date${r.bad?', '+r.bad+' skipped':''}`); await ensureSavedPacks(); run(); }
@@ -1520,7 +1540,7 @@ async function boot(){
     if(dlF) await openDeep(dlF);
     setTimeout(ensureComps,300);
     /* small internal API for drive.js / lenders.js (same page, nothing leaves the browser) */
-    window.PF={cmReady:()=>!!CM, cmMeta:()=>CM&&CM.meta, cmGet:f=>CMM.get(f)||null, cmMissing:async fs=>{ if(!PACKS[1]) await loadPack(1,'Loading condo units…'); const all=new Set(); PACKS.forEach(p=>{ if(p){ const c=strCol(p,'folio'); for(let i=0;i<p.n;i++) all.add(c[i]); } }); return fs.filter(f=>!all.has(f)); }, META,D,PACKS,P,I,getStr,LU_T,TYPE_LABEL,SV,esc,money,fmt,dollars,dateStr,monYr,folioFmt,today,toast,savedInfo,loadGeo,loadLeaflet,openDrawer,scoreBadge,vacBadge,sigBadges,ensureSavedPacks,savedIdx,stKey,svDate,download,stamp,csvq,
+    window.PF={expStat:()=>({...EXPSTAT}), cmReady:()=>!!CM, cmMeta:()=>CM&&CM.meta, cmGet:f=>CMM.get(f)||null, cmMissing:async fs=>{ if(!PACKS[1]) await loadPack(1,'Loading condo units…'); const all=new Set(); PACKS.forEach(p=>{ if(p){ const c=strCol(p,'folio'); for(let i=0;i<p.n;i++) all.add(c[i]); } }); return fs.filter(f=>!all.has(f)); }, META,D,PACKS,P,I,getStr,LU_T,TYPE_LABEL,SV,esc,money,fmt,dollars,dateStr,monYr,folioFmt,today,toast,savedInfo,loadGeo,loadLeaflet,openDrawer,scoreBadge,vacBadge,sigBadges,ensureSavedPacks,savedIdx,stKey,svDate,download,stamp,csvq,
       setSaved:on=>{ S.saved=!!on; run(); }, rerun:()=>run(),
       // test hook: total + an evenly spaced sample of the current results with the raw fields filters use
       sample:(k=300)=>{ const n=results.length, out=[], step=Math.max(1,Math.floor(n/k)); for(let j=0;j<n&&out.length<k;j+=step){ const id=results[j], p=P(id), i=I(id), c=p.c, mz=D.mzone[c.mz[i]]||[], g=asmOf(p,i);
@@ -1529,7 +1549,8 @@ async function boot(){
           tier:p.td?p.td.tier[i]:null, ap:p.ap?p.ap[i]:0, stage:(SV.get(getStr(p,'folio',i))||{}).stage||null, due:!!SV.dueState(getStr(p,'folio',i),todayDay()), sg:p.sg?p.sg[i]:0, cmd:CMM.get(getStr(p,'folio',i))||null, pf:PFM.get(getStr(p,'folio',i))||null, pb:PBM.get(getStr(p,'folio',i))||null, au:AUM.get(getStr(p,'folio',i))||null, comps:(()=>{ const x=compsOf(p,i); return x?{n:x.n,rad:x.rad,band:x.band,useB:x.useB,size:x.size,sameCn:x.sameCn,com:!!x.com,ppsf:x.ppsf||0,lo:x.lo||0,hi:x.hi||0,est:x.est||0}:null; })(), asm:g?{id:g.id,upside:g.upside,muni:g.muni}:null}); } return {n, rows:out, dbit:DBIT, sort:S.sort}; },
       sigMeta:()=>SIG&&SIG.meta, compsMeta:()=>CP&&CP.meta, compsReady:()=>!!CP&&PACKS.every(p=>!p||!!p.geo), ensureComps};
     document.dispatchEvent(new Event('pf:ready')); window.PF_READY=true;
-    if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{});
+    if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) { const hadCtl=!!navigator.serviceWorker.controller; navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update().catch(()=>{}); }).catch(()=>{});
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(!hadCtl||document.getElementById('swUpd')) return; const b=document.createElement('div'); b.id='swUpd'; b.className='swupd'; b.innerHTML='A new version of Parcel Finder is ready. <button type="button">Reload</button>'; b.querySelector('button').onclick=()=>location.reload(); document.body.appendChild(b); }); }
     IDB.prune(META.ver);
     setTimeout(()=>{ loadDetail(0).catch(()=>{}); },1500);
     setTimeout(()=>{ loadGeo(0).catch(()=>{}); },4000);

@@ -106,3 +106,4 @@ body.simple:not(.detail) .card .uline{display:none} /* compact cards: the type t
 .pitem .dueb,.dueb{color:var(--danger);background:var(--danger-soft)}
 .actlist li{position:relative}.actlist li [data-actdel]{position:relative;z-index:2;float:right;min-height:28px}
 .cmlist .cmlive b{font-weight:700}.cmtax .note{font-size:12px}
+.swupd{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;background:#111;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,.3)}.swupd button{margin-left:10px;background:#00B2BD;color:#fff;border:0;border-radius:6px;padding:6px 10px;font-weight:600}

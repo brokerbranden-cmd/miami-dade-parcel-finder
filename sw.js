@@ -4,7 +4,7 @@
    - data packs (data/*.gz?v=<build>): cache-first; when a new build arrives, older versions of the same file are deleted
    - map tiles (Esri / OSM, CORS only): stale-while-revalidate, capped at ~1,500 tiles
    Nothing is sent anywhere: this only caches GET requests the page already makes. */
-const SHELL = 'pf-shell-v9', DATA = 'pf-data', TILES = 'pf-tiles', MAX_TILES = 1500;
+const SHELL = 'pf-shell-v10', DATA = 'pf-data', TILES = 'pf-tiles', MAX_TILES = 1500;
 const SHELL_FILES = ['./', 'index.html', 'styles.css', 'ui.css', 'ui.js', 'teardown.js', 'app.js', 'saved.js', 'drive.js', 'lenders.js', 'lenders-page.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png'];
 self.addEventListener('install', e => {
@@ -16,7 +16,7 @@ self.addEventListener('activate', e => {
 async function networkFirst(req, cacheName, key) {
   const c = await caches.open(cacheName);
   try {
-    const r = await fetch(req);
+    const r = await fetch(req.mode === 'navigate' ? req.url : req, { cache: 'no-cache' });   // revalidate with the server: never serve stale app code from the HTTP cache
     if (r && r.ok) c.put(key || req, r.clone());
     return r;
   } catch (err) {

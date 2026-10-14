@@ -179,7 +179,7 @@ def s10_send_to():
     ok(pg.query_selector('.drawer') is None, 'tagging does not open the drawer')
     click('#sendChips .chip[data-send="cc"]'); settle(); ok(cnt() == 2, 'Send to: call center filter shows the 2 tagged')
     fill('#listName-cc', 'Scenario list'); rs = csv_of('#sendExp-cc')
-    ok({r['Folio'] for r in rs} == {f1, f2} and all(r['Team'] == 'Call center' and r['List Name'] == 'Scenario list' for r in rs), 'export has the 2 folios with team + list name')
+    ok({r['Folio'] for r in rs} == {f1, f2} and rs and list(rs[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'Send to export: the 2 folios, 6 contact columns only')
     click('#sendBar [data-sendmark="1"]'); pg.wait_for_timeout(500)
     ok(pg.is_disabled('#sendExp-cc'), 'after Mark as sent nothing new to export')
     click(f'#cards .card[data-folio="{f1}"] .resend[data-resend="cc"]'); pg.wait_for_timeout(400)
@@ -241,14 +241,12 @@ def s16_csv_columns():
     reset(); go('city=Miami%20Gardens&sig=TD&type=sf'); n = cnt(); ok(0 < n < 5000, f'{n} rows to export')
     rs = csv_of('#exportBtn'); hdr = list(rs[0].keys()) if rs else []
     ok(len(rs) == n, f'CSV rows {len(rs)} = results {n}')
-    for col in ('Folio', 'Address', 'City', 'ZIP', 'Owner', 'Market Value', 'Lot SqFt', 'Latitude', 'Longitude', 'Distress Score', 'Teardown Tier', 'Assemblage Group'):
-        ok(any(h_.startswith(col) for h_ in hdr), f'column {col}')
-    ok(len(set(hdr)) == len(hdr), 'no duplicate column names')
+    ok(hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], f'columns exactly Address, Owner Name, Mailing Address, Folio, County, City ({hdr})')
     ok(all(re.fullmatch(r'[\d-]{13,17}', r['Folio']) for r in rs), 'folios look right')
     ok(len({r['Folio'] for r in rs}) == len(rs), 'no duplicate rows')
     ok(all(r['City'] == 'Miami Gardens' for r in rs), 'city column matches filter')
-    mv = [r['Market Value'] for r in rs]; ok(all(re.fullmatch(r'\d+', v) for v in mv if v), 'market value is a plain number')
-    lat = [float(r['Latitude']) for r in rs if r['Latitude']]; ok(lat and all(25.1 < x < 26.1 for x in lat), 'coordinates in Miami-Dade')
+    ok(all(r['County'] == 'Miami-Dade' and r['Owner Name'] for r in rs), 'county + owner filled')
+    ok(sum(1 for r in rs if r['Mailing Address']) >= 0.9 * len(rs), 'mailing address present on most rows')
 @scenario
 def s17_sort_orders():
     reset(); go('type=sf&city=Doral')

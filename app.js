@@ -948,21 +948,12 @@ async function copy(text,ok){
 const csvq=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 function distCSV(folio){ const r=DIST&&DIST.recs[folio]; if(!r) return ['','']; return [csvq(r.map(x=>[x[0],x[1],x[2],x[4],x[3]?'$'+Math.round(x[3]):''].filter(Boolean).join(' ')).join('; ')), csvq([...new Set(r.map(x=>x[5]).filter(Boolean))].join(' '))]; }
 function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.savedAt.slice(0,10),csvq(x.note),x.vacant?'Y':'',csvq(x.cond||'')]:['','','','','',''];}
-function buildCSV(ids=results,extra){
-  const head=['Folio','Address','City','ZIP','Property Type','City Zoning','Zoning Jurisdiction','Zoning Description','Zoning Group','Appraiser Zoning','Land Use','Lot SqFt','Acres','Living SqFt','Beds','Baths','Units','Stories','Year Built','Land Value','Building Value','Market Value','Assessed Value','Land Share %','Last Sale Date','Last Sale Price','Market Sale','Prior Sale Date','Prior Sale Price','Owner','Owner Type','Mailing Address','Homestead','Out of State Owner','Mails to Other ZIP','Company/Organization','Trust','Estate/Heirs','CRA','Legal','Senior Exemption','Taxable Value (County)','Prior Year Value','Sold By','Deed Book-Page','Latitude','Longitude','Property Appraiser Link','Distress Score','Distress Signals','Signal Details','Signal Sources','Vacancy Hint','Vacancy Signals','Last Permit On Record','Permits (5 yrs)','Last Permit Detail','Open Code Cases','Code Cases (5 yrs)','Code Case Detail','Permit/Code Signals','Permit Data Coverage','Code Data Coverage','Saved','Saved Status','Saved Date','Saved Note','Marked Vacant/Damaged','Condition Note','Teardown Tier','Teardown Reasons','Zone Min Lot SqFt','Zone Units/Acre','Zone Max Stories','Zone FAR','Units Allowed','Unit Multiple','Buildable SqFt Multiple','Lot vs Zone Minimum','Lot Could Be Split','Construction','Adverse Possession','Call Center Tag','Door Knock Tag','Assemblage Group','Assemblage Score','Assemblage Parcels','Assemblage Owners','Combined Lot SqFt','Combined Units Allowed','Unit Gain vs Separate','Assemblage Upside','Assemblage Reason'];
-  if(extra) head.splice(1,0,'Team','List Name');
-  const parts=[head.join(',')+'\n']; let buf='';
+function buildCSV(ids=results){
+  // export = contact list only (main export and Send to lists): Address, Owner Name, Mailing Address, Folio, County, City
+  const parts=['Address,Owner Name,Mailing Address,Folio,County,City\n']; let buf='';
   for(let j=0;j<ids.length;j++){
-    const id=ids[j], p=P(id), i=I(id), c=p.c, fl=c.flags[i], mv=c.mkt[i];
-    const row=[getStr(p,'folio',i),csvq(getStr(p,'addr',i)),csvq(D.city[c.city[i]]),D.zip[c.zip[i]],csvq(TYPE_LABEL[LU_T[c.landuse[i]]]),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][0]):''),(MZ[c.mz[i]]?csvq(MZ[c.mz[i]][1]):''),csvq(mzLabel(c.mz[i])),csvq(ZONE_LABEL[Z_G[c.zoning[i]]]),csvq(D.zoning[c.zoning[i]]),csvq(D.landuse[c.landuse[i]]),
-      c.lot[i],(c.lot[i]/SQFT_AC).toFixed(3),c.sqft[i],c.beds[i],c.baths[i]/10,c.units[i],c.stories[i],c.yb[i]||'',
-      c.land[i],c.bldg[i],mv,c.assd[i],mv?Math.round(c.land[i]/mv*100):'',dateStr(c.sd1[i]),c.sale1[i]||'',c.sq1[i]===1?'Y':c.sq1[i]===2?'N':'',
-      dateStr(c.sd2[i]),c.sale2[i]||'',csvq(getStr(p,'owner',i)),fl&8?'Company/Organization':fl&16?'Trust':fl&32?'Government':'Individual',csvq(getStr(p,'mail',i)),
-      fl&1?'Y':'',fl&2?'Y':'',fl&4?'Y':'',fl&8?'Y':'',fl&16?'Y':'',fl&64?'Y':'',csvq(D.cra[c.cra[i]]||''),csvq(getStr(p,'legal',i)),
-      fl&128?'Y':'',c.taxable[i],c.prv[i]||'',csvq(getStr(p,'grantor',i)),getStr(p,'book',i),p.geo&&p.geo.lat[i]>20?p.geo.lat[i].toFixed(6):'',p.geo&&p.geo.lat[i]>20?p.geo.lon[i].toFixed(6):'','https://apps.miamidadepa.gov/propertysearch/#/?folio='+getStr(p,'folio',i),
-      c.dscore[i],csvq(sigText(c.dsig[i])),...distCSV(getStr(p,'folio',i)),c.vscore?c.vscore[i]:'',csvq(vsigText(c.vsig?c.vsig[i]:0)),c.lperm?dateStr(c.lperm[i]):'',c.pn5?c.pn5[i]:'',csvq(getStr(p,'psum',i)||''),c.cn_open?c.cn_open[i]:'',c.cn5?c.cn5[i]:'',csvq(getStr(p,'csum',i)||''),csvq(pcsText(c.pcs?c.pcs[i]:0)),csvq(covShort(PCOV[getStr(p,'folio',i).slice(0,2)],'permit')),csvq(covShort(PCOV[getStr(p,'folio',i).slice(0,2)],'code')),...savedCSV(getStr(p,'folio',i)),...tdCSV(p,i)];
-    if(extra) row.splice(1,0,csvq(extra.team.label),csvq(extra.list));
-    buf+=row.join(',')+'\n';
+    const id=ids[j], p=P(id), i=I(id), c=p.c;
+    buf+=[csvq(getStr(p,'addr',i)),csvq(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; ')),csvq(getStr(p,'mail',i)),getStr(p,'folio',i),'Miami-Dade',csvq(D.city[c.city[i]]||'')].join(',')+'\n';
     if(buf.length>1e6){ parts.push(buf); buf=''; }
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});

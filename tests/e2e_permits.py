@@ -69,8 +69,8 @@ with sync_playwright() as pw:
     pg.goto(URL + '#city=Hialeah&pcs=CO&sort=lot_d'); pg.wait_for_selector('#results:not([hidden])', timeout=120000); pg.wait_for_timeout(1200)
     with pg.expect_download() as dl: pg.click('#exportBtn')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
-    ok(rows and all(k in rows[0] for k in ('Permits (5 yrs)', 'Open Code Cases', 'Permit Data Coverage', 'Code Case Detail')), 'CSV has permit/code columns')
-    ok(rows and any(r['Open Code Cases'] not in ('', '0') for r in rows[:50]) and 'Since' in rows[0]['Code Data Coverage'], f"CSV rows carry open cases + coverage: {rows[0]['Code Data Coverage'][:60]}")
+    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'CSV has exactly the 6 contact columns')
+    ok(all(r['City'] == 'Hialeah' and r['County'] == 'Miami-Dade' for r in rows[:200]), 'CSV rows are Hialeah, Miami-Dade')
     b.close()
 print('\nERRORS:' if errs else '\nALL OK'); [print(' ', e) for e in errs]
 sys.exit(1 if errs else 0)

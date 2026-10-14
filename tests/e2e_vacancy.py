@@ -75,7 +75,7 @@ with sync_playwright() as pw:
     ok(rows[0]['Marked Vacant/Damaged'] == 'Y' and rows[0]['Condition Note'].startswith('Boarded') and rows[0]['Vacancy Hint'] != '', 'saved CSV has vacancy columns')
     with pg.expect_download() as dl: pg.click('#exportBtn')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
-    ok(rows and rows[0]['Vacancy Hint'] and rows[0]['Vacancy Signals'] and rows[0]['Marked Vacant/Damaged'] == 'Y', 'results CSV has Vacancy Hint/Signals/Marked columns')
+    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'results CSV = the 6 contact columns')
     pg.click('#svBack'); pg.wait_for_timeout(500)
     # import merges flag into a fresh context
     ctx2 = b.new_context(viewport={'width': 1360, 'height': 900}); p2 = ctx2.new_page()

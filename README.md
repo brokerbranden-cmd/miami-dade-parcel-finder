@@ -413,3 +413,6 @@ Tests:
 - **Auction max bid**: `fetch_auctions.py` keeps *Plaintiff Max Bid*; cards with a scheduled sale show date · judgment (or opening bid) · max bid (most plaintiffs show **Hidden** until the sale).
 - **Comps value estimate** on cards + a comps table in the drawer: PA-qualified (arm's-length) sales in the last 6 months (`scripts/build_comps.py` → `data/comps.json.gz`, multi-parcel deeds dropped), same land use, building size within ½–2× (lot within 4×; relaxed to ¼–4× if needed), within 0.5 → 1 → 2 mi until 3+ sales, same construction when 3+ share it. Range = middle half of $/sf × this size. Cash vs financed is shown when known; the roll does not carry it (Clerk deed + mortgage join pending the paid daily file). Not an appraisal.
 - Tests: `tests/e2e_clerk.py URL [desktop|mobile]` and scenarios s34–s38.
+
+## CSV export (Oct 14, 2026)
+The main **Export CSV** and the **Send to** list exports contain only: `Address, Owner Name, Mailing Address, Folio, County, City` (County is always Miami-Dade; Mailing Address is the owner mailing address from the PA roll whenever present). Send to "Mark as sent" is unchanged. The Saved-list CSV/JSON exports are separate and unchanged.

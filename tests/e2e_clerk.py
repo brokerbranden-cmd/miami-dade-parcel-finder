@@ -19,7 +19,8 @@ PF = {r[0]: r for r in SIG['pf']}; PB = {r[0]: r for r in SIG['pb']}; AU = {r[0]
 ok(len(PF) > 100 and len(PB) > 50 and len(AU) > 20, f"signals file: {len(PF)} open pre-foreclosures, {len(PB)} probate, {len(AU)} auction folios")
 ok(all(r[4] in 'HM' for r in SIG['pb']), 'probate rows are high or medium confidence only')
 ok(all(len(r) == 8 for r in SIG['au']) and all(r[6] > 0 or r[7] in (1, 0, -1) for r in SIG['au']), 'auction rows carry max bid (amount or hidden flag)')
-cut = CPD['meta']['cutoff']; ok(CPD['meta']['months'] == 6 and all(r[3] >= cut and r[4] >= 1000 for r in CPD['rows']), f"comps: {len(CPD['rows']):,} sales, all since {cut} and >= $1,000")
+cut = CPD['meta']['cutoff']; cutC = CPD['meta'].get('commCutoff', cut); com = lambda r: 10 <= int(r[7][:2]) <= 49
+ok(CPD['meta']['months'] == 6 and all(r[4] >= 1000 and r[3] >= (cutC if com(r) else cut) for r in CPD['rows']), f"comps: {len(CPD['rows']):,} sales >= $1,000, residential since {cut}, commercial/industrial since {cutC}")
 def boot(pg, url):
     pg.goto(url, timeout=180000)
     if MOB and pg.query_selector('#drive:not([hidden])'): pg.click('#dExit')

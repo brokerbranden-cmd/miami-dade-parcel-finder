@@ -635,6 +635,8 @@ function sigBadges(sg){ let h=''; for(let b=0;b<12;b++) if(sg&(1<<b)) h+=`<span 
 const vacBadge=(c,i)=>{ const v=c.vscore?c.vscore[i]:0; return v>=25?`<span class="vac ${vsTone(v)}" title="Vacancy / neglect hint ${v} of 100 (public records only)">${v>=40?'Likely vacant':'Possibly vacant'} · ${v}</span>`:''; };
 const vsigText=vg=>{ const a=[]; for(let b=0;b<VSIG.length;b++) if(vg&(1<<b)) a.push(VSIG[b][1]); return a.join(', '); };
 const scoreBadge=(v,big)=>`<span class="dscore ${dsTone(v)}${big?' big':''}" title="Distress score ${v} of 100">${v}</span>`;
+/* FEMA flood zone badge (counties with the flood layer keep the zone label in the 'cra' column / D.cra) */
+const floodTag=(c,i)=>{ if(!HAS('flood')) return ''; const z=D.cra[c.cra[i]]||''; return /^V/.test(z)?'<span class="tt hot" title="'+esc(z)+'">Flood VE</span>':/^A/.test(z)?'<span class="tt warm" title="'+esc(z)+'">Flood '+esc(z.split(' ')[0])+'</span>':''; };
 function cardHTML(id){
   const p=P(id), i=I(id), c=p.c;
   const addr=getStr(p,'addr',i)||'No street address', lu=D.landuse[c.landuse[i]], zn=D.zoning[c.zoning[i]], t=LU_T[c.landuse[i]], zg=Z_G[c.zoning[i]];
@@ -643,7 +645,7 @@ function cardHTML(id){
   const sale = c.sd1[i]? `${monYr(c.sd1[i])}${c.sale1[i]>100?' for '+money(c.sale1[i]):''} · owned ${Math.max(0,Math.floor((today-c.sd1[i])/365.25))} yrs` : 'No sale on record';
   const folio=getStr(p,'folio',i), sv=SV.get(folio);
   return `<article class="card ${sv?'is-saved':''}" data-id="${id}" data-folio="${folio}" tabindex="0" aria-label="${esc(addr)}. Open details">
-    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span><span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span>${tdTag(p,i)}<span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
+    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span>${HAS('zoning')?`<span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span>`:''}${floodTag(c,i)}${tdTag(p,i)}<span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
     ${sv?`<div class="svline"><span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span>${sv.vacant?'<span class="spill vmine" title="You marked it as looking vacant / damaged">Looks vacant (you)</span>':''}<span class="svd">Saved ${svDate(sv.savedAt)}</span>${sv.note||sv.cond?`<span class="svn" title="${esc([sv.note,sv.cond].filter(Boolean).join(' · '))}">${esc(sv.note||sv.cond)}</span>`:''}</div>`:''}
     <div><h3>${esc(addr)}</h3><div class="city">${esc(D.city[c.city[i]])}, FL ${D.zip[c.zip[i]]}</div></div>
     <div class="facts">
@@ -651,7 +653,7 @@ function cardHTML(id){
       <div><div class="k">Building</div><div class="v">${sf?fmt.format(sf)+' sf':'None'}</div><div class="s">${esc(bldgS)}</div></div>
       <div><div class="k">Value</div><div class="v">${mv?money(mv):'–'}</div><div class="s">${mv&&c.land[i]?Math.round(c.land[i]/mv*100)+'% is land':'&nbsp;'}</div></div>
     </div>
-    <div class="line"><span class="k">Zoning</span><span class="v" title="${esc(zn)}">${mzHTML(c.mz[i]) || esc(nice(zn)||'Not listed')}</span></div>
+    ${HAS('zoning')?`<div class="line"><span class="k">Zoning</span><span class="v" title="${esc(zn)}">${mzHTML(c.mz[i]) || esc(nice(zn)||'Not listed')}</span></div>`:HAS('flood')?`<div class="line"><span class="k">Flood</span><span class="v">${esc(D.cra[c.cra[i]]||'Not mapped')}</span></div>`:''}
     <div class="line uline"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>

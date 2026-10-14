@@ -114,3 +114,4 @@ body.simple:not(.detail) .card .uline{display:none} /* compact cards: the type t
 /* county switcher (counties.js) */
 .countysel{margin:4px 0 0;font:inherit;font-size:13px;padding:3px 6px;border-radius:8px;border:1px solid rgba(0,0,0,.2);background:#fff;color:inherit;max-width:200px}
 [data-county-hidden]{display:none!important}
+.tt.hot{color:#b42318} .tt.warm{color:#b54708}

@@ -52,7 +52,7 @@ try:
     import geopandas as gpd
     fz = gpd.read_file(f'{RAW}/flood.geojson')
     def lab(z, sub, bfe):
-        z = (z or '').strip(); sub = (sub or '').upper(); b = pd.to_numeric(bfe, errors='coerce')
+        z = z.strip() if isinstance(z, str) else ''; sub = sub.upper() if isinstance(sub, str) else ''; b = pd.to_numeric(bfe, errors='coerce')
         if not z: return ''
         if z.startswith('V'): t = f'{z} - coastal high hazard'
         elif z.startswith('A'): t = f'{z} - high risk'

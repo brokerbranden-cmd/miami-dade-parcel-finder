@@ -1,0 +1,70 @@
+1760
+distress_type                                                                  property_type                         
+Closed gas station - FDEP storage tank facility status ABANDONED               vacant commercial (former gas station)      1
+Closed gas station - FDEP storage tank facility status CLOSED                  convenience store                          15
+                                                                               gas station                                23
+                                                                               vacant commercial (former gas station)    120
+Code enforcement - county lis pendens (Active LP)                              mixed use (store/office/residential)        1
+Code enforcement lien                                                          auto sales/repair                          13
+                                                                               fast food                                   2
+                                                                               gas station                                 8
+                                                                               hotel/motel                                 1
+                                                                               mixed use (store/office/residential)        4
+                                                                               office                                     10
+                                                                               parking lot                                 4
+                                                                               restaurant (freestanding/sit-down)          2
+                                                                               retail                                     22
+                                                                               strip / shopping center                     8
+                                                                               vacant commercial land                     21
+Delinquent property taxes (advertised for 2026 tax certificate sale)           auto sales/repair                         109
+                                                                               commercial condo unit                       8
+                                                                               fast food                                   9
+                                                                               gas station                                16
+                                                                               hotel/motel                                26
+                                                                               mixed use (store/office/residential)      111
+                                                                               office                                    202
+                                                                               other commercial                           43
+                                                                               parking lot                                67
+                                                                               restaurant (freestanding/sit-down)         45
+                                                                               retail                                    269
+                                                                               strip / shopping center                     1
+                                                                               vacant commercial land                    586
+Fast-food closure - Popeyes franchisee (Sailormen Inc.) Ch.11 lease rejection  fast food                                   1
+Foreclosure auction (upcoming)                                                 commercial condo unit                       1
+                                                                               hotel/motel                                 1
+                                                                               mixed use (store/office/residential)        1
+                                                                               retail                                      1
+                                                                               vacant commercial land                      1
+Foreclosure lawsuit filed (Ocean Bank v. Aurora Investment & Holdings LLC)     gas station                                 1
+Tax deed auction (upcoming)                                                    hotel/motel                                 2
+                                                                               other commercial                            1
+                                                                               strip / shopping center                     1
+                                                                               vacant commercial land                      2
+distress_type
+Closed gas station - FDEP storage tank facility status ABANDONED                    1
+Closed gas station - FDEP storage tank facility status CLOSED                     158
+Code enforcement - county lis pendens (Active LP)                                   1
+Code enforcement lien                                                              95
+Delinquent property taxes (advertised for 2026 tax certificate sale)             1492
+Fast-food closure - Popeyes franchisee (Sailormen Inc.) Ch.11 lease rejection       1
+Foreclosure auction (upcoming)                                                      5
+Foreclosure lawsuit filed (Ocean Bank v. Aurora Investment & Holdings LLC)          1
+Tax deed auction (upcoming)                                                         6
+dtype: int64
+property_type
+auto sales/repair                         122
+commercial condo unit                       9
+convenience store                          15
+fast food                                  12
+gas station                                48
+hotel/motel                                30
+mixed use (store/office/residential)      117
+office                                    212
+other commercial                           44
+parking lot                                71
+restaurant (freestanding/sit-down)         47
+retail                                    292
+strip / shopping center                    10
+vacant commercial (former gas station)    121
+vacant commercial land                    610
+dtype: int64

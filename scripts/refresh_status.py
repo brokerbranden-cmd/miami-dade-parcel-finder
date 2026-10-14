@@ -8,7 +8,7 @@ SOURCES = {  # step -> label
     'clerk': 'Clerk lis pendens', 'clerk_clp': 'Clerk CLP (open check)', 'auctions': 'Foreclosure/tax auctions',
     'tax': 'Tax delinquency', 'viol': 'Code violations', 'permits': 'City of Miami permits',
     'county_permits': 'County permits', 'energov': 'EnerGov city permits', 'parcels': 'Parcel polygons'}
-BUILDS = ['load_raw', 'spatial', 'merge_permits', 'distress', 'signals', 'comps', 'data', 'zoning_rules', 'assemblages']
+BUILDS = ['load_raw', 'spatial', 'merge_permits', 'distress', 'signals', 'comps', 'commercial', 'data', 'zoning_rules', 'assemblages']
 def state(s):
     for k in ('ok', 'stale', 'fail'):
         p = os.path.join(st, f'{s}.{k}')
@@ -37,6 +37,8 @@ if isinstance(sg, dict):
         if isinstance(sg.get(k), list): counts[n] = len(sg[k])
 cp = J('data/comps.json.gz')
 if isinstance(cp, dict): counts['comps'] = len(cp.get('rows') or [])
+cm = J('data/commercial.json.gz')
+if isinstance(cm, dict): counts['commercial_list'] = len(cm.get('rows') or {}); counts['commercial_live_tax'] = sum('chk' in v for v in (cm.get('rows') or {}).values())
 for s, d in (('tax', 'tax'), ('viol', 'viol'), ('permits_files', 'permits'), ('parcel_files', 'parcels'), ('clerk_files', 'clerk')):
     counts[s] = nfiles(d)
 hist, _ = lastgood(None)

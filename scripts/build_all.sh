@@ -74,6 +74,7 @@ if ! ls raw/lp_downloads/clp_*.csv raw/lp_downloads/cot_*.csv >/dev/null 2>&1; t
 else done_ clerk_clp || mark clerk_clp ok; fi
 build signals python3 scripts/build_signals.py data        # -> data/signals.json.gz
 build comps   python3 scripts/build_comps.py data          # -> data/comps.json.gz
+build commercial bash scripts/commercial/run_commercial.sh   # -> data/commercial.json.gz (Miami-Dade commercial distress score, live tax payoff, owner entity, closed gas; non-fatal)
 build data    python3 scripts/build_data.py data           # -> data/meta.json + data/*.bin.gz
 build zoning_rules python3 scripts/build_zoning_rules.py data   # -> data/zoning-rules.json + data/extras.json.gz
 fetch parcels "parcels" python3 scripts/fetch_parcels.py "$RAW"

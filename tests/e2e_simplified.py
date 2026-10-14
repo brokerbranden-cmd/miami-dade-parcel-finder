@@ -83,6 +83,7 @@ with sync_playwright() as pw:
     ok(c0.query_selector('[data-sendtag="cc"]').is_visible() and pg.query_selector('.drawer') is None, '⋯ shows them (drawer stays closed)')
     c0.query_selector('[data-sendtag="cc"]').click(); pg.wait_for_timeout(400)
     ok('on' in (pg.query_selector(f'#cards .card[data-folio="{f0}"] [data-sendtag="cc"]').get_attribute('class') or ''), 'tagging from the ⋯ menu works')
+    if not pg.query_selector(f'#cards .card[data-folio="{f0}"] [data-sendtag="cc"]').is_visible(): pg.click(f'#cards .card[data-folio="{f0}"] .cmore'); pg.wait_for_timeout(200)  # tagging re-renders the card, which may close ⋯
     pg.query_selector(f'#cards .card[data-folio="{f0}"] [data-sendtag="cc"]').click(); pg.wait_for_timeout(300)
     h = pg.evaluate("Math.round(document.querySelector('#cards .card').getBoundingClientRect().height)"); ok(h < 470, f'compact card height {h}px (was 540)')
     pg.screenshot(path=f'{SHOTS}after_{TAG}_cards_compact.png')

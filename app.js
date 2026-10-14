@@ -1418,7 +1418,7 @@ function wire(){
   $('stageSel').addEventListener('change',()=>{ S.stage=$('stageSel').value; clearIdea(); run(); });
   $('clrOut').onclick=()=>{ S.due=false; S.stage=''; clearIdea(); run(); };
   $('drawerHost').addEventListener('change',e=>{ const ob=$('outBox'); if(!ob||!ob.contains(e.target)) return; const f=ob.dataset.folio, id=+ob.dataset.id;
-    if(e.target.id==='outStage'||e.target.id==='outNext'){ if(!SV.has(f)) SV.add(f,savedInfo(id)); SV.update(f,e.target.id==='outStage'?{stage:e.target.value}:{next:e.target.value}); toast(e.target.id==='outStage'?'Stage: '+e.target.value:(e.target.value?'Next follow-up '+e.target.value:'Follow-up cleared')); } });
+    if(e.target.id==='outStage'||e.target.id==='outNext'){ if(!SV.has(f)) SV.add(f,savedInfo(id)); SV.update(f,e.target.id==='outStage'?{stage:e.target.value}:{next:e.target.value}); ob.innerHTML=outInner(f); toast(e.target.id==='outStage'?'Stage: '+e.target.value:(e.target.value?'Next follow-up '+e.target.value:'Follow-up cleared')); } });
   $('drawerHost').addEventListener('click',e=>{ const ob=$('outBox'); if(!ob||!ob.contains(e.target)) return; const f=ob.dataset.folio, id=+ob.dataset.id;
     if(e.target.id==='actAdd'){ const a=SV.logActivity(f,{type:$('actType').value,d:$('actDate').value,outcome:$('actOutcome').value,note:$('actNote').value.trim()},savedInfo(id)); toast(a?`${ACT_LABEL[a.type]} logged`:'Pick a valid date'); if(a){ ob.innerHTML=outInner(f); } return; }
     const d=e.target.closest('[data-actdel]'); if(d){ SV.removeActivity(f,d.dataset.actdel); ob.innerHTML=outInner(f); toast('Activity deleted'); } });

@@ -104,3 +104,4 @@ body.simple:not(.detail) .card .uline{display:none} /* compact cards: the type t
 .dueb{font-weight:700}
 @media (max-width:899px){ .pipecols{grid-template-columns:1fr;overflow:visible} }
 .pitem .dueb,.dueb{color:var(--danger);background:var(--danger-soft)}
+.actlist li{position:relative}.actlist li [data-actdel]{position:relative;z-index:2;float:right;min-height:28px}

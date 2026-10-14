@@ -131,7 +131,7 @@ with sync_playwright() as pw:
     d0 = dl.value; ok(d0.suggested_filename == 'Hialeah_teardowns_Oct.csv', 'file name ' + d0.suggested_filename)
     rows = list(csv.DictReader(io.StringIO(open(d0.path(), encoding='utf-8').read())))
     ok(len(rows) == 2 and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'Send to export: the 6 contact columns only; 2 rows')
-    ok({r['Folio'] for r in rows} == {f1, f2} and all(r['City'] == 'Hialeah' and r['Owner Name'] for r in rows), 'export rows = the tagged folios')
+    ok({r['Folio'] for r in rows} == {f1, f2} and all(r['Owner Name'] and r['County'] == 'Miami-Dade' for r in rows), 'export rows = the tagged folios')
     ok(not pg.query_selector('#sendBar').is_hidden() and 'Mark as sent' in pg.inner_text('#sendBar'), 'mark-as-sent bar shown')
     pg.click('#sendBar [data-sendmark="1"]'); wait(pg, 600)
     ok('Sent' in pg.inner_text(f'#cards .card[data-folio="{f1}"] .sendline'), 'card shows Call center · Sent badge')

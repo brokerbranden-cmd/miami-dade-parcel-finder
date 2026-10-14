@@ -416,3 +416,11 @@ Tests:
 
 ## CSV export (Oct 14, 2026)
 The main **Export CSV** and the **Send to** list exports contain only: `Address, Owner Name, Mailing Address, Folio, County, City` (County is always Miami-Dade; Mailing Address is the owner mailing address from the PA roll whenever present). Send to "Mark as sent" is unchanged. The Saved-list CSV/JSON exports are separate and unchanged.
+
+## Counties (multi-county)
+`counties.js` is the county registry, and it loads before every other script. Each entry sets the name, map center and bounds, `dataDir`, the available `layers`, the Property Appraiser link and a storage suffix.
+- The active county comes from `?county=<id>`, then the last county picked (`localStorage pf.county`), then `miami-dade`. The header select switches county by reloading with `?county=`, so copied links carry the county.
+- Miami-Dade keeps `data/` and its original storage keys. Other counties read `data/<id>/`. Saved properties, outreach, send tags, the last search and the IndexedDB pack cache are all per county (keys end in `.<id>`), so counties never mix. The CSV County column is the active county.
+- Filter groups and ideas that need a missing layer are hidden (`data-need="..."` in index.html, `NEED` in counties.js, `IDEA_NEED` in app.js).
+- **Monroe (phase 1):** `scripts/counties/monroe/fetch_monroe.py` pulls the FL statewide cadastral layer (FDOR roll, `CO_NO=54`) and the FEMA NFHL flood zones (`DFIRM_ID 12087%`). `build_monroe.py` writes the packs in the same format as Miami-Dade. The flood zone sits in the `cra` column (labelled "FEMA flood zone"). The pack lat/lon origin is `meta.geoOrigin`. build_all.sh runs both as a non-fatal step (`SKIP_COUNTIES=monroe` skips them). There is no zoning (the mcgis4 server is unreachable), and no permits, code cases or Clerk/tax/auction distress. The roll only carries sales from the last ~2 years, so "owned 20+ years" can't be computed.
+- To add Broward or Palm Beach: add an entry to `counties.js`, then add `scripts/counties/<id>/` fetch + build steps that write `data/<id>/` and a step in build_all.sh.

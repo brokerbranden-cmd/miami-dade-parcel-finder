@@ -379,6 +379,18 @@ def s38_comps_value_estimate():
     cl = pg.locator('#cards .card:has(.cpline b)').first; cl.scroll_into_view_if_needed(); cl.locator('.facts').click(); pg.wait_for_selector('.drawer', timeout=60000); pg.wait_for_timeout(800)
     reveal('.drawer .cpt'); ok(pg.locator('.drawer .cpt tbody tr').count() >= 3, 'drawer lists the comparable sales'); pg.keyboard.press('Escape'); settle(400)
 @scenario
+def s39_outreach_followups_due():
+    reset(); go(''); settle(800); fs = pg.eval_on_selector_all('#cards .card', 'e=>e.slice(0,2).map(x=>x.dataset.folio)')
+    pg.evaluate("([a,b])=>{const t=new Date(),y=new Date(t-2*864e5),p=d=>d.toISOString().slice(0,10);PF.SV.logActivity(a,{type:'call',d:p(t),outcome:'Talked'});PF.SV.update(a,{next:p(y)});PF.SV.logActivity(b,{type:'mailer',d:p(t)});PF.SV.update(b,{next:'2099-01-01'})}", fs)
+    go('due=1'); settle(1500); cs = pg.eval_on_selector_all('#cards .card', 'e=>e.map(x=>x.dataset.folio)')
+    ok(fs[0] in cs and fs[1] not in cs, f'Due/overdue filter shows only the overdue lead ({len(cs)} cards)')
+    ok('Overdue' in pg.inner_text('#cards'), 'overdue badge on the card')
+@scenario
+def s40_outreach_pipeline():
+    go('view=pipe'); settle(1500)
+    ok(pg.locator('#pipeCols .pcol').count() == 7, 'pipeline has 7 stage columns')
+    ok(pg.locator('#pipeCols .pcol[data-stage="Contacted"] .pitem').count() >= 2, 'contacted leads appear in the Contacted column')
+@scenario
 def s32_mobile_or_desktop_layout():
     reset(); w = pg.evaluate('document.documentElement.scrollWidth'); vw = pg.evaluate('innerWidth')
     ok(w <= vw + 1, f'no horizontal scroll ({w} <= {vw})'); shot('32_layout')

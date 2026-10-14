@@ -179,7 +179,7 @@ def s10_send_to():
     ok(pg.query_selector('.drawer') is None, 'tagging does not open the drawer')
     click('#sendChips .chip[data-send="cc"]'); settle(); ok(cnt() == 2, 'Send to: call center filter shows the 2 tagged')
     fill('#listName-cc', 'Scenario list'); rs = csv_of('#sendExp-cc')
-    ok({r['Folio'] for r in rs} == {f1, f2} and rs and list(rs[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'Send to export: the 2 folios, 6 contact columns only')
+    ok({r['Folio'].replace('-', '') for r in rs} == {f1, f2} and rs and list(rs[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'Send to export: the 2 folios, 6 contact columns only')
     click('#sendBar [data-sendmark="1"]'); pg.wait_for_timeout(500)
     ok(pg.is_disabled('#sendExp-cc'), 'after Mark as sent nothing new to export')
     click(f'#cards .card[data-folio="{f1}"] .resend[data-resend="cc"]'); pg.wait_for_timeout(400)

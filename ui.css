@@ -84,3 +84,23 @@ body.simple .dsec>*:last-child{margin-bottom:12px}
 .cpt td,.cpt th{font-size:12px;padding:3px 6px;white-space:nowrap}
 .dlist.clerk{margin-top:6px}
 body.simple:not(.detail) .card .uline{display:none} /* compact cards: the type tag already says the use; full use in Detailed cards + drawer */
+/* outreach + pipeline */
+.outbox .outrow{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:end}
+.outbox .outlog{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.outbox .outlog input[type=text]{flex:1 1 160px;min-width:120px}
+.actlist{list-style:none;padding:0;margin:6px 0;display:grid;gap:4px}
+.actlist li{border-left:3px solid var(--line);padding:2px 8px;font-size:13px}
+.actlist li small{display:block;color:var(--muted)}
+.pipebox{margin:8px 0 24px}
+.pipe-h{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}
+.pipe-act{display:flex;gap:6px;flex-wrap:wrap}
+.pipecols{display:grid;grid-template-columns:repeat(7,minmax(170px,1fr));gap:10px;overflow-x:auto;padding-bottom:6px}
+.pcol{background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:80px}
+.pcol h3{font-size:13px;margin:0 0 2px;display:flex;justify-content:space-between}
+.pitem{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:transparent;cursor:pointer;font:inherit;color:inherit}
+.pitem:hover{border-color:#FC4C02}
+.pitem small{color:var(--muted)}
+.pitem .dueb{font-size:11px;border-radius:4px;padding:0 5px}
+.dueb{font-weight:700}
+@media (max-width:899px){ .pipecols{grid-template-columns:1fr;overflow:visible} }
+.pitem .dueb,.dueb{color:var(--danger);background:var(--danger-soft)}

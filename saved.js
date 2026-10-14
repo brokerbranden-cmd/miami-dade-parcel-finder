@@ -55,10 +55,10 @@
     /* outreach: logging on an unsaved property saves it first; the first contact moves a New lead to Contacted */
     logActivity(f, act, info){ const a = cleanAct(act); if(!a) return null; if(!items[f]) api.add(f, info || {}); const cur = items[f];
       const acts = sortActs([a, ...cur.acts.filter(x => x.id !== a.id)]).slice(0, 500), patch = { acts };
-      if(cur.stage === 'New' && a.type !== 'note') patch.stage = 'Contacted'; if(a.outcome === 'Offer made' && ['New','Contacted','Follow-up'].includes(cur.stage)) patch.stage = 'Offer';
+      if(cur.stage === 'New' && a.type !== 'note' && a.outcome !== 'Sent to list') patch.stage = 'Contacted'; if(a.outcome === 'Offer made' && ['New','Contacted','Follow-up'].includes(cur.stage)) patch.stage = 'Offer';
       api.update(f, patch); return a; },
     removeActivity(f, id){ if(!items[f]) return; api.update(f, { acts: items[f].acts.filter(x => x.id !== id) }); },
-    lastTouch: f => { const x = items[f]; return x && x.acts.find(a => a.type !== 'note') || null; },
+    lastTouch: f => { const x = items[f]; return x && x.acts.find(a => a.type !== 'note' && a.outcome !== 'Sent to list') || null; },
     /* due: next follow-up today or earlier on a lead that is still open */
     dueState(f, today){ const x = items[f]; if(!x || !x.next || x.stage === 'Closed' || x.stage === 'Dead') return null; const t = today || new Date().toLocaleDateString('en-CA');
       const days = Math.round((Date.parse(t) - Date.parse(x.next)) / 864e5); return days < 0 ? null : { days, overdue: days > 0 }; },

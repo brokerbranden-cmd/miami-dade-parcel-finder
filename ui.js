@@ -84,7 +84,7 @@
     if(!e.target.closest('.sendline')) document.querySelectorAll('.card.menu-open').forEach(x=>x.classList.remove('menu-open')); },true);
 
   /* ---- drawer: overview first, other sections collapsible ---- */
-  const DOPEN=new Set(['the property','owner','value estimate (comps)']);
+  const DOPEN=new Set(['the property','owner','value estimate (comps)','outreach']);
   function sectionDrawer(d){
     if(d.dataset.sx) return; d.dataset.sx='1';
     const kids=[...d.children]; let sec=null, secs=[];

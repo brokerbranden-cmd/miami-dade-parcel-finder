@@ -160,6 +160,14 @@
       </div>
     </div>
 
+    <div class="grp outreach" id="outGrp">
+      <div class="grp-h"><h2>Outreach</h2><span class="hint">Log calls, texts, mailers, door knocks and emails on a property (in its details), set a pipeline stage and a next follow-up date. Saved in this browser with your saved list. <span id="outSrc"></span></span><button class="clr" type="button" id="clrOut">Clear</button></div>
+      <div class="sigrow">
+        <label class="check"><input type="checkbox" id="dueOnly"> Follow-up due today or overdue <span class="n" id="dueCount"></span></label>
+        <label class="dsmin">Stage <select id="stageSel" aria-label="Pipeline stage"><option value="">Any</option></select></label>
+      </div>
+    </div>
+
     <div class="grp sendto" id="sendGrp">
       <div class="grp-h"><h2>Send to</h2><span class="hint">Tag properties on a card for the call center or the door knocker. Tags are saved in this browser. Export builds the list (only parcels not already sent to that team), then you can mark them as sent so they are not exported twice.</span><button class="clr" type="button" id="clrSend">Clear</button></div>
       <div class="chips" id="sendChips"></div>
@@ -243,7 +251,7 @@
       </div>
       <div class="actions">
         <select id="sortSel" aria-label="Sort by"></select>
-        <div class="seg" role="group" aria-label="View"><button type="button" id="vCards" class="on">Cards</button><button type="button" id="vTable">Table</button><button type="button" id="vMap">Map</button></div>
+        <div class="seg" role="group" aria-label="View"><button type="button" id="vCards" class="on">Cards</button><button type="button" id="vTable">Table</button><button type="button" id="vMap">Map</button><button type="button" id="vPipe" title="Your outreach pipeline by stage">Pipeline</button></div>
         <button class="btn" id="copyBtn" type="button">Copy folios</button>
         <button class="btn" id="linkBtn" type="button" title="Copy a link that reopens this exact search">Copy link</button>
         <button class="btn primary" id="exportBtn" type="button">Export CSV</button>
@@ -253,6 +261,10 @@
 
   <div class="cards" id="cards"></div>
   <div class="more-row" id="moreRow"><button class="btn" type="button" id="showMore">Show more (15,095 left)</button></div>
+  <div class="pipebox" id="pipebox" hidden>
+    <div class="pipe-h"><span class="note" id="pipeInfo"></span><span class="pipe-act"><button class="btn" type="button" id="pipeExport" title="Backup of your saved list with outreach logs">Backup outreach (JSON)</button><label class="btn" for="svImport" tabindex="0" role="button" id="pipeImportLbl">Restore / merge (JSON)</label></span></div>
+    <div class="pipecols" id="pipeCols"></div>
+  </div>
   <div class="tablebox" id="tablebox" hidden="">
     <div class="scroller" id="scroller"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
   </div>

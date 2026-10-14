@@ -391,6 +391,16 @@ def s40_outreach_pipeline():
     ok(pg.locator('#pipeCols .pcol').count() == 7, 'pipeline has 7 stage columns')
     ok(pg.locator('#pipeCols .pcol[data-stage="Contacted"] .pitem').count() >= 2, 'contacted leads appear in the Contacted column')
 @scenario
+def s41_commercial_distress():
+    reset(); preset('Commercial distress'); settle(1500); n, rs = rows(200)
+    ok(n >= 100 and all(r['cmd'] and r['cmd']['s'] >= 35 for r in rs), f'Commercial distress preset: {n} parcels, all scored 35+')
+    t = pg.inner_text('#cards'); ok('Comm. distress' in t and 'Tax payoff' in t and re.search(r'read \w+ \d+, \d{4}', t) is not None, 'cards show the score and live tax payoff with its read date')
+@scenario
+def s42_commercial_presets_and_ppsf():
+    reset(); preset('Warehouses'); pg.wait_for_function('PF.compsReady()', timeout=180000); settle(1500); n, rs = rows(200)
+    ok(n > 1000 and all(41 <= int(r['lu'][:2]) <= 49 for r in rs), f'Warehouses & industrial preset: {n} parcels, DOR 41-49')
+    e = [r for r in rs if r['comps'] and r['comps']['est']]; ok(len(e) >= 0.3 * len(rs), f'{len(e)}/{len(rs)} have a commercial $/sf estimate')
+@scenario
 def s32_mobile_or_desktop_layout():
     reset(); w = pg.evaluate('document.documentElement.scrollWidth'); vw = pg.evaluate('innerWidth')
     ok(w <= vw + 1, f'no horizontal scroll ({w} <= {vw})'); shot('32_layout')

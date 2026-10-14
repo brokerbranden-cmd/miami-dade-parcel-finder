@@ -183,7 +183,7 @@ def s10_send_to():
     click('#sendBar [data-sendmark="1"]'); pg.wait_for_timeout(500)
     ok(pg.is_disabled('#sendExp-cc'), 'after Mark as sent nothing new to export')
     click(f'#cards .card[data-folio="{f1}"] .resend[data-resend="cc"]'); pg.wait_for_timeout(400)
-    rs = csv_of('#sendExp-cc'); ok([r['Folio'] for r in rs] == [f1], 'Re-send exports only the re-sent parcel')
+    rs = csv_of('#sendExp-cc'); ok([r['Folio'].replace('-', '') for r in rs] == [f1], 'Re-send exports only the re-sent parcel')
     for f in (f1, f2): click(f'#cards .card[data-folio="{f}"] [data-sendtag="cc"]'); pg.wait_for_timeout(200)
     click('#clrSend'); settle()
 @scenario
@@ -242,7 +242,8 @@ def s16_csv_columns():
     rs = csv_of('#exportBtn'); hdr = list(rs[0].keys()) if rs else []
     ok(len(rs) == n, f'CSV rows {len(rs)} = results {n}')
     ok(hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], f'columns exactly Address, Owner Name, Mailing Address, Folio, County, City ({hdr})')
-    ok(all(re.fullmatch(r'[\d-]{13,17}', r['Folio']) for r in rs), 'folios look right')
+    ok(all(re.fullmatch(r'\d\d-\d{4}-\d{3}-\d{4}', r['Folio']) for r in rs), 'folios are dashed 13-digit (Excel keeps them as text)')
+    ok(all(r['Address'].strip() for r in rs), 'no blank Address')
     ok(len({r['Folio'] for r in rs}) == len(rs), 'no duplicate rows')
     ok(all(r['City'] == 'Miami Gardens' for r in rs), 'city column matches filter')
     ok(all(r['County'] == 'Miami-Dade' and r['Owner Name'] for r in rs), 'county + owner filled')

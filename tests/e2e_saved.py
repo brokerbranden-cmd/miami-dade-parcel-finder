@@ -78,7 +78,7 @@ with sync_playwright() as pw:
     with pg.expect_download(timeout=180000) as dl: pg.click('#exportBtn')
     rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read()))); hdr = rows[0]
     ok(len(rows) - 1 == 5 and hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], f'Export CSV in Saved view: {len(rows)-1} rows, 6 contact columns')
-    st = {dict(zip(hdr, r))['Folio'] for r in rows[1:]}; ok(f1 in st, 'CSV includes saved card 1')
+    st = {dict(zip(hdr, r))['Folio'].replace('-', '') for r in rows[1:]}; ok(f1 in st, 'CSV includes saved card 1')
     # map: filter to one property, click it -> popup with star
     pg.click('#svStatus .chip[data-st="Called"]'); pg.click('#vMap'); pg.wait_for_function("document.getElementById('mapHint').textContent.includes('on the map')", timeout=180000); pg.wait_for_timeout(1500)
     box = pg.query_selector('#map').bounding_box(); pg.mouse.click(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2); pg.wait_for_timeout(600)
@@ -93,7 +93,7 @@ with sync_playwright() as pw:
     data = json.load(open(dl.value.path())); ok(data.get('count') == 5 and any(x['note'].startswith('Left voicemail') for x in data['items']), 'Export JSON has 5 items with note')
     jpath = dl.value.path()
     with pg.expect_download() as dl: pg.click('#svExportCsv')
-    srows = list(csv.reader(open(dl.value.path(), encoding='utf-8'))); ok(len(srows) - 1 == 5 and srows[0][4] == 'Status', 'Export saved CSV: 5 rows')
+    srows = list(csv.reader(open(dl.value.path(), encoding='utf-8'))); ok(len(srows) - 1 == 5 and srows[0] == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'] and all(r[0] and r[1] and r[3] and r[4] == 'Miami-Dade' for r in srows[1:]), 'Export saved CSV: 5 rows, only the 6 contact columns, address/owner/folio filled')
     pg.click(f'#cards .card[data-folio="{f2}"] .star'); pg.wait_for_timeout(600); ok(badge(pg) == 4 and cnt(pg) == 4, 'unsave in Saved view removes it (4)')
     pg.set_input_files('#svImport', jpath); pg.wait_for_timeout(1500); ok(badge(pg) == 5 and cnt(pg) == 5, 'Import JSON merges it back (5)')
     pg.reload(); pg.wait_for_selector('#results:not([hidden])', timeout=180000); pg.wait_for_function("document.getElementById('sCount').textContent==='5'", timeout=120000)

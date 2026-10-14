@@ -72,7 +72,7 @@ with sync_playwright() as pw:
     ok(x['vacant'] and x['cond'].startswith('Boarded'), 'JSON export carries vacant + cond')
     with pg.expect_download() as dl: pg.click('#svExportCsv')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
-    ok(rows[0]['Marked Vacant/Damaged'] == 'Y' and rows[0]['Condition Note'].startswith('Boarded') and rows[0]['Vacancy Hint'] != '', 'saved CSV has vacancy columns')
+    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'saved CSV = the 6 contact columns (no vacancy / notes columns)')
     with pg.expect_download() as dl: pg.click('#exportBtn')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
     ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'results CSV = the 6 contact columns')

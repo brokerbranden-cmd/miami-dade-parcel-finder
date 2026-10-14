@@ -107,7 +107,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { cont:false, hideSent:false, cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 /* teardown rule, zone rules (data/zoning-rules.json), construction + adverse possession (data/extras.json.gz) */
@@ -283,13 +283,25 @@ async function drawAsmOutlines(){
 }
 /* Send to: tag parcels for the call center / door knocker (this browser only) */
 const SEND_KEY='pf.send.v1';
-const TEAMS=[{k:'cc',label:'Call center',noun:'call center',prefix:'CallCenter'},{k:'dk',label:'Door knock',noun:'door knock',prefix:'DoorKnock'}];
+const TEAMS=[{k:'sms',label:'Text / SMS',noun:'text / SMS team',prefix:'TextSMS',act:'text'},{k:'cc',label:'Call center',noun:'call center',prefix:'CallCenter',act:'call'},{k:'dk',label:'Door knock',noun:'door knock',prefix:'DoorKnock',act:'door'},{k:'ml',label:'Mail',noun:'mail list',prefix:'Mail',act:'mailer'}];
 const teamOf=k=>TEAMS.find(t=>t.k===k);
 const SEND=(()=>{ let o={}; try{ o=JSON.parse(localStorage.getItem(SEND_KEY)||'{}')||{}; }catch(e){} return {tags:o.tags&&typeof o.tags==='object'?o.tags:{}, sent:o.sent&&typeof o.sent==='object'?o.sent:{}}; })();
 let SEND_PENDING=null;
 const saveSend=()=>{ try{ localStorage.setItem(SEND_KEY,JSON.stringify(SEND)); }catch(e){ toast("Couldn't save the tags in this browser."); } };
 const isTagged=(f,k)=>!!(SEND.tags[f]&&SEND.tags[f][k]);
 const sentOf=(f,k)=>SEND.sent[f]&&SEND.sent[f][k]||null;
+const wasSent=f=>!!(SEND.sent[f]&&Object.keys(SEND.sent[f]).length);
+const contacted=f=>wasSent(f)||(()=>{ const x=SV.get(f); return !!(x&&x.acts&&x.acts.some(a=>a.type!=='note')); })();
+function contSet(){ const o=new Set(Object.keys(SEND.sent).filter(wasSent)); for(const x of SV.list()) if(x.acts&&x.acts.some(a=>a.type!=='note')) o.add(x.folio); return o; }
+/* main CSV export -> "Mark these N as sent to" bar (sticky, brand orange) */
+let EXP_PENDING=null;
+function renderExpBar(){ const el=$('expBar'); if(!el) return; if(!EXP_PENDING){ el.hidden=true; el.innerHTML=''; return; } const n=EXP_PENDING.folios.length; el.hidden=false;
+  el.innerHTML=`<span><b>Exported ${fmt.format(n)} ${n===1?'property':'properties'}.</b> Mark these ${fmt.format(n)} as sent ${EXP_PENDING.day} to:</span><select id="expTeam" aria-label="Sent to which list">${TEAMS.map(t=>`<option value="${t.k}">${t.label}</option>`).join('')}</select><button type="button" class="btn" id="expMark">Mark as sent</button><button type="button" class="btn ghost" id="expSkip">Not now</button>`; }
+const ACT_CAP=2000;
+function expMark(k){ const P0=EXP_PENDING; EXP_PENDING=null; renderExpBar(); if(!P0) return; const t=teamOf(k), iso=new Date().toISOString(), td=todayDay(), list='Export '+P0.day;
+  P0.folios.forEach(f=>{ (SEND.sent[f]||(SEND.sent[f]={}))[k]={d:P0.day,t:iso,list}; }); saveSend();
+  let lg=0; SV.batch(()=>{ for(const f of P0.folios){ if(lg>=ACT_CAP) break; SV.logActivity(f,{type:t.act,d:td,outcome:'Sent to list',note:`${t.label} · ${list}`},savedInfo(P0.ids.get(f))); lg++; } });
+  P0.folios.forEach(refreshSendUi); renderSend(); toast(`Marked ${fmt.format(P0.folios.length)} as sent ${P0.day} to ${t.label}`+(lg<P0.folios.length?` (activity logged on the first ${fmt.format(lg)})`:'')); if(S.cont||S.hideSent) run(); }
 const tagCount=k=>Object.values(SEND.tags).filter(r=>r&&r[k]).length;
 const dayStr=d=>{ d=new Date(d); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 function sendBtns(folio){ return `<span class="sendtools">${TEAMS.map(t=>{ const on=isTagged(folio,t.k); return `<button type="button" class="sbtn ${on?'on':''}" data-sendtag="${t.k}" data-folio="${folio}" aria-pressed="${on}" title="${on?`On the ${t.noun} list (tagged ${dayStr(SEND.tags[folio][t.k])}). Click to remove`:`Add this property to the ${t.noun} list`}">${t.label}</button>`; }).join('')}</span>`; }
@@ -387,13 +399,13 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; return st;
+  st.cont=S.cont; st.hideSent=S.hideSent; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
   NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':(MONEY_IDS.has(id)?fmtAmt(st[id]):st[id]));
   $('mvMin').value=st.mvMin?fmtAmt(st.mvMin):''; $('mvMax').value=st.mvMax?fmtAmt(st.mvMax):'';
-  S.cm=[1,20,35,50].includes(+st.cm)?+st.cm:0; S.cgas=!!st.cgas; S.cent=['in','dis'].includes(st.cent)?st.cent:'';
+  S.cont=!!st.cont; S.hideSent=!!st.hideSent; S.cm=[1,20,35,50].includes(+st.cm)?+st.cm:0; S.cgas=!!st.cgas; S.cent=['in','dis'].includes(st.cent)?st.cent:'';
   S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.due=!!st.due; S.stage=SV.STAGES.includes(st.stage)?st.stage:''; S.pf=!!st.pf; S.pb=['hm','h'].includes(st.pb)?st.pb:''; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.asm=!!st.asm; S.asmUp=!!st.asmUp; S.asmGroup=+st.asmGroup||0; S.mzSel=new Set(st.mzSel||[]); renderRules();
   $('mzq').value=st.mzq||''; $('q').value=st.q||''; $('qScope').value=st.qScope||'ao'; $('city').value=st.city||''; $('zips').value=st.zips||''; $('cra').value=st.cra||'';
   $('hideGov').checked=st.hideGov!==false; $('noBldg').checked=!!st.noBldg; $('qualOnly').checked=!!st.qualOnly;
@@ -447,12 +459,12 @@ function run(){
   const mine=st.vsMine?new Set([...savedIdx()].filter(([f])=>{ const x=SV.get(f); return x&&x.vacant; }).map(([,id])=>id)):null;
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
   const tierW=S.tier==='strong'?2:S.tier==='basic'?1:0, tcn=new Uint32Array(3), lzSel=S.lotz, lzc={split:0,minok:0,below:0}, cnSel=S.cons, cnc=new Uint32Array(6);
-  const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0; const outSet=outFolios(); const cmMin=S.cm, cgOn=S.cgas, ceMask=S.cent==='dis'?4:S.cent?6:0, pfOn=S.pf, pbMask=S.pb==='h'?2:S.pb?6:0; let pfN=0, pbN=0;
+  const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0; const outSet=outFolios(), cSet=S.cont||S.hideSent?contSet():null, sentAny=S.hideSent?new Set(Object.keys(SEND.sent).filter(wasSent)):null; const cmMin=S.cm, cgOn=S.cgas, ceMask=S.cent==='dis'?4:S.cent?6:0, pfOn=S.pf, pbMask=S.pb==='h'?2:S.pb?6:0; let pfN=0, pbN=0;
   const asmOn=S.asm&&!!ASM, asmUp=S.asmUp, asmJ=S.asmGroup&&ASM?ASM.byId.get(S.asmGroup):undefined, asmSeen=asmOn?new Set():null;
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
-    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), SGa=(sigIndexPack(p),p.sg||new Uint8Array(p.n)), CMa=(cmIndexPack(p),p.cm||new Uint8Array(p.n)), CXa=p.cx||new Uint8Array(p.n), FO=sendSet||outSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null;
+    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), SGa=(sigIndexPack(p),p.sg||new Uint8Array(p.n)), CMa=(cmIndexPack(p),p.cm||new Uint8Array(p.n)), CXa=p.cx||new Uint8Array(p.n), FO=sendSet||outSet||cSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null;
     const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n), PG=c.pcs||new Uint16Array(n);
     if(bb && !gl) continue;
     for(let i=0;i<n;i++){
@@ -461,6 +473,7 @@ function run(){
       if(mine && !mine.has(base+i)) continue;
       if(sendSet && !sendSet.has(FO[i])) continue;
       if(outSet && !outSet.has(FO[i])) continue;
+      if(S.cont && !cSet.has(FO[i])) continue; if(sentAny && sentAny.has(FO[i])) continue;
       if(apOnly && !APa[i]) continue;
       if(cmMin && CMa[i]<cmMin) continue; if(cgOn && !(CXa[i]&1)) continue; if(ceMask && !(CXa[i]&ceMask)) continue;
       if(pfOn && !(SGa[i]&1)) continue; if(pbMask && !(SGa[i]&pbMask)) continue;
@@ -559,7 +572,7 @@ function renderChips(){
   $('tierSeg').querySelectorAll('button').forEach(b=>{ const on=b.dataset.tier===S.tier; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); });
   const lzc=facet.lzc||{}; $('lotz').innerHTML=LOTZ.map(([k,l])=>{ const on=S.lotz.has(k), n=lzc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-lz="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
   const cnc=facet.cnc||[]; $('cnChips').innerHTML=EX?CN_CATS.map(([k,l])=>{ const on=S.cons.has(k), n=cnc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-cn="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join(''):'<span class="note">Construction data did not load.</span>';
-  $('apCount').textContent=EX?'('+fmt.format(facet.apN||0)+')':''; $('apOnly').checked=S.ap; $('pfCount').textContent=SIG?'('+fmt.format(facet.pfN||0)+')':''; $('pbCount').textContent=SIG?'('+fmt.format(facet.pbN||0)+')':''; $('pfOnly').checked=S.pf; $('cmMin').value=String(S.cm); $('cgasOnly').checked=S.cgas; $('centSel').value=S.cent; $('cmCount').textContent=CM?'('+fmt.format(CM.meta.n)+' on the list)':''; $('dueOnly').checked=S.due; $('stageSel').value=S.stage; $('dueCount').textContent='('+fmt.format(dueCount())+')'; $('pbSel').value=S.pb;
+  $('apCount').textContent=EX?'('+fmt.format(facet.apN||0)+')':''; $('apOnly').checked=S.ap; $('pfCount').textContent=SIG?'('+fmt.format(facet.pfN||0)+')':''; $('pbCount').textContent=SIG?'('+fmt.format(facet.pbN||0)+')':''; $('pfOnly').checked=S.pf; $('contOnly').checked=S.cont; $('hideSent').checked=S.hideSent; $('contCount').textContent='('+fmt.format(contSet().size)+')'; $('cmMin').value=String(S.cm); $('cgasOnly').checked=S.cgas; $('centSel').value=S.cent; $('cmCount').textContent=CM?'('+fmt.format(CM.meta.n)+' on the list)':''; $('dueOnly').checked=S.due; $('stageSel').value=S.stage; $('dueCount').textContent='('+fmt.format(dueCount())+')'; $('pbSel').value=S.pb;
   renderSend();
   $('asmOn').classList.toggle('on',S.asm); $('asmOn').setAttribute('aria-pressed',S.asm); $('asmUp').checked=S.asmUp;
   $('asmN').textContent=S.asm&&ASM?fmt.format(facet.asmGroups||0)+' groups':ASM?fmt.format(ASM.meta.groups)+' groups':'';
@@ -597,7 +610,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.pf?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
+  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.pf?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
   let badBox=0; HASH_NUM.forEach(id=>{ const el=$(id), v=el.value.trim(), bad=!!v && parseAmt(v)==null; if(bad) badBox++; if(bad) { el.setAttribute('aria-invalid','true'); el.title='Not a number. Try 500k, 1.2m or 750000'; } else if(el.hasAttribute('aria-invalid')){ el.removeAttribute('aria-invalid'); el.title=''; } });
   const tot=k+main; $('onCount').hidden=!tot; $('resetBtn').disabled=!tot&&!badBox; $('onCount').textContent=tot+(tot===1?' filter on':' filters on');
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
@@ -926,7 +939,8 @@ async function exportIds(ids,kind,btn){
   const lab=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
   try{ await ensureDetail(); await ensureGeo(); await loadDistress(); await loadAsm().catch(()=>{}); await new Promise(r=>setTimeout(r,30));
     const url=URL.createObjectURL(buildCSV(ids)), a=document.createElement('a'); a.href=url; a.download=exportName(kind,ids.length); document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),60000); toast(fmt.format(ids.length)+' properties exported'); }
+    setTimeout(()=>URL.revokeObjectURL(url),60000); toast(fmt.format(ids.length)+' properties exported');
+    const fl=[], im=new Map(); for(let j=0;j<ids.length;j++){ const f=getStr(P(ids[j]),'folio',I(ids[j])); fl.push(f); im.set(f,ids[j]); } EXP_PENDING={folios:fl,ids:im,day:dayStr(new Date())}; renderExpBar(); }
   catch(e){ toast('Export failed: '+(e&&e.message||e)); }
   if(btn){ btn.disabled=false; btn.textContent=lab; }
 }
@@ -1069,7 +1083,7 @@ function writeHash(st){
     if(st.ogf) h.set('ogf',st.ogf); if(st.ogMin) h.set('ogn',st.ogMin); if(st.ogDist) h.set('ogd','1'); if(st.ogInst) h.set('ogi','1');
     if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';')); if(st.asm) h.set('asm','1'); if(st.asmUp) h.set('asmup','1'); if(st.asmGroup) h.set('asmg',st.asmGroup);
     if(st.rules&&!RULE_KEYS.every(k=>st.rules[k]===TD.DEFAULT_RULES[k])) h.set('tdr',RULE_KEYS.map(k=>k==='enforce_min_lot'?(st.rules[k]?1:0):st.rules[k]).join(','));
-    if(st.due) h.set('due','1'); if(st.stage) h.set('stage',st.stage); if(st.pf) h.set('pf','1'); if(st.cm) h.set('cm',String(st.cm)); if(st.cgas) h.set('cgas','1'); if(st.cent) h.set('cent',st.cent); if(st.pb) h.set('pb',st.pb); if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
+    if(st.due) h.set('due','1'); if(st.stage) h.set('stage',st.stage); if(st.pf) h.set('pf','1'); if(st.cm) h.set('cm',String(st.cm)); if(st.cont) h.set('cont','1'); if(st.hideSent) h.set('hs','1'); if(st.cgas) h.set('cgas','1'); if(st.cent) h.set('cent',st.cent); if(st.pb) h.set('pb',st.pb); if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
     const str=h.toString(), want=str?'#'+str:'';
     // a new history entry once the search has been still for a moment (so Back undoes a filter step, not each keystroke)
     if(location.hash!==want){ const now=Date.now(), push=!HIST.restoring && now-HIST.last>1200; HIST.last=now;
@@ -1092,7 +1106,7 @@ function parseHash(){
   st.sort=h.get('sort')||'lot_d'; st.view=h.get('view')||'cards';
   st.ogf=(h.get('ogf')||'').replace(/\D/g,''); st.ogMin=+h.get('ogn')||0; st.ogDist=h.get('ogd')==='1'; st.ogInst=h.get('ogi')==='1';
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
-  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.due=h.get('due')==='1'; st.stage=h.get('stage')||''; st.pf=h.get('pf')==='1'; st.cm=+h.get('cm')||0; st.cgas=h.get('cgas')==='1'; st.cent=h.get('cent')||''; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
+  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.due=h.get('due')==='1'; st.stage=h.get('stage')||''; st.pf=h.get('pf')==='1'; st.cm=+h.get('cm')||0; st.cont=h.get('cont')==='1'; st.hideSent=h.get('hs')==='1'; st.cgas=h.get('cgas')==='1'; st.cent=h.get('cent')||''; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
   const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length){ st.rules={}; RULE_KEYS.forEach((k,j)=>st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]); }
   const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null;
   return st;
@@ -1375,7 +1389,7 @@ function renderSend(){ const ch=$('sendChips'); if(!ch) return;
   el.innerHTML=`<span><b>Exported ${fmt.format(n)} ${n===1?'property':'properties'}</b> for the ${t.noun} as ${esc(SEND_PENDING.list)}. Mark them as Sent ${SEND_PENDING.day} so they aren't exported to the ${t.noun} again?</span><button type="button" class="btn primary" data-sendmark="1">Mark as sent</button><button type="button" class="btn" data-sendmark="0">Not now</button>`; }
 function sendMark(yes){ const P0=SEND_PENDING; SEND_PENDING=null;
   if(yes&&P0){ const iso=new Date().toISOString(); P0.folios.forEach(f=>{ if(!isTagged(f,P0.k)) return; (SEND.sent[f]||(SEND.sent[f]={}))[P0.k]={d:P0.day,t:iso,list:P0.list}; }); saveSend(); P0.folios.forEach(refreshSendUi);
-    const td=todayDay(); let lg=0; P0.folios.forEach(f=>{ if(SV.has(f)&&isTagged(f,P0.k)){ SV.logActivity(f,{type:P0.k==='cc'?'call':'door',d:td,outcome:'Sent to list',note:`${teamOf(P0.k).label} list ${P0.list}`}); lg++; } }); toast(`Marked ${fmt.format(P0.folios.length)} as Sent ${P0.day} for the ${teamOf(P0.k).noun}`); }
+    const td=todayDay(); let lg=0; SV.batch(()=>P0.folios.forEach(f=>{ if(SV.has(f)&&isTagged(f,P0.k)){ SV.logActivity(f,{type:teamOf(P0.k).act,d:td,outcome:'Sent to list',note:`${teamOf(P0.k).label} list ${P0.list}`}); lg++; } })); toast(`Marked ${fmt.format(P0.folios.length)} as Sent ${P0.day} for the ${teamOf(P0.k).noun}`); }
   renderSend(); }
 async function exportSend(k){ const t=teamOf(k);
   if(!PACKS[1] && Object.keys(SEND.tags).some(f=>SEND.tags[f][k]&&!sentOf(f,k))){ const p0=sendPlan(k); if(p0.missing){ try{ await loadPack(1,'Loading condo units for your list…'); }catch(e){} } }
@@ -1438,6 +1452,14 @@ function wire(){
   $('clrCn').onclick=()=>{ S.cons.clear(); clearIdea(); run(); };
   $('apOnly').addEventListener('change',()=>{ S.ap=$('apOnly').checked; clearIdea(); run(); });
   const cmCh=async()=>{ S.cm=+$('cmMin').value||0; S.cgas=$('cgasOnly').checked; S.cent=$('centSel').value; clearIdea(); if((S.cm||S.cgas||S.cent||S.sort==='cm_d')&&!CM){ try{ await loadCommercial(); }catch(e){ toast('Commercial data did not load: '+e.message); } } run(); };
+  $('contOnly').addEventListener('change',()=>{ S.cont=$('contOnly').checked; clearIdea(); run(); });
+  $('hideSent').addEventListener('change',()=>{ S.hideSent=$('hideSent').checked; clearIdea(); run(); });
+  $('tagAllTeam').innerHTML=TEAMS.map(t=>`<option value="${t.k}">${t.label}</option>`).join('');
+  $('tagAll').onclick=()=>{ const k=$('tagAllTeam').value, t=teamOf(k), n=results.length; if(!n){ toast('No results to tag.'); return; } const CAP=20000;
+    if(n>CAP){ toast(`Narrow the filters first: Tag all works on up to ${fmt.format(CAP)} results (${fmt.format(n)} now).`); return; }
+    const iso=new Date().toISOString(); let add=0; for(let j=0;j<n;j++){ const f=getStr(P(results[j]),'folio',I(results[j])); const r=SEND.tags[f]||(SEND.tags[f]={}); if(!r[k]){ r[k]=iso; add++; } }
+    saveSend(); renderSend(); renderResults(true); $('tagAllInfo').textContent=`${fmt.format(add)} newly tagged for ${t.label}`; toast(`Tagged ${fmt.format(n)} results for ${t.label} (${fmt.format(add)} new)`); };
+  $('expBar').addEventListener('click',e=>{ if(e.target.id==='expMark') expMark($('expTeam').value); else if(e.target.id==='expSkip'){ EXP_PENDING=null; renderExpBar(); } });
   ['cmMin','cgasOnly','centSel'].forEach(k=>$(k).addEventListener('change',cmCh));
   $('pfOnly').addEventListener('change',async()=>{ S.pf=$('pfOnly').checked; clearIdea(); if(S.pf) await ensureSig(); run(); });
   $('pbSel').addEventListener('change',async()=>{ S.pb=$('pbSel').value; clearIdea(); if(S.pb) await ensureSig(); run(); });

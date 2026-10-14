@@ -41,12 +41,15 @@
   function clean(obj){ const out = {}; if(obj && typeof obj === 'object') for(const [f, x] of Object.entries(obj)){ const c = cleanItem(x, f); if(c) out[c.folio] = c; } return out; }
   items = clean(backend.load());
   function emit(why, folio){ rev++; subs.forEach(fn => { try{ fn(why, folio); }catch(e){ console.warn(e); } }); }
-  function persist(why, folio){ lastError = backend.save(items) ? '' : 'Could not write to this browser\'s storage (full or blocked).'; emit(why, folio); return !lastError; }
+  let batching = 0, dirty = false;
+  function persist(why, folio){ if(batching){ dirty = true; return true; } lastError = backend.save(items) ? '' : 'Could not write to this browser\'s storage (full or blocked).'; emit(why, folio); return !lastError; }
   window.addEventListener('storage', e => { if(e.key === KEY){ items = clean(backend.load()); emit('external'); } });   // another tab changed the list
 
   const api = {
     STATUSES, STAGES, ACT_TYPES, OUTCOMES, KEY,
     get rev(){ return rev; }, get error(){ return lastError; },
+    /* run many add/update/logActivity calls with one storage write + one change event (bulk Mark as sent) */
+    batch(fn){ batching++; try{ fn(); } finally { batching--; if(!batching && dirty){ dirty = false; persist('batch'); } } },
     has: f => !!items[f], get: f => items[f] || null, count: () => Object.keys(items).length,
     list: () => Object.values(items).sort((a, b) => b.savedAt < a.savedAt ? -1 : 1),
     add(f, info){ if(items[f]) return items[f]; const t = now(); items[f] = cleanItem({ ...info, folio: f, savedAt: t, updatedAt: t, status: 'New', note: '', vacant: false, cond: '' }); persist('add', f); return items[f]; },

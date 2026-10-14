@@ -178,7 +178,14 @@
       <div class="chips" id="sendChips"></div>
       <div class="sendrow">
         <div class="sendbox"><button class="btn" type="button" id="sendExp-cc">Export call center list</button><input type="text" id="listName-cc" aria-label="Call center list name" placeholder="List name"><span class="note" id="sendInfo-cc"></span></div>
+        <div class="sendbox"><button class="btn" type="button" id="sendExp-sms">Export text / SMS list</button><input type="text" id="listName-sms" aria-label="Text / SMS list name" placeholder="List name"><span class="note" id="sendInfo-sms"></span></div>
+        <div class="sendbox"><button class="btn" type="button" id="sendExp-ml">Export mail list</button><input type="text" id="listName-ml" aria-label="Mail list name" placeholder="List name"><span class="note" id="sendInfo-ml"></span></div>
         <div class="sendbox"><button class="btn" type="button" id="sendExp-dk">Export door knock list</button><input type="text" id="listName-dk" aria-label="Door knock list name" placeholder="List name"><span class="note" id="sendInfo-dk"></span></div>
+      </div>
+      <div class="sendrow tagall"><button class="btn" type="button" id="tagAll">Tag all results</button> for <select id="tagAllTeam" aria-label="Team to tag the results for"></select> <span class="note" id="tagAllInfo"></span></div>
+      <div class="sigrow">
+        <label class="check" title="Properties already exported and marked as sent to any team, or with a call / text / mailer / door knock / email logged"><input type="checkbox" id="contOnly"> Already contacted <span class="n" id="contCount"></span></label>
+        <label class="check" title="Hide properties already marked as sent to any team"><input type="checkbox" id="hideSent"> Hide already sent</label>
       </div>
       <div class="sendbar" id="sendBar" hidden></div>
     </div>
@@ -264,6 +271,7 @@
     </div>
   </section>
 
+  <div class="expbar" id="expBar" hidden></div>
   <div class="cards" id="cards"></div>
   <div class="more-row" id="moreRow"><button class="btn" type="button" id="showMore">Show more (15,095 left)</button></div>
   <div class="pipebox" id="pipebox" hidden>

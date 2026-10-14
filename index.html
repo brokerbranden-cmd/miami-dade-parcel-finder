@@ -65,6 +65,11 @@
         <label class="check" title="Open lis pendens matched to the parcel: no later cancellation, dismissal or certificate of title in the Clerk files we hold, no foreclosure sale held for the case and no transfer since. Hover a card's tag for the case and CFN."><input type="checkbox" id="pfOnly"> Pre-foreclosure (open lis pendens) <span class="n" id="pfCount"></span></label>
         <label class="dsmin" title="Clerk probate filings (death certificate of estate, probate &amp; administration, order of distribution, probate case) matched to the parcel by folio, legal description, address or decedent name vs owner.">Probate filed <select id="pbSel" aria-label="Probate filed"><option value="">Any or none</option><option value="hm">Filed (high + medium match)</option><option value="h">Filed (high match only)</option></select> <span class="n" id="pbCount"></span></label>
       </div>
+      <div class="sigrow cmrow">
+        <label class="dsmin" title="Commercial Data list for Miami-Dade: score from delinquent / live tax, code liens, recertification, unsafe structures, closed gas station, owner entity status and bankruptcy">Commercial distress <select id="cmMin" aria-label="Commercial distress score"><option value="0">Any</option><option value="1">On the list</option><option value="20">20+</option><option value="35">35+</option><option value="50">50+</option></select> <span class="n" id="cmCount"></span></label>
+        <label class="check" title="FDEP storage-tank facility closed or abandoned at the parcel, with no open station nearby"><input type="checkbox" id="cgasOnly"> Closed gas station</label>
+        <label class="dsmin" title="Owner entity status in the Florida registry (OpenCorporates mirror of Sunbiz)">Owner entity <select id="centSel" aria-label="Owner entity status"><option value="">Any</option><option value="in">Inactive or dissolved</option><option value="dis">Dissolved (FL entity)</option></select></label>
+      </div>
       <div class="note" id="sigSrc"></div>
     </div>
 

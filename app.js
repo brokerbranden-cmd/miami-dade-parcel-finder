@@ -1018,10 +1018,10 @@ function exportAddr(p,i){ const a=getStr(p,'addr',i).trim(); if(a){ EXPSTAT.real
   const use=TYPE_LABEL[LU_T[p.c.landuse[i]]]||'Parcel', st=nearStreet(p,i); if(st){ EXPSTAT.near++; return `No site address – ${use}, near ${st}`; }
   const lg=(p.det?getStr(p,'legal',i):'').replace(/\s+/g,' ').trim(); if(lg){ EXPSTAT.legal++; return `No site address – ${use}, ${lg.length>48?lg.slice(0,48)+'…':lg}`; }
   EXPSTAT.use++; return `No site address – ${use}`; }
-function exportRow(p,i){ const c=p.c; return [csvq(exportAddr(p,i)),csvq(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; ')),csvq(getStr(p,'mail',i)),folio13(getStr(p,'folio',i)),'Miami-Dade',csvq(D.city[c.city[i]]||'')].join(','); }
-const EXP_HEAD='Address,Owner Name,Mailing Address,Folio,County,City\n';
+function exportRow(p,i){ const c=p.c; return [csvq(exportAddr(p,i)),csvq(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; ')),csvq(getStr(p,'mail',i)),folio13(getStr(p,'folio',i)),'Miami-Dade',csvq(D.city[c.city[i]]||''),'FL'].join(','); }
+const EXP_HEAD='Address,Owner Name,Mailing Address,Folio,County,City,State\n';
 function buildCSV(ids=results){
-  // export = contact list only (main export and Send to lists): Address, Owner Name, Mailing Address, Folio, County, City
+  // export = contact list only (main export and Send to lists): Address, Owner Name, Mailing Address, Folio, County, City, State
   const parts=[EXP_HEAD]; let buf=''; for(const k in EXPSTAT) EXPSTAT[k]=0;
   for(let j=0;j<ids.length;j++){
     const id=ids[j], p=P(id), i=I(id);
@@ -1321,10 +1321,10 @@ function refreshFolio(folio){
 function download(name,blob){ const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
 const stamp=()=>{ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); };
 function savedListCSV(){
-  // same contact-only columns as every property export: Address, Owner Name, Mailing Address, Folio, County, City
+  // same contact-only columns as every property export: Address, Owner Name, Mailing Address, Folio, County, City, State
   const ids=savedIdx(); for(const k in EXPSTAT) EXPSTAT[k]=0; const rows=SV.list().map(x=>{ const id=ids.get(x.folio);
     if(id!=null) return exportRow(P(id),I(id)); EXPSTAT.real++;
-    return [csvq(x.addr||'No site address'),csvq(x.owner||''),csvq(x.mail||''),folio13(x.folio),'Miami-Dade',csvq(x.city||'')].join(','); });
+    return [csvq(x.addr||'No site address'),csvq(x.owner||''),csvq(x.mail||''),folio13(x.folio),'Miami-Dade',csvq(x.city||''),'FL'].join(','); });
   return new Blob([EXP_HEAD+rows.join('\n')+(rows.length?'\n':'')],{type:'text/csv'});
 }
 function wireSaved(){

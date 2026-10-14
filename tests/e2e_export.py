@@ -1,11 +1,11 @@
-"""Every property CSV export: exactly Address,Owner Name,Mailing Address,Folio,County,City; Folio dashed 13-digit; Address never blank
+"""Every property CSV export: exactly Address,Owner Name,Mailing Address,Folio,County,City,State; Folio dashed 13-digit; Address never blank
 (fallback 'No site address – <use>, near <street>' / legal). Main export, saved-list export, dashed + plain folio search. argv: URL [desktop|mobile]"""
 import sys, csv, io, re, json
 from playwright.sync_api import sync_playwright
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
 MOB = len(sys.argv) > 2 and sys.argv[2] == 'mobile'; TAG = 'mobile' if MOB else 'desktop'
 BASE = URL.split('#')[0].split('?')[0]; Q = '?drive=0' if MOB else ''
-HDR = ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City']; FD = re.compile(r'\d\d-\d{4}-\d{3}-\d{4}')
+HDR = ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State']; FD = re.compile(r'\d\d-\d{4}-\d{3}-\d{4}')
 BLANKS = ['3021250180770', '3040110180060', '0421320130350']
 errs = []
 def ok(c, m):
@@ -26,9 +26,9 @@ with sync_playwright() as pw:
         with pg.expect_download(timeout=240000) as dl: pg.evaluate(f"document.querySelector('{sel}').click()")
         t = open(dl.value.path(), encoding='utf-8').read(); return list(csv.reader(io.StringIO(t)))
     def check(rows, what):
-        ok(rows and rows[0] == HDR, f'{what}: header is exactly the 6 contact columns')
+        ok(rows and rows[0] == HDR, f'{what}: header is exactly the 7 contact columns')
         body = rows[1:]; bad_a = [r for r in body if not r[0].strip()]; bad_f = [r for r in body if not FD.fullmatch(r[3])]
-        ok(body and not bad_a and not bad_f and all(len(r) == 6 and r[4] == 'Miami-Dade' for r in body), f'{what}: {len(body)} rows, blank Address {len(bad_a)}, non-dashed Folio {len(bad_f)}')
+        ok(body and not bad_a and not bad_f and all(len(r) == 7 and r[4] == 'Miami-Dade' and r[6] == 'FL' for r in body), f'{what}: {len(body)} rows, blank Address {len(bad_a)}, non-dashed Folio {len(bad_f)}')
         return body
     go('q=' + ' '.join(BLANKS) + '&gov=1'); n = pg.evaluate('PF.sample(10)')['n']
     if n != 3:   # search may not take several folios at once: fall back to the vacant type

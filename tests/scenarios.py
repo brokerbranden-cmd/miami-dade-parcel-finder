@@ -184,7 +184,7 @@ def s10_send_to():
     ok(pg.query_selector('.drawer') is None, 'tagging does not open the drawer')
     click('#sendChips .chip[data-send="cc"]'); settle(); ok(cnt() == 2, 'Send to: call center filter shows the 2 tagged')
     fill('#listName-cc', 'Scenario list'); rs = csv_of('#sendExp-cc')
-    ok({r['Folio'].replace('-', '') for r in rs} == {f1, f2} and rs and list(rs[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'Send to export: the 2 folios, 6 contact columns only')
+    ok({r['Folio'].replace('-', '') for r in rs} == {f1, f2} and rs and list(rs[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], 'Send to export: the 2 folios, 7 contact columns only')
     click('#sendBar [data-sendmark="1"]'); pg.wait_for_timeout(500)
     ok(pg.is_disabled('#sendExp-cc'), 'after Mark as sent nothing new to export')
     click(f'#cards .card[data-folio="{f1}"] .resend[data-resend="cc"]'); pg.wait_for_timeout(400)
@@ -246,7 +246,7 @@ def s16_csv_columns():
     reset(); go('city=Miami%20Gardens&sig=TD&type=sf'); n = cnt(); ok(0 < n < 5000, f'{n} rows to export')
     rs = csv_of('#exportBtn'); hdr = list(rs[0].keys()) if rs else []
     ok(len(rs) == n, f'CSV rows {len(rs)} = results {n}')
-    ok(hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], f'columns exactly Address, Owner Name, Mailing Address, Folio, County, City ({hdr})')
+    ok(hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], f'columns exactly Address, Owner Name, Mailing Address, Folio, County, City ({hdr})')
     ok(all(re.fullmatch(r'\d\d-\d{4}-\d{3}-\d{4}', r['Folio']) for r in rs), 'folios are dashed 13-digit (Excel keeps them as text)')
     ok(all(r['Address'].strip() for r in rs), 'no blank Address')
     ok(len({r['Folio'] for r in rs}) == len(rs), 'no duplicate rows')

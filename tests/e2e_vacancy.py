@@ -72,10 +72,10 @@ with sync_playwright() as pw:
     ok(x['vacant'] and x['cond'].startswith('Boarded'), 'JSON export carries vacant + cond')
     with pg.expect_download() as dl: pg.click('#svExportCsv')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
-    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'saved CSV = the 6 contact columns (no vacancy / notes columns)')
+    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], 'saved CSV = the 7 contact columns (no vacancy / notes columns)')
     with pg.expect_download() as dl: pg.click('#exportBtn')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
-    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'results CSV = the 6 contact columns')
+    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], 'results CSV = the 7 contact columns')
     pg.click('#svBack'); pg.wait_for_timeout(500)
     # import merges flag into a fresh context
     ctx2 = b.new_context(viewport={'width': 1360, 'height': 900}); p2 = ctx2.new_page()

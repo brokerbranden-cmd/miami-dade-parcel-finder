@@ -77,7 +77,7 @@ with sync_playwright() as pw:
     with pg.expect_download(timeout=120000) as dlv: pg.click('#exportBtn')
     rows = list(csv.DictReader(io.StringIO(open(dlv.value.path(), encoding='utf-8-sig').read())))
     ok(len(rows) == n_up, f'CSV rows {len(rows)}')
-    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'] and all(r['Folio'] and r['County'] == 'Miami-Dade' for r in rows[:200]), 'CSV = the 6 contact columns, filled')
+    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'] and all(r['Folio'] and r['County'] == 'Miami-Dade' for r in rows[:200]), 'CSV = the 7 contact columns, filled')
     # presets + hash reload
     pg.click('#resetBtn'); pg.wait_for_timeout(1000)
     names = pg.eval_on_selector_all('#ideas .chip[data-i]', 'e=>e.sort((a,b)=>a.dataset.i-b.dataset.i).map(x=>x.textContent)')

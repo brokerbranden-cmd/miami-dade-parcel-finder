@@ -50,7 +50,7 @@ with sync_playwright() as pw:
     # CSV
     with page.expect_download(timeout=180000) as dl: page.click('#exportBtn')
     raw = open(dl.value.path(), encoding='utf-8').read(); rows = list(csv.reader(io.StringIO(raw)))
-    hdr = rows[0]; ok(hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'CSV = the 6 contact columns')
+    hdr = rows[0]; ok(hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], 'CSV = the 7 contact columns')
     r1 = dict(zip(hdr, rows[1])); print('CSV row1:', r1)
     ok(len(rows) - 1 == n_us35, f'CSV rows {len(rows)-1} == results {n_us35}')
     # map colored by score

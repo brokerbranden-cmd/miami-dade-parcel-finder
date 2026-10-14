@@ -69,7 +69,7 @@ with sync_playwright() as pw:
     pg.goto(URL + '#city=Hialeah&pcs=CO&sort=lot_d'); pg.wait_for_selector('#results:not([hidden])', timeout=120000); pg.wait_for_timeout(1200)
     with pg.expect_download() as dl: pg.click('#exportBtn')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
-    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City'], 'CSV has exactly the 6 contact columns')
+    ok(rows and list(rows[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], 'CSV has exactly the 7 contact columns')
     ok(all(r['City'] == 'Hialeah' and r['County'] == 'Miami-Dade' for r in rows[:200]), 'CSV rows are Hialeah, Miami-Dade')
     b.close()
 print('\nERRORS:' if errs else '\nALL OK'); [print(' ', e) for e in errs]

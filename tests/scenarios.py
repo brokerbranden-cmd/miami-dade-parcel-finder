@@ -68,7 +68,12 @@ def reveal(sel):
         if i['sheet']: pg.click('#sheetClose'); pg.wait_for_timeout(250); continue
         if i['menu']: pg.click(f'.card[data-folio="{i["menu"]}"] .cmore'); pg.wait_for_timeout(150); continue
         return
-def click(sel, **k): reveal(sel); pg.click(sel, **k)
+def click(sel, **k):
+    for _ in range(3):   # cards can re-render (lazy badges) and close a just-opened card menu: reveal again and retry
+        reveal(sel)
+        try: pg.click(sel, **{**k, 'timeout': 10000}); return
+        except Exception: pg.wait_for_timeout(500)
+    reveal(sel); pg.click(sel, **k)
 def fill(sel, v): reveal(sel); pg.fill(sel, v)
 def select(sel, v): reveal(sel); pg.select_option(sel, v)
 def check(sel): reveal(sel); pg.check(sel)

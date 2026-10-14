@@ -407,6 +407,14 @@ def s42_commercial_presets_and_ppsf():
     ok(n > 1000 and all(41 <= int(r['lu'][:2]) <= 49 for r in rs), f'Warehouses & industrial preset: {n} parcels, DOR 41-49')
     e = [r for r in rs if r['comps'] and r['comps']['est']]; ok(len(e) >= 0.3 * len(rs), f'{len(e)}/{len(rs)} have a commercial $/sf estimate')
 @scenario
+def s43_mark_main_export_as_sent():
+    reset(); go('type=vacant&city=Miami%20Gardens'); settle(1200); n = cnt()
+    rs = csv_of('#exportBtn'); ok(len(rs) == n, f'main export {len(rs)} rows')
+    pg.wait_for_selector('#expBar:not([hidden])'); ok(f'Mark these {n:,}' in pg.inner_text('#expBar'), 'orange Mark-as-sent bar after the main export')
+    pg.select_option('#expTeam', 'ml'); pg.click('#expMark'); settle(1200)
+    go('type=vacant&city=Miami%20Gardens&hs=1'); settle(1200); ok(cnt() == 0, 'Hide already sent: none left')
+    go('type=vacant&city=Miami%20Gardens&cont=1'); settle(1200); ok(cnt() == n, f'Already contacted: {n}')
+@scenario
 def s32_mobile_or_desktop_layout():
     reset(); w = pg.evaluate('document.documentElement.scrollWidth'); vw = pg.evaluate('innerWidth')
     ok(w <= vw + 1, f'no horizontal scroll ({w} <= {vw})'); shot('32_layout')

@@ -79,6 +79,12 @@ build data    python3 scripts/build_data.py data           # -> data/meta.json +
 build zoning_rules python3 scripts/build_zoning_rules.py data   # -> data/zoning-rules.json + data/extras.json.gz
 fetch parcels "parcels" python3 scripts/fetch_parcels.py "$RAW"
 build assemblages python3 scripts/build_assemblages.py data    # -> data/asm.json.gz + data/asm-polys.json.gz
+# --- other counties (counties.js): each is a non-fatal fetch + build into data/<county>/; a failure keeps that county's last packs ---
+# SKIP_COUNTIES="monroe" skips one. Monroe: FL statewide cadastral (CO_NO=54) + FEMA NFHL flood zones, ~3-5 min, no login.
+case " ${SKIP_COUNTIES:-} " in *" monroe "*) note "skip monroe (SKIP_COUNTIES)";; *)
+  fetch monroe_fetch "monroe" python3 scripts/counties/monroe/fetch_monroe.py
+  build monroe_data  python3 scripts/counties/monroe/build_monroe.py data/monroe ;;
+esac
 python3 scripts/refresh_status.py "$ST" data/refresh-status.json > "$ST/status.txt" || echo "WARN: status file failed"
 cat "$ST/status.txt" 2>/dev/null
 now > "$ST/run_finished"

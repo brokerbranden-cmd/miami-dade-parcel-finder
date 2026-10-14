@@ -1283,7 +1283,7 @@ async function openDeep(f){
 /* commercial presets by Property Appraiser DOR land use family (see CP_FAM) */
 const LUF=fam=>D.landuse.filter((v,i)=>{ const c=LU_CODE[i]; return cpCom(c)&&CP_FAM(c)===fam; });
 /* ideas that need a data layer the active county may not have (counties.js layers) */
-const IDEA_NEED=[[/Hottest|Pre-foreclosure|Tax deeds|Unsafe/,'distress'],[/vacant \/ neglected/,'vacancy'],[/multifamily land|Strong teardowns|could be split/,'zoning'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm']];
+const IDEA_NEED=[[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/multifamily land|Strong teardowns|could be split/,'zoning'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm']];
 const ideaOk=l=>IDEA_NEED.every(([re,ly])=>!re.test(l)||HAS(ly));
 const IDEAS=[
   ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
@@ -1558,7 +1558,7 @@ async function boot(){
     $('lotzNote').textContent='Lot vs the zone minimum lot size; “could be split” = single-family zone and lot ≥ your split factor × the minimum.';
     wire(); renderRules();
     const dlF=deepFolio(); let st=dlF?{...BLANK(),q:dlF,hideGov:false,view:'cards'}:parseHash(), fresh=false; if(!st){ try{ st=JSON.parse(localStorage.getItem(PFC.key('mdpf.v2'))||'null'); }catch(e){} }
-    if(!st){ st=IDEAS[Math.max(0,IDEAS.findIndex(([l])=>ideaOk(l)))][1](); fresh=true; }
+    if(!st){ st=HAS('distress')?IDEAS[0][1]():{...BLANK()}; fresh=HAS('distress'); }
     applyState(st);
     const ownLoad=loadOwners().catch(()=>null);
     await loadPack(0,'Loading properties…');

@@ -91,7 +91,7 @@
       <div class="chips" id="types"></div>
     </div>
 
-    <div class="grp">
+    <div class="grp" data-need="zoning">
       <div class="grp-h"><h2>City zoning code</h2><span class="hint">The actual code from the city or county zoning map. Type one or more codes; "T6" also finds T6-8-O, T6-36A-L and so on.</span><button class="clr" type="button" id="clrMz">Clear</button></div>
       <input type="search" id="mzq" placeholder="e.g. T4, T5-O, RU-2, BU-1A" autocomplete="off" aria-label="City zoning codes" style="max-width: 420px;">
       <div class="mzrow"><span class="mzlab">Miami 21</span><div class="chips" id="mzMiami"></div></div>
@@ -99,7 +99,7 @@
       <div class="mzcities" id="mzCities" aria-label="Zoning codes by city"></div>
     </div>
 
-    <div class="grp">
+    <div class="grp" data-need="zoning">
       <div class="grp-h"><h2>Zoning type</h2><span class="hint">Plain-language groups that work the same in every city.</span><button class="clr" type="button" id="clrZone">Clear</button></div>
       <div class="chips" id="zones"></div>
       <div class="chips lotz" id="lotz" role="group" aria-label="Lot compared with the zone minimum"></div>
@@ -155,7 +155,7 @@
     </div>
 
     <div class="row2">
-      <div class="grp">
+      <div class="grp" data-need="construction">
         <div class="grp-h"><h2>Construction</h2><span class="hint">Main building, from the Property Appraiser's building details. Pick one or more. Unknown = no building data or not recorded. <span id="cnSrc"></span></span><button class="clr" type="button" id="clrCn">Clear</button></div>
         <div class="chips" id="cnChips"></div>
       </div>
@@ -319,6 +319,7 @@
   </div>
   <dialog id="lpDialog" class="lpdialog" aria-label="Lender or deal form"></dialog>
 </div>
+<script src="counties.js"></script>
 <script src="saved.js"></script>
 <script src="lenders.js"></script>
 <script src="teardown.js"></script>

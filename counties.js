@@ -1,0 +1,66 @@
+/* County registry + the active county (loaded before every other script).
+   Each county ships its own data pack folder (dataDir) and gets its own browser storage namespace, so saved properties,
+   outreach, send tags and the last search never mix between counties. Miami-Dade keeps the original paths and keys
+   (data/, mdpf.*) so existing builds, links and saved lists keep working.
+   Active county: ?county=<id> in the URL, else the last one picked (localStorage pf.county), else miami-dade.
+   To add a county: add an entry here, build its packs into data/<id>/ (scripts/counties/<id>/), list its layers. */
+(function(){
+  "use strict";
+  // layers: which data the county has. The UI hides filter groups / ideas that need a missing layer.
+  const ALL = ['distress','signals','permits','vacancy','zoning','asm','teardown','commercial','comps','owners','construction','cra','flood'];
+  const COUNTIES = {
+    'miami-dade': { id:'miami-dade', name:'Miami-Dade', state:'FL', dataDir:'data/', storeSuffix:'',
+      center:[25.76,-80.30], bounds:[[25.13,-80.88],[25.98,-80.11]],
+      layers: ALL.filter(l=>l!=='flood'),
+      source:'Miami-Dade County GIS', roll:'Miami-Dade Property Appraiser roll',
+      paUrl:f=>`https://apps.miamidadepa.gov/propertysearch/#/?folio=${f}`, auctionHost:'https://www.miamidade.realforeclose.com',
+      searchHint:'Search an address, owner name or folio number' },
+    'monroe': { id:'monroe', name:'Monroe', state:'FL', dataDir:'data/monroe/', storeSuffix:'.monroe',
+      center:[24.75,-81.20], bounds:[[24.45,-82.20],[25.40,-80.25]],
+      layers: ['owners','teardown','comps','flood'],
+      source:'Florida statewide cadastral (FDOR roll, Monroe County) + FEMA flood maps', roll:'Monroe County Property Appraiser roll (via Florida DOR)',
+      paUrl:f=>`https://qpublic.schneidercorp.com/Application.aspx?AppID=605&LayerID=9946&PageTypeID=4&KeyValue=${encodeURIComponent(f.length===14?f.slice(0,8)+'-'+f.slice(8):f)}`,
+      auctionHost:'https://monroe.realforeclose.com', searchHint:'Search an address, owner name or RE number' }
+    // 'broward': {...}, 'palm-beach': {...}   (add when their packs exist)
+  };
+  const DEF = 'miami-dade';
+  let id = null;
+  try{ const q = new URLSearchParams(location.search).get('county'); if(q && COUNTIES[q]) id = q; }catch(e){}
+  if(!id){ try{ const s = localStorage.getItem('pf.county'); if(s && COUNTIES[s]) id = s; }catch(e){} }
+  if(!id) id = DEF;
+  try{ localStorage.setItem('pf.county', id); }catch(e){}
+  const cfg = COUNTIES[id];
+  const has = l => cfg.layers.includes(l);
+  // per-county storage key: Miami-Dade keeps the original key names
+  const key = k => k + cfg.storeSuffix;
+  // the URL for a county: keeps ?county= in the address bar (so copied links carry it), drops the hash (filters are county-specific)
+  const urlFor = c => { const u = new URL(location.href); u.hash = ''; u.searchParams.set('county', c); u.searchParams.delete('folio'); return u.toString(); };
+  function sw(c){ if(!COUNTIES[c] || c === id) return; try{ localStorage.setItem('pf.county', c); }catch(e){} location.assign(urlFor(c)); }
+  // make sure the current URL names the county, so "Copy link" / shared links reopen in it
+  try{ const u = new URL(location.href); if(u.searchParams.get('county') !== id){ u.searchParams.set('county', id); history.replaceState(history.state, '', u.toString()); } }catch(e){}
+  // hide UI that needs a layer this county lacks (runs on DOMContentLoaded and again by app.js after it builds dynamic UI)
+  const NEED = { '.grp.distress':'distress', '.grp.permits':'permits', '.grp.vacancy':'vacancy', '#asmGrp':'asm', '#tdGrp':'teardown',
+    '[data-need]':null };
+  function applyLayers(root){
+    root = root || document;
+    for(const [sel, l] of Object.entries(NEED)){
+      root.querySelectorAll(sel).forEach(n => { const need = l || n.dataset.need; if(!need) return;
+        const ok = need.split(/\s+/).every(has); n.hidden = !ok; if(!ok) n.setAttribute('data-county-hidden',''); });
+    }
+    document.documentElement.dataset.county = id;
+  }
+  function header(){
+    const h1 = document.querySelector('header.top h1'); if(h1 && !document.getElementById('countySel')){
+      h1.firstChild.nodeValue = cfg.name + ' ';
+      const s = document.createElement('select'); s.id = 'countySel'; s.className = 'countysel'; s.setAttribute('aria-label', 'County');
+      s.innerHTML = Object.values(COUNTIES).map(c => `<option value="${c.id}" ${c.id===id?'selected':''}>${c.name} County</option>`).join('');
+      s.addEventListener('change', () => sw(s.value));
+      h1.parentNode.insertBefore(s, h1.nextSibling);
+    }
+    const q = document.getElementById('q'); if(q) q.placeholder = cfg.searchHint;
+    document.title = document.title.replace(/Miami-Dade/, cfg.name);
+    applyLayers();
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', header); else header();
+  window.PFCounty = { id, cfg, list: Object.values(COUNTIES), has, key, dp: cfg.dataDir, switchTo: sw, urlFor, applyLayers, DEFAULT: DEF };
+})();

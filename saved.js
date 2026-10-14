@@ -8,7 +8,7 @@
    (ISO timestamps; vacant = your own 'looks vacant / damaged' mark, cond = condition note; pack = 'main' | 'condo'). */
 (function(){
   "use strict";
-  const KEY = 'mdpf.saved.v1';
+  const KEY = window.PFCounty ? window.PFCounty.key('mdpf.saved.v1') : 'mdpf.saved.v1';   // per county (Miami-Dade keeps the original key)
   const STATUSES = ['New','Researching','Mailed','Called','Offer sent','Under contract','Pass'];
   const STAGES = ['New','Contacted','Follow-up','Offer','Under contract','Closed','Dead'];
   const ACT_TYPES = [['call','Call'],['text','Text'],['mailer','Mailer'],['door','Door knock'],['email','Email'],['note','Note']];

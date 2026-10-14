@@ -2,6 +2,7 @@
 (() => {
 "use strict";
 const $ = id => document.getElementById(id);
+const PFC = window.PFCounty, DP = PFC.dp, HAS = PFC.has;   /* active county (counties.js): data folder, layers, storage keys */
 const fmt = new Intl.NumberFormat('en-US');
 const money = v => v>=1e9 ? '$'+(v/1e9).toFixed(1)+'B' : v>=1e6 ? '$'+(v/1e6).toFixed(v>=1e7?1:2).replace(/\.?0+$/,'')+'M' : v>=1e3 ? '$'+Math.round(v/1e3)+'K' : '$'+fmt.format(v);
 const dollars = v => '$'+fmt.format(v);
@@ -36,12 +37,12 @@ const dsTone=v=>v>=50?'s4':v>=35?'s3':v>=20?'s2':v>0?'s1':'s0';
 let DIST=null, distP=null;
 /* owner portfolios (data/owners.json.gz from scripts/owners_lib.py; parcel -> group id in the 'og' column) */
 let OWN=null, ownP=null;
-const loadOwners=()=>OWN?Promise.resolve(OWN):(ownP||(ownP=(async()=>{ if(!META.ownersFile) return null; const r=await fetch('data/'+META.ownersFile+'?v='+META.ver); if(!r.ok) throw new Error('Owner data did not load');
+const loadOwners=()=>OWN?Promise.resolve(OWN):(ownP||(ownP=(async()=>{ if(!META.ownersFile) return null; const r=await fetch(DP+META.ownersFile+'?v='+META.ver); if(!r.ok) throw new Error('Owner data did not load');
   const j=JSON.parse(dec.decode(await gunzip(new Uint8Array(await r.arrayBuffer()))));
   OWN={n:Uint32Array.from(j.n), nd:Uint32Array.from(j.nd), nc:Uint32Array.from(j.nc), mv:Float64Array.from(j.mv), fl:Uint8Array.from(j.fl), name:j.name, nv:j.nv}; return OWN; })().catch(e=>{ ownP=null; throw e; })));
 const OGFL=[[1,'Government'],[2,'Bank / lender'],[4,'Association, church or non-profit'],[8,'Large holder (200+ parcels)']];
 const ogFlags=f=>OGFL.filter(([b])=>f&b).map(x=>x[1]);
-const loadDistress=()=>distP||(distP=(async()=>{ if(!META.distressFile) return null; const r=await fetch('data/'+META.distressFile+'?v='+META.ver); if(!r.ok) throw new Error('Distress data did not load'); DIST=JSON.parse(dec.decode(await gunzip(new Uint8Array(await r.arrayBuffer())))); return DIST; })().catch(e=>{ distP=null; throw e; }));
+const loadDistress=()=>distP||(distP=(async()=>{ if(!META.distressFile) return null; const r=await fetch(DP+META.distressFile+'?v='+META.ver); if(!r.ok) throw new Error('Distress data did not load'); DIST=JSON.parse(dec.decode(await gunzip(new Uint8Array(await r.arrayBuffer())))); return DIST; })().catch(e=>{ distP=null; throw e; }));
 const FLAG = {homestead:1, oos:2, absz:4, corp:8, trust:16, govt:32, estate:64, senior:128};
 const MZ_MIAMI=[['T3','Sub-urban (single family, duplex)'],['T4','General urban (small apartments)'],['T5','Urban center (up to 5 stories)'],['T6','Urban core (8+ stories)'],['CI','Civic institution'],['CS','Civic space'],['D1','Work place'],['D2','Industrial'],['D3','Waterfront industrial']];
 const MZ_COUNTY=[['RU-1','Single family'],['RU-2','Duplex'],['RU-TH','Townhouse'],['RU-3','Small multifamily'],['RU-4','Apartments'],['RU-5','Residential / office'],['EU','Estates'],['BU','Business'],['IU','Industrial'],['GU','Interim'],['PAD','Planned area development']];
@@ -122,11 +123,11 @@ const parseAmt=v=>{ v=String(v==null?'':v).trim().toLowerCase().replace(/[$,\s]/
 const fmtAmt=v=>v==null||v===''?'':v>=1e6&&v%1e4===0?(v/1e6)+'m':v>=1e3&&v%1e3===0?(v/1e3)+'k':String(v);
 const MONEY_IDS=new Set(['mvMin','mvMax','spMin','spMax']);
 async function loadZoneRules(){
-  try{ const r=await fetch('data/zoning-rules.json?v='+META.ver+'-'+EXTRA_VER); if(r.ok) ZR=await r.json(); }catch(e){}
+  if(HAS('zoning')) try{ const r=await fetch(DP+'zoning-rules.json?v='+META.ver+'-'+EXTRA_VER); if(r.ok) ZR=await r.json(); }catch(e){}
   ZREC=MZ.map((e,i)=>{ const r=ZR&&e&&ZR.rules[e[1]+'|'+String(e[0]).toUpperCase()]; if(!r) return null; const n=v=>v==null||v===''?null:+v;
     return {upa:n(r[0]),stories:n(r[1]),min_lot_sf:n(r[2]),lot_cov:n(r[3]),far:n(r[4]),height_ft:n(r[5]),zt:r[6]||null,sf:r[6]?(r[6]==='sf'?1:0):null,pd:!!r[7]||r[6]==='pad',src:r[8]||''}; });
   LU_CODE=D.landuse.map(s=>{ const m=/^\s*(\d{4})/.exec(s); return m?parseInt(m[1],10):-1; });
-  try{ const r=await fetch('data/extras.json.gz?v='+META.ver+'-'+EXTRA_VER); if(r.ok){ const u8=new Uint8Array(await r.arrayBuffer()); EX=JSON.parse(dec.decode(u8[0]===0x1f&&u8[1]===0x8b?await gunzip(u8):u8)); } }catch(e){}
+  if(HAS('construction')) try{ const r=await fetch(DP+'extras.json.gz?v='+META.ver+'-'+EXTRA_VER); if(r.ok){ const u8=new Uint8Array(await r.arrayBuffer()); EX=JSON.parse(dec.decode(u8[0]===0x1f&&u8[1]===0x8b?await gunzip(u8):u8)); } }catch(e){}
   if(EX){ CNMAP=new Map(); for(const [k,s] of Object.entries(EX.cn.groups)){ const m=parseInt(k,10); let v=0; for(const t of s.split(',')){ v+=parseInt(t,36); CNMAP.set(v,m); } } APSET=new Set(EX.ap.folios); }
 }
 /* per-pack zoning upside (rule-independent) + tier / split (depends on S.rules) */
@@ -160,7 +161,7 @@ const SIG_VER='s1'; let SIG=null, sigP=null; const PFM=new Map(), PBM=new Map(),
 const PB_DOC={PRO:'Probate order of distribution',PAD:'Probate & administration filed',DCE:'Death certificate (estate of) recorded',CP:'Probate case filed'};
 const ymd=n=>n?String(n).replace(/^(\d{4})(\d\d)(\d\d)$/,'$1-$2-$3'):'';
 const mdy=n=>{ const t=String(n); return t.slice(4,6)+'/'+t.slice(6,8)+'/'+t.slice(0,4); };
-function loadSignals(){ return sigP||(sigP=(async()=>{ const o=await gzJSON('data/signals.json.gz?v='+META.ver+'-'+SIG_VER);
+function loadSignals(){ return sigP||(sigP=(async()=>{ const o=await gzJSON(DP+'signals.json.gz?v='+META.ver+'-'+SIG_VER);
   o.pf.forEach(r=>PFM.set(r[0],r)); o.pb.forEach(r=>PBM.set(r[0],r)); o.au.forEach(r=>{ const a=AUM.get(r[0])||[]; a.push(r); a.sort((x,y)=>x[1]-y[1]); AUM.set(r[0],a); }); SIG=o; PACKS.forEach(sigIndexPack); return o; })().catch(e=>{ sigP=null; throw e; })); }
 function sigIndexPack(p){ if(!p||!SIG||p.sg) return; const f=strCol(p,'folio'), g=new Uint8Array(p.n); for(let i=0;i<p.n;i++){ const k=f[i]; let v=0; if(PFM.has(k)) v|=1; const b=PBM.get(k); if(b) v|=b[4]==='H'?2:4; if(AUM.has(k)) v|=8; g[i]=v; } p.sg=g; }
 const PF_KIND={H:'HOA / condo lien foreclosure',M:'Mortgage foreclosure',O:'Other lis pendens'};
@@ -181,7 +182,7 @@ function clerkHTML(folio){ if(!SIG) return ''; const a=PFM.get(folio), b=PBM.get
 /* Commercial distress (data/commercial.json.gz, scripts/commercial/): Commercial Data bot list for Miami-Dade with its build3 score,
    live county-taxes.net payoff reads, OpenCorporates/Sunbiz owner entity status and FDEP closed gas stations */
 const CM_VER='m1'; let CM=null, cmP=null; const CMM=new Map();
-function loadCommercial(){ return cmP||(cmP=(async()=>{ const o=await gzJSON('data/commercial.json.gz?v='+META.ver+'-'+CM_VER);
+function loadCommercial(){ return cmP||(cmP=(async()=>{ const o=await gzJSON(DP+'commercial.json.gz?v='+META.ver+'-'+CM_VER);
   for(const f in o.rows) CMM.set(f,o.rows[f]); CM=o; PACKS.forEach(cmIndexPack); return o; })().catch(e=>{ cmP=null; throw e; })); }
 function cmIndexPack(p){ if(!p||!CM||p.cm) return; const f=strCol(p,'folio'), a=new Uint8Array(p.n), b=new Uint8Array(p.n);
   for(let i=0;i<p.n;i++){ const r=CMM.get(f[i]); if(!r) continue; a[i]=Math.max(1,Math.min(255,r.s)); b[i]=(r.gas?1:0)|(r.ent==='Inactive'?2:0)|(r.ent==='Dissolved'?4:0)|(r.due>0?8:0); } p.cm=a; p.cx=b; }
@@ -200,7 +201,7 @@ function cmHTML(folio){ const r=CM&&CMM.get(folio); if(!r) return ''; const li=[
   return `<h3>Commercial distress</h3><ul class="dlist cmlist">${li.join('')}</ul><div class="note">Commercial list built ${esc(CM.meta.built)}. Live tax amounts are as of the read date shown; confirm with the tax collector before acting.</div>`; }
 /* comps value estimate (data/comps.json.gz, scripts/build_comps.py): PA-qualified sales in the last 6 months, same land use, nearby */
 const COMP_VER='c2', CP_STEPS_C=[1,2,3,5], CP_STEPS=[0.5,1,2], CP_SIZE=[2,4], CP_MIN=3; let CP=null, cpP=null;
-function loadComps(){ return cpP||(cpP=(async()=>{ const o=await gzJSON('data/comps.json.gz?v='+META.ver+'-'+COMP_VER), grid=new Map();
+function loadComps(){ return cpP||(cpP=(async()=>{ const o=await gzJSON(DP+'comps.json.gz?v='+META.ver+'-'+COMP_VER), grid=new Map();
   o.rows.forEach((r,k)=>{ const key=Math.floor(r[1]/1000)*100000+Math.floor(r[2]/1000); let a=grid.get(key); if(!a) grid.set(key,a=[]); a.push(k); r.luN=parseInt(r[7],10); });
   o.grid=grid; CP=o; return o; })().catch(e=>{ cpP=null; throw e; })); }
 /* commercial / industrial (DOR 10xx-49xx): sales are rare, so match the use family and widen to 5 mi / 24 months */
@@ -242,11 +243,11 @@ function asmDecode(o){ const nul=v=>v<0?null:v, groups=[], byFolio=new Map(), by
     for(const t of o.m[j].split(',')){ const [f,b,sl]=t.split('.'); g.mem.push([f,parseInt(b,16),+sl]); byFolio.set(f,j); }
     groups.push(g); byId.set(g.id,j); });
   return {meta:o.meta,mot:o.mot,gt:o.gt,groups,byFolio,byId}; }
-function loadAsm(){ return asmP||(asmP=(async()=>{ ASM=asmDecode(await gzJSON('data/asm.json.gz?v='+META.ver+'-'+ASM_VER)); PACKS.forEach(asmIndexPack); return ASM; })().catch(e=>{ asmP=null; throw e; })); }
-function loadTile(t){ const key=ASM.meta.tiles[t]; if(!apolyP.has(t)) apolyP.set(t,gzJSON('data/asm-polys/'+key+'.json.gz?v='+META.ver+'-'+ASM_VER).then(o=>{ o.j.forEach((j,x)=>APOLY.set(j,o.p[x])); }).catch(e=>{ apolyP.delete(t); throw e; })); return apolyP.get(t); }
+function loadAsm(){ return asmP||(asmP=(async()=>{ ASM=asmDecode(await gzJSON(DP+'asm.json.gz?v='+META.ver+'-'+ASM_VER)); PACKS.forEach(asmIndexPack); return ASM; })().catch(e=>{ asmP=null; throw e; })); }
+function loadTile(t){ const key=ASM.meta.tiles[t]; if(!apolyP.has(t)) apolyP.set(t,gzJSON(DP+'asm-polys/'+key+'.json.gz?v='+META.ver+'-'+ASM_VER).then(o=>{ o.j.forEach((j,x)=>APOLY.set(j,o.p[x])); }).catch(e=>{ apolyP.delete(t); throw e; })); return apolyP.get(t); }
 function asmIndexPack(p){ if(!p||!ASM||p.asmG) return; const f=strCol(p,'folio'), g=new Int32Array(p.n).fill(-1); for(let i=0;i<p.n;i++){ const x=ASM.byFolio.get(f[i]); if(x!==undefined) g[i]=x; } p.asmG=g; }
 const asmOf=(p,i)=>ASM&&p.asmG&&p.asmG[i]>=0?ASM.groups[p.asmG[i]]:null;
-async function ensureAsm(){ if(!S.asm||ASM) return; $('asmSrc').textContent='Loading assemblage groups…'; try{ await loadAsm(); }catch(e){ toast('Assemblage data did not load: '+e.message); S.asm=false; } renderAsmSrc(); }
+async function ensureAsm(){ if(!HAS('asm')){ S.asm=false; return; } if(!S.asm||ASM) return; $('asmSrc').textContent='Loading assemblage groups…'; try{ await loadAsm(); }catch(e){ toast('Assemblage data did not load: '+e.message); S.asm=false; } renderAsmSrc(); }
 function renderAsmSrc(){ if(ASM) $('asmSrc').textContent=`${fmt.format(ASM.meta.groups)} groups (${fmt.format(ASM.meta.members)} parcels), ${fmt.format(ASM.meta.upside)} with a combined-site upside. Built ${ASM.meta.built}.`; }
 function asmMotText(b){ return ASM.mot.filter(([m])=>(b&m)&&!(m===2&&(b&1))).map(x=>x[1]); }
 function asmMix(g){ const sb=new Array(g.owners).fill(0), cnt={}; for(const [,b,sl] of g.mem) sb[sl]|=b; let rec=0; sb.forEach(b=>{ asmMotText(b).forEach(t=>cnt[t]=(cnt[t]||0)+1); if(b&256) rec++; });
@@ -282,7 +283,7 @@ async function drawAsmOutlines(){
   asmHint(`${fmt.format(want.size)} group${want.size===1?'':'s'} outlined${S.asmGroup?'':' in view'}.`);
 }
 /* Send to: tag parcels for the call center / door knocker (this browser only) */
-const SEND_KEY='pf.send.v1';
+const SEND_KEY=PFC.key('pf.send.v1');
 const TEAMS=[{k:'sms',label:'Text / SMS',noun:'text / SMS team',prefix:'TextSMS',act:'text'},{k:'cc',label:'Call center',noun:'call center',prefix:'CallCenter',act:'call'},{k:'dk',label:'Door knock',noun:'door knock',prefix:'DoorKnock',act:'door'},{k:'ml',label:'Mail',noun:'mail list',prefix:'Mail',act:'mailer'}];
 const teamOf=k=>TEAMS.find(t=>t.k===k);
 const SEND=(()=>{ let o={}; try{ o=JSON.parse(localStorage.getItem(SEND_KEY)||'{}')||{}; }catch(e){} return {tags:o.tags&&typeof o.tags==='object'?o.tags:{}, sent:o.sent&&typeof o.sent==='object'?o.sent:{}}; })();
@@ -315,13 +316,13 @@ const IDB=(()=>{ let dbp=null;
   const withTimeout=(pr,ms)=>Promise.race([pr,new Promise(r=>setTimeout(()=>r(null),ms))]);
   async function get(k){ try{ const db=await withTimeout(open(),1500); if(!db) return null; return await withTimeout(new Promise(res=>{ const q=db.transaction('f').objectStore('f').get(k); q.onsuccess=()=>res(q.result||null); q.onerror=()=>res(null); }),3000); }catch(e){ return null; } }
   async function put(k,v){ try{ const db=await withTimeout(open(),1500); if(db) db.transaction('f','readwrite').objectStore('f').put(v,k); }catch(e){} }
-  async function prune(ver){ try{ const db=await withTimeout(open(),1500); if(!db) return; const r=db.transaction('f','readwrite').objectStore('f').openCursor(); r.onsuccess=()=>{ const cur=r.result; if(!cur) return; if(!String(cur.key).startsWith(ver+'/')) cur.delete(); cur.continue(); }; }catch(e){} }
+  async function prune(ver){ try{ const db=await withTimeout(open(),1500); if(!db) return; const r=db.transaction('f','readwrite').objectStore('f').openCursor(); r.onsuccess=()=>{ const cur=r.result; if(!cur) return; const k=String(cur.key), mine=k.startsWith(PFC.id+':')||(PFC.id===PFC.DEFAULT&&!/^[a-z-]+:/.test(k)); if(mine&&!k.startsWith(PFC.id+':'+ver+'/')) cur.delete(); cur.continue(); }; }catch(e){} }
   return {get,put,prune}; })();
 async function fetchAll(files, onBytes){
   const bufs = await Promise.all(files.map(async f => {
-    const key=META.ver+'/'+f, hit=await IDB.get(key);
+    const key=PFC.id+':'+META.ver+'/'+f, hit=await IDB.get(key);
     if(hit && hit.byteLength){ onBytes(hit.byteLength); return new Uint8Array(hit); }
-    const r = await fetch('data/'+f+'?v='+META.ver); if(!r.ok) throw new Error('Could not load '+f+' ('+r.status+')');
+    const r = await fetch(DP+f+'?v='+META.ver); if(!r.ok) throw new Error('Could not load '+f+' ('+r.status+')');
     if(!r.body){ const b=new Uint8Array(await r.arrayBuffer()); onBytes(b.length); return b; }
     const rd=r.body.getReader(), chunks=[]; let len=0;
     for(;;){ const {done,value}=await rd.read(); if(done) break; chunks.push(value); len+=value.length; onBytes(value.length); }
@@ -401,7 +402,7 @@ function readState(){
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
   st.cont=S.cont; st.hideSent=S.hideSent; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; return st;
 }
-function save(){ const st=readState(); try{ localStorage.setItem('mdpf.v2',JSON.stringify(st)); }catch(e){} writeHash(st); }
+function save(){ const st=readState(); try{ localStorage.setItem(PFC.key('mdpf.v2'),JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
   NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':(MONEY_IDS.has(id)?fmtAmt(st[id]):st[id]));
   $('mvMin').value=st.mvMin?fmtAmt(st.mvMin):''; $('mvMax').value=st.mvMax?fmtAmt(st.mvMax):'';
@@ -872,7 +873,7 @@ async function openDrawer(id,opts){
     <div class="note" style="font-family:var(--f-mono)">Folio ${folioFmt(folio)}</div>
     <h2>${esc(addr)}</h2><div class="sub">${esc(city)}, FL ${zip}</div>
     <div class="links">
-      <a href="https://apps.miamidadepa.gov/propertysearch/#/?folio=${folio}" target="_blank" rel="noopener">Property Appraiser page ↗</a>
+      <a href="${PFC.cfg.paUrl(folio)}" target="_blank" rel="noopener">Property Appraiser page ↗</a>
       <a href="https://www.google.com/maps/search/?api=1&query=${hasG&&!getStr(p,'addr',i)?la.toFixed(6)+','+lo.toFixed(6):gq}" target="_blank" rel="noopener">Google Maps ↗</a>
       ${hasG?`<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${la.toFixed(6)},${lo.toFixed(6)}" target="_blank" rel="noopener">Street View ↗</a>`:''}
       <button class="btn" type="button" id="copyFolio">Copy folio</button>
@@ -898,7 +899,7 @@ async function openDrawer(id,opts){
       ['Buildings on the lot', c.bcount&&c.bcount[i]>1?c.bcount[i]:''],
       ['Construction', p.cn&&EX?(p.cn[i]?esc(CN_LABEL[p.cn[i]]):'<span class="note">Unknown</span>')+'<small>Main building, Property Appraiser building details</small>':''],
       ['Adverse possession', p.ap&&p.ap[i]?'<b>Claim noted</b><small>F.S. 95.18 / DR-452, from the Property Appraiser legal description</small>':''],
-      ['Redevelopment area', esc(D.cra[c.cra[i]]||'')],['Legal description', esc(getStr(p,'legal',i))]])}</div>
+      [HAS('flood')?'FEMA flood zone':'Redevelopment area', esc(D.cra[c.cra[i]]||'')],['Legal description', esc(getStr(p,'legal',i))]])}</div>
     <h3>${META.rollYear||''} values</h3><div class="dl">${rows([
       ['Market value', dollars(mv)],['Land', dollars(c.land[i])+(mv?`<small>${Math.round(c.land[i]/mv*100)}% of the total</small>`:'')],['Building', dollars(c.bldg[i])],
       ['Assessed (capped)', dollars(c.assd[i])],['Taxable (county)', dollars(c.taxable[i])],
@@ -967,7 +968,7 @@ async function openOwner(g,backId){
     <button class="btn" id="closeD" type="button" style="float:right">Close</button>${backId!=null?'<button class="btn back" id="ogBack" type="button" style="float:right;margin-right:8px">← Property</button>':''}
     <div class="note eyebrow">Owner portfolio</div>
     <h2>${esc(OWN.name[g])}</h2>
-    <div class="sub">${fmt.format(ids.length)} properties in Miami-Dade${fl.length?` · <span class="flagged">${esc(fl.join(', '))}</span>`:''}</div>
+    <div class="sub">${fmt.format(ids.length)} properties in ${esc(PFC.cfg.name)}${fl.length?` · <span class="flagged">${esc(fl.join(', '))}</span>`:''}</div>
     <div class="ogstats">
       <div><div class="k">Properties</div><div class="v">${fmt.format(ids.length)}</div><small>${OWN.nc[g]?fmt.format(OWN.nc[g])+' condo units':'&nbsp;'}</small></div>
       <div><div class="k">Market value</div><div class="v">${money(mv)}</div><small>${dollars(mv)}</small></div>
@@ -1002,7 +1003,7 @@ async function openOwner(g,backId){
     L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${dark?'Dark':'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,{maxZoom:20,maxNativeZoom:16,attribution:'Esri'}).addTo(OGMAP);
     const pts=[]; for(const id of ids.slice(0,5000)){ const p=P(id), g2=p.geo, i=I(id); if(!g2||!(g2.lat[i]>20)) continue; const ll=[g2.lat[i],g2.lon[i]]; pts.push(ll);
       L.circleMarker(ll,{radius:5,weight:1,color:'#0C0E10',fillColor:SC_RGB[scIdx(p.c.dscore[i])].css,fillOpacity:.9}).bindTooltip(esc(getStr(p,'addr',i)||'No street address')).on('click',()=>openDrawer(id,{backOwner:g})).addTo(OGMAP); }
-    if(pts.length) OGMAP.fitBounds(pts,{padding:[18,18],maxZoom:16}); else OGMAP.setView([25.7,-80.35],10);
+    if(pts.length) OGMAP.fitBounds(pts,{padding:[18,18],maxZoom:16}); else OGMAP.setView(PFC.cfg.center,10);
   }catch(e){ const m=$('ogMap'); if(m) m.textContent='The map did not load.'; }
 }
 
@@ -1026,13 +1027,13 @@ function nearStreet(p,i){ const g=addrGrid(); if(!g) return ''; const la=p.geo.l
   const cx=Math.floor(la*200), cy=Math.floor(-lo*200); let best=1e9, id=-1;
   for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){ const b=g.get((cx+dx)*100000+cy+dy); if(!b) continue; for(let k=0;k<b.length;k+=3){ const d=(b[k]-la)**2+((b[k+1]-lo)*0.9)**2; if(d<best){ best=d; id=b[k+2]; } } }
   return id<0?'':getStr(P(id),'addr',I(id)).replace(/^\d+[A-Z]?(-\d+)?\s+/,''); }
-const folio13=f=>{ const d=String(f||'').replace(/\D/g,''); return d?folioFmt(d.padStart(13,'0')):''; };
+const folio13=f=>{ const d=String(f||'').replace(/\D/g,''); if(!d) return ''; if(PFC.id!==PFC.DEFAULT) return d.length===14?d.slice(0,8)+'-'+d.slice(8):d; return folioFmt(d.padStart(13,'0')); };
 const EXPSTAT={real:0,near:0,legal:0,use:0};
 function exportAddr(p,i){ const a=getStr(p,'addr',i).trim(); if(a){ EXPSTAT.real++; return a; }
   const use=TYPE_LABEL[LU_T[p.c.landuse[i]]]||'Parcel', st=nearStreet(p,i); if(st){ EXPSTAT.near++; return `No site address – ${use}, near ${st}`; }
   const lg=(p.det?getStr(p,'legal',i):'').replace(/\s+/g,' ').trim(); if(lg){ EXPSTAT.legal++; return `No site address – ${use}, ${lg.length>48?lg.slice(0,48)+'…':lg}`; }
   EXPSTAT.use++; return `No site address – ${use}`; }
-function exportRow(p,i){ const c=p.c; return [csvq(exportAddr(p,i)),csvq(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; ')),csvq(getStr(p,'mail',i)),folio13(getStr(p,'folio',i)),'Miami-Dade',csvq(D.city[c.city[i]]||''),'FL'].join(','); }
+function exportRow(p,i){ const c=p.c; return [csvq(exportAddr(p,i)),csvq(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; ')),csvq(getStr(p,'mail',i)),folio13(getStr(p,'folio',i)),csvq(PFC.cfg.name),csvq(D.city[c.city[i]]||''),'FL'].join(','); }
 const EXP_HEAD='Address,Owner Name,Mailing Address,Folio,County,City,State\n';
 function buildCSV(ids=results){
   // export = contact list only (main export and Send to lists): Address, Owner Name, Mailing Address, Folio, County, City, State
@@ -1135,10 +1136,11 @@ function loadGeo(i){
   const pk=META.packs[i]; if(!pk.geo) return Promise.resolve();
   GEOP[i]=(async()=>{
     const d=parsePack(await gunzip(await fetchAll(pk.geo,()=>{})),pk.name,i), n=d.n, la=d.c.lat, lo=d.c.lon;
+    const G0=META.geoOrigin||[24,-81.5];   // pack stores (lat-G0[0])*1e6, (lon-G0[1])*1e6
     const lat=new Float32Array(n), lon=new Float32Array(n), mx=new Float64Array(n), my=new Float64Array(n);
     for(let k=0;k<n;k++){
       if(!la[k]){ lat[k]=NaN; lon[k]=NaN; mx[k]=NaN; my[k]=NaN; continue; }
-      const a=la[k]/1e6+24, b=lo[k]/1e6-81.5, s=Math.sin(a*Math.PI/180);
+      const a=la[k]/1e6+G0[0], b=lo[k]/1e6+G0[1], s=Math.sin(a*Math.PI/180);
       lat[k]=a; lon[k]=b; mx[k]=(b+180)/360; my[k]=0.5-Math.log((1+s)/(1-s))/(4*Math.PI);
     }
     PACKS[i].geo={lat,lon,mx,my};
@@ -1222,7 +1224,7 @@ function onMapMove(e){
 }
 function initMap(){
   const dark=document.documentElement.dataset.theme==='dark' || (document.documentElement.dataset.theme!=='light' && matchMedia('(prefers-color-scheme: dark)').matches);
-  LMAP=L.map('map',{zoomControl:true,minZoom:8,maxZoom:19}).setView([25.70,-80.35],10);
+  LMAP=L.map('map',{zoomControl:true,minZoom:7,maxZoom:19}).setView(PFC.cfg.center,PFC.id===PFC.DEFAULT?10:9);
   const esri=(svc,opt={})=>L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/${svc}/MapServer/tile/{z}/{y}/{x}`,{maxZoom:20,maxNativeZoom:svc.includes('Imagery')?19:16,
     attribution:'Tiles &copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',...opt});
   const gray=dark?'Dark':'Light';
@@ -1278,6 +1280,9 @@ async function openDeep(f){
 }
 /* commercial presets by Property Appraiser DOR land use family (see CP_FAM) */
 const LUF=fam=>D.landuse.filter((v,i)=>{ const c=LU_CODE[i]; return cpCom(c)&&CP_FAM(c)===fam; });
+/* ideas that need a data layer the active county may not have (counties.js layers) */
+const IDEA_NEED=[[/Hottest|Pre-foreclosure|Tax deeds|Unsafe/,'distress'],[/vacant \/ neglected/,'vacancy'],[/multifamily land|Strong teardowns|could be split/,'zoning'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm']];
+const ideaOk=l=>IDEA_NEED.every(([re,ly])=>!re.test(l)||HAS(ly));
 const IDEAS=[
   ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
   ['Pre-foreclosure & auctions', ()=>({...BLANK(), dsig:['LP','FC'], sort:'ds_d'})],
@@ -1338,7 +1343,7 @@ function savedListCSV(){
   // same contact-only columns as every property export: Address, Owner Name, Mailing Address, Folio, County, City, State
   const ids=savedIdx(); for(const k in EXPSTAT) EXPSTAT[k]=0; const rows=SV.list().map(x=>{ const id=ids.get(x.folio);
     if(id!=null) return exportRow(P(id),I(id)); EXPSTAT.real++;
-    return [csvq(x.addr||'No site address'),csvq(x.owner||''),csvq(x.mail||''),folio13(x.folio),'Miami-Dade',csvq(x.city||''),'FL'].join(','); });
+    return [csvq(x.addr||'No site address'),csvq(x.owner||''),csvq(x.mail||''),folio13(x.folio),csvq(PFC.cfg.name),csvq(x.city||''),'FL'].join(','); });
   return new Blob([EXP_HEAD+rows.join('\n')+(rows.length?'\n':'')],{type:'text/csv'});
 }
 function wireSaved(){
@@ -1410,11 +1415,11 @@ async function ensureOg(){
   S.og=g||-1; renderOgRow();
 }
 function renderOgRow(){ $('ogRow').hidden=!S.ogf; if(S.ogf) $('ogLabel').textContent=S.og>0&&OWN?`Only properties of ${OWN.name[S.og]} (${fmt.format(OWN.n[S.og])})`:'Only one owner\'s properties'; }
-async function ensureCm(){ if(CM) return; try{ await loadCommercial(); }catch(e){ toast('Commercial data did not load: '+e.message); } }
-async function ensureSig(){ if(SIG) return; try{ await loadSignals(); renderSigSrc(); }catch(e){ toast('Clerk signal data did not load: '+e.message); } }
+async function ensureCm(){ if(CM||!HAS('commercial')) return; try{ await loadCommercial(); }catch(e){ toast('Commercial data did not load: '+e.message); } }
+async function ensureSig(){ if(SIG||!HAS('signals')) return; try{ await loadSignals(); renderSigSrc(); }catch(e){ toast('Clerk signal data did not load: '+e.message); } }
 function renderSigSrc(){ if(!SIG) return; const m=SIG.meta; $('sigSrc').textContent=`${fmt.format(m.pf.n)} open pre-foreclosures (lis pendens ${ymd(m.pf.from)} – ${ymd(m.pf.to)}), ${fmt.format(m.pb.n)} probate filings (${fmt.format(m.pb.high)} high, ${fmt.format(m.pb.medium)} medium match), ${fmt.format(m.au.n)} upcoming auctions. Built ${m.built}.`; }
 /* comps: card value estimate needs the comp sales + parcel points; loaded in the background after the first results */
-let cpBusy=false; async function ensureComps(){ if(cpBusy) return; cpBusy=true; try{ await loadComps(); fillComps(); for(const p of PACKS) if(p&&!p.geo){ await loadGeo(p.idx).catch(()=>{}); } fillComps(); }catch(e){} cpBusy=false; }
+let cpBusy=false; async function ensureComps(){ if(cpBusy||!HAS('comps')) return; cpBusy=true; try{ await loadComps(); fillComps(); for(const p of PACKS) if(p&&!p.geo){ await loadGeo(p.idx).catch(()=>{}); } fillComps(); }catch(e){} cpBusy=false; }
 async function ensureCondo(){ if(S.types.has('condo') && !PACKS[1]){ try{ await loadPack(1,'Loading condo units…'); if(CP) setTimeout(ensureComps,0); }catch(e){ S.types.delete('condo'); toast(e.message); } } }
 const clearIdea=()=>document.querySelectorAll('#ideas .chip').forEach(b=>b.classList.remove('on'));
 function wire(){
@@ -1483,7 +1488,7 @@ function wire(){
     $(f+'Find').addEventListener('input',()=>renderFacet(f));
     $(f+'List').addEventListener('change',e=>{ const t=e.target; if(!t.dataset.f) return; const set=f==='zoning'?S.exZ:S.exL, i=+t.dataset.i; t.checked?set.add(i):set.delete(i); schedule(100); });
   });
-  $('ideas').innerHTML=IDEAS.map(([l],i)=>`<button type="button" class="chip" data-i="${i}">${l}</button>`).join('');
+  $('ideas').innerHTML=IDEAS.map(([l],i)=>ideaOk(l)?`<button type="button" class="chip" data-i="${i}">${l}</button>`:'').join('');
   $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); clearIdea(); b.classList.add('on'); });
   $('toResults').onclick=()=>{ const r=$('results'); const y=r.getBoundingClientRect().top+window.scrollY-($('stickybar').offsetHeight+16); window.scrollTo({top:y,behavior:'smooth'}); };
   $('resetBtn').onclick=()=>{ applyState({...BLANK(), view:S.view}); clearIdea(); run(); };
@@ -1524,10 +1529,10 @@ function wire(){
 
 async function boot(){
   try{
-    META=await (await fetch('data/meta.json')).json(); D=META.dicts; PCOV=(META.permitCov&&META.permitCov.cities)||{};
+    META=await (await fetch(DP+'meta.json')).json(); D=META.dicts; PCOV=(META.permitCov&&META.permitCov.cities)||{};
     MZ=D.mzone||[null]; MZ_UP=MZ.map(e=>e?String(e[0]).toUpperCase():''); LU_T=D.landuse.map(luType); Z_G=D.zoning.map(zGroup);
-    $('srcCount').textContent=fmt.format(META.total); $('srcDate').textContent=META.salesThrough||META.built;
-    $('srcLine').title=`Downloaded from Miami-Dade County GIS on ${META.built}. Newest recorded sale on the roll: ${META.salesThrough}. ${META.rollYear} values.`;
+    $('srcCount').textContent=fmt.format(META.total); if(PFC.id!==PFC.DEFAULT){ $('srcLine').firstChild.nodeValue=`Every property on the ${PFC.cfg.roll}, `; const cl=document.querySelector('label[for="cra"]'); if(cl&&HAS('flood')) cl.textContent='FEMA flood zone'; } PFC.applyLayers(); $('srcDate').textContent=META.salesThrough||META.built;
+    $('srcLine').title=`Downloaded from ${PFC.cfg.source} on ${META.built}. Newest recorded sale on the roll: ${META.salesThrough}. ${META.rollYear} values.`;
     $('footData').textContent=`Pulled ${META.built}; ${fmt.format(META.stats.farmland_removed)} farm parcels and ${fmt.format(META.stats.reference_removed)} reference-only folios left out.`;
     D.city.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('city').appendChild(o); });
     D.cra.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('cra').appendChild(o); });
@@ -1550,8 +1555,8 @@ async function boot(){
     if(EX&&EX.cn.meta) $('cnSrc').textContent=`${fmt.format(EX.cn.meta.folios||0)} folios have a recorded category (${EX.cn.meta.source||''}).`;
     $('lotzNote').textContent='Lot vs the zone minimum lot size; “could be split” = single-family zone and lot ≥ your split factor × the minimum.';
     wire(); renderRules();
-    const dlF=deepFolio(); let st=dlF?{...BLANK(),q:dlF,hideGov:false,view:'cards'}:parseHash(), fresh=false; if(!st){ try{ st=JSON.parse(localStorage.getItem('mdpf.v2')||'null'); }catch(e){} }
-    if(!st){ st=IDEAS[0][1](); fresh=true; }
+    const dlF=deepFolio(); let st=dlF?{...BLANK(),q:dlF,hideGov:false,view:'cards'}:parseHash(), fresh=false; if(!st){ try{ st=JSON.parse(localStorage.getItem(PFC.key('mdpf.v2'))||'null'); }catch(e){} }
+    if(!st){ st=IDEAS[Math.max(0,IDEAS.findIndex(([l])=>ideaOk(l)))][1](); fresh=true; }
     applyState(st);
     const ownLoad=loadOwners().catch(()=>null);
     await loadPack(0,'Loading properties…');
@@ -1576,7 +1581,7 @@ async function boot(){
     IDB.prune(META.ver);
     setTimeout(()=>{ loadDetail(0).catch(()=>{}); },1500);
     setTimeout(()=>{ loadGeo(0).catch(()=>{}); },4000);
-    setTimeout(()=>{ if(!ASM) loadAsm().then(()=>{ renderAsmSrc(); if(S.view==='cards') renderResults(true); renderChips(); }).catch(()=>{}); },6000);
+    setTimeout(()=>{ if(!ASM&&HAS('asm')) loadAsm().then(()=>{ renderAsmSrc(); if(S.view==='cards') renderResults(true); renderChips(); }).catch(()=>{}); },6000);
   }catch(e){ $('loadMsg').textContent='The property data did not load.'; $('loadSub').textContent=String(e.message||e)+'. Reload the page to try again.'; }
 }
 boot();

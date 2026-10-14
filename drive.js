@@ -126,7 +126,7 @@
     if(booting) return booting;
     booting = (async () => {
       await PF.loadLeaflet(); await PF.loadGeo(0);
-      M = L.map('dmap', { zoomControl: false, minZoom: 10, maxZoom: 20, tap: true }).setView([25.774, -80.194], 17);
+      M = L.map('dmap', { zoomControl: false, minZoom: 10, maxZoom: 20, tap: true }).setView(window.PFCounty && window.PFCounty.id !== 'miami-dade' ? window.PFCounty.cfg.center : [25.774, -80.194], 17);
       const esri = (svc, o = {}) => L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/${svc}/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 20, maxNativeZoom: svc.includes('Imagery') ? 19 : 16, crossOrigin: true, attribution: 'Esri, HERE, Garmin, © OpenStreetMap', ...o });
       const streets = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors' });
       const sat = L.layerGroup([esri('World_Imagery'), esri('Reference/World_Transportation', { opacity: .7 })]);

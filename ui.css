@@ -111,3 +111,6 @@ body.simple:not(.detail) .card .uline{display:none} /* compact cards: the type t
 .expbar select{font:inherit;padding:5px 8px;border-radius:6px;border:0;width:auto;flex:0 0 auto;max-width:180px}.expbar .btn{flex:0 0 auto}
 .expbar .btn{background:#fff;color:#C2410C;border:0;font-weight:700}.expbar .btn.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.7)}
 .tagall{align-items:center;gap:6px}
+/* county switcher (counties.js) */
+.countysel{margin:4px 0 0;font:inherit;font-size:13px;padding:3px 6px;border-radius:8px;border:1px solid rgba(0,0,0,.2);background:#fff;color:inherit;max-width:200px}
+[data-county-hidden]{display:none!important}

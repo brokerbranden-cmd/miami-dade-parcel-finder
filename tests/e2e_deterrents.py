@@ -51,12 +51,13 @@ with sync_playwright() as pw:
     ok(fire('selectstart', 'header.top h1'), 'selectstart on UI blocked')
     ok(not fire('selectstart', '#q'), 'selectstart in input allowed')
     # input selection + copy
+    if not pg.is_visible('#q'): pg.evaluate("document.body.classList.add('sheet-open')")   # mobile: filters live in a sheet
     pg.fill('#q', 'hello world'); pg.focus('#q'); pg.keyboard.press('Control+A')
     ok(pg.evaluate("(()=>{const q=document.getElementById('q'); return q.selectionEnd-q.selectionStart})()") == 11, 'text in input can be selected (Ctrl+A -> 11 chars)')
     pg.evaluate("window.__copy=null; document.addEventListener('copy',e=>{window.__copy=e.defaultPrevented},false)")
     pg.keyboard.press('Control+C'); ok(pg.evaluate('window.__copy') is False, 'copy inside an input is not prevented')
     pg.evaluate("document.getElementById('tImg').remove()")
-    pg.fill('#q', '')
+    pg.fill('#q', ''); pg.evaluate("document.body.classList.remove('sheet-open')")
     # mouse right-click for real on the header: no menu event default left unprevented
     pg.evaluate("window.__dp={}"); pg.click('header.top h1', button='right'); ok(dp('contextmenu') is True, 'real right-click on header is default-prevented')
     # CSV export + Mark as sent
@@ -65,7 +66,7 @@ with sync_playwright() as pw:
     go('type=vacant&city=Homestead'); n = pg.evaluate('PF.sample(5)')['n']; ok(0 < n < 3000, f'small search: {n} results')
     with pg.expect_download() as dl: jsclick('#exportBtn')
     rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read()))); ok(len(rows) - 1 == n and dl.value.suggested_filename.endswith('.csv'), f'CSV export downloads: {len(rows)-1} rows ({dl.value.suggested_filename})')
-    ok(any('@' in c or c.isdigit() for r in rows[1:20] for c in r), 'exported rows still contain public contact/owner data')
+    ok(all(r[1].strip() and r[2].strip() for r in rows[1:20]), 'exported rows still contain owner names + mailing addresses')
     pg.wait_for_selector('#expBar:not([hidden])'); pg.select_option('#expTeam', 'sms'); pg.click('#expMark'); pg.wait_for_timeout(1500)
     ok(pg.is_hidden('#expBar'), 'Mark as sent works (bar closes)')
     f0 = rows[1][3].replace('-', ''); it = pg.evaluate(f'PF.SV.get("{f0}")')

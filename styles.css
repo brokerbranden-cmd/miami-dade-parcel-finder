@@ -542,3 +542,5 @@ body.lending .wrap{display:none}
 .asmlist{margin:8px 0;padding-left:20px;font-size:13px}.asmlist small{color:var(--muted)}
 .lnk{background:none;border:0;padding:0;color:var(--accent,#00B2BD);text-decoration:underline;cursor:pointer;font:inherit}
 input[aria-invalid="true"]{border-color:var(--danger)!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--danger) 25%,transparent)}
+
+.copyr{margin:28px 0 18px;padding-top:14px;border-top:1px solid var(--line);text-align:center;font-size:12px;color:var(--muted)}

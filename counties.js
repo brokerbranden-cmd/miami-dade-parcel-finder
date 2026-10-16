@@ -10,12 +10,14 @@
   const ALL = ['distress','signals','permits','vacancy','zoning','asm','teardown','commercial','comps','owners','construction','cra','flood','mzoning'];
   const COUNTIES = {
     'miami-dade': { id:'miami-dade', name:'Miami-Dade', state:'FL', dataDir:'data/', storeSuffix:'',
+      nameOrder:'first-last',   // owner names on the roll read FIRST MIDDLE LAST (used by the skip trace export / import)
       center:[25.76,-80.30], bounds:[[25.13,-80.88],[25.98,-80.11]],
       layers: ALL.filter(l=>l!=='flood'),
       source:'Miami-Dade County GIS', roll:'Miami-Dade Property Appraiser roll',
       paUrl:f=>`https://apps.miamidadepa.gov/propertysearch/#/?folio=${f}`, auctionHost:'https://www.miamidade.realforeclose.com',
       searchHint:'Search an address, owner name or folio number' },
     'monroe': { id:'monroe', name:'Monroe', state:'FL', dataDir:'data/monroe/', storeSuffix:'.monroe',
+      nameOrder:'last-first',   // Monroe roll names read LAST FIRST MIDDLE
       center:[24.75,-81.20], bounds:[[24.45,-82.20],[25.40,-80.25]],
       layers: ['owners','teardown','comps','flood','mzoning','monroe'],
       source:'Florida statewide cadastral (FDOR roll, Monroe County), county / city zoning + ROGO / Tier, FNAI / NWI / FEMA layers', roll:'Monroe County Property Appraiser roll (via Florida DOR)',

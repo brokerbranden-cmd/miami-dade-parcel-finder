@@ -203,6 +203,23 @@
       <div class="sendbar" id="sendBar" hidden></div>
     </div>
 
+    <div class="grp skiptrace" id="stGrp">
+      <div class="grp-h"><h2>Skip trace</h2><span class="hint">Get phone numbers and emails for owners: export the filtered list as a CSV, send it to a skip tracing provider, then import their results. Stored in this browser, separately for each county.</span><button class="clr" type="button" id="clrSt">Clear</button></div>
+      <div class="sigrow">
+        <label class="check" title="Only properties with a phone number from skip tracing"><input type="checkbox" id="stHasPhone"> Has phone <span class="n" id="stPhoneCount"></span></label>
+        <label class="check" title="Only properties you imported skip trace results for"><input type="checkbox" id="stTraced"> Skip traced <span class="n" id="stTracedCount"></span></label>
+        <label class="check" title="Only properties that have not been skip traced yet"><input type="checkbox" id="stNotTraced"> Not skip traced yet</label>
+      </div>
+      <div class="sendgrp-x stactions">
+        <button class="btn" type="button" id="stExportBtn" title="Download the filtered properties as a CSV for a skip tracing provider (one row per owner)">Skip trace export</button>
+        <label class="btn" for="stFile" tabindex="0" role="button" id="stImportLbl" title="Upload the provider's result CSV">Import results</label><input type="file" id="stFile" accept=".csv,.tsv,.txt,text/csv,text/plain" class="sr">
+        <button class="btn" type="button" id="stTextBtn" title="Name, phone and address for your texting tool, then Mark as sent">Text list</button>
+        <button class="btn" type="button" id="stHelpBtn">How it works</button>
+      </div>
+      <div class="note sendgrp-x" id="stInfo"></div>
+      <div class="sendgrp-x"><button class="btn ghost" type="button" id="stClearData">Clear skip trace data</button></div>
+    </div>
+
     <details class="more" id="moreBox" open="">
       <summary>More filters <span class="badge-n" id="advCount" hidden="">0 on</span></summary>
       <div class="adv">
@@ -335,6 +352,8 @@
 </div>
 <script src="counties.js"></script>
 <script src="saved.js"></script>
+<script src="skiptrace.js"></script>
+<script src="skiptrace-ui.js"></script>
 <script src="lenders.js"></script>
 <script src="teardown.js"></script>
 <script src="app.js"></script>

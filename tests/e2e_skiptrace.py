@@ -22,7 +22,7 @@ with sync_playwright() as pw:
     b = pw.chromium.launch(args=['--js-flags=--max-old-space-size=1024'])
     vp = {'width': 390, 'height': 844} if MOB else {'width': 1440, 'height': 900}
     ctx = b.new_context(viewport=vp, is_mobile=MOB, has_touch=MOB, accept_downloads=True, service_workers='block'); pg = ctx.new_page(); pg.set_default_timeout(120000)
-    pg.add_init_script("if(!localStorage.getItem('pf.ui.v1')) localStorage.setItem('pf.ui.v1', JSON.stringify({legacy:true}))")
+    pg.add_init_script("try{ if(!localStorage.getItem('pf.ui.v1')) localStorage.setItem('pf.ui.v1', JSON.stringify({legacy:true})); }catch(e){}")
     pg.on('pageerror', lambda e: errs.append('pageerror: ' + str(e)))
     downloads = []; pg.on('download', lambda d: downloads.append(d))
     Q = '?drive=0&county=' if MOB else '?county='
@@ -89,7 +89,7 @@ with sync_playwright() as pw:
     open_export(); c2 = pg.inner_text('#stxCounts'); ok(re.search(r'Nothing left|0 rows', c2) is not None or 'already contacted' in c2, f'already contacted/sent are excluded: {c2[:140]!r}')
     pg.evaluate("(()=>{const e=document.getElementById('stxContacted'); e.checked=false; e.dispatchEvent(new Event('change',{bubbles:true}));})()"); pg.wait_for_function(f"/{rows_n} rows?/.test(document.getElementById('stxCounts').textContent)", timeout=60000); ok(True, 'unchecking the exclusion brings them back'); close_modal()
     # reset the sent marks so later steps start clean
-    pg.evaluate("localStorage.removeItem('pf.send.v1')"); load('miami-dade', 'city=Homestead&q=SW 2&hg=0')
+    pg.evaluate("localStorage.removeItem('pf.send.v1'); localStorage.removeItem('mdpf.saved.v1')"); load('miami-dade', 'city=Homestead&q=SW 2&hg=0')
 
     # ---------- large list warning ----------
     go('city=Homestead&hg=0'); big_n = n_of(); open_export(); pg.wait_for_function("!document.getElementById('stxGo').disabled", timeout=180000)
@@ -181,7 +181,8 @@ with sync_playwright() as pw:
     it = pg.evaluate(f"PF.SV.get('{k0}')"); ok(it and it['acts'] and it['acts'][0]['type'] == 'text' and it['acts'][0]['outcome'] == 'Sent to list', 'outreach activity (Text, Sent to list) logged')
     go('city=Homestead&q=SW 2&hg=0&ph=1'); base = in_search(); go('city=Homestead&q=SW 2&hg=0&ph=1&hs=1'); left = n_of(); sf = {f for f in sent if 'sms' in sent[f]}; want_left = len(base - sf); print('   sent', len(sf), 'in search w/ phone', len(base), 'left', left, 'want', want_left, 'notsent', base - sf, 'k1', k1 in base, k1 in sf)
     ok(left == want_left and left < expected_props and want_left >= 1, f'Hide already sent removes texted owners ({left} left; the DNC-only owner stays)')
-    go('city=Homestead&q=SW 2&hg=0&ph=1&cont=1'); ok(n_of() == expected_props - left, f'Already contacted shows them ({n_of()})')
+    go('city=Homestead&q=SW 2&hg=0&ph=1&cont=1'); print('   cont debug', pg.evaluate('location.hash'), pg.inner_text('#sCount'), pg.evaluate("document.getElementById('contOnly').checked"), pg.evaluate("[...PF.SV.list()].map(x=>x.folio+':'+x.acts.length).join(',')"), pg.evaluate("Object.keys(JSON.parse(localStorage.getItem('pf.send.v1')).sent).length"))
+    ok(n_of() == expected_props - left, f'Already contacted shows them ({n_of()})')
     go('city=Homestead&q=SW 2&hg=0&ph=1'); jsclick('#stTextBtn'); pg.wait_for_selector('#sttCounts b', timeout=60000); ok('already texted' in pg.inner_text('#sttCounts') and re.search(r'[1-9]\d* already texted', pg.inner_text('#sttCounts')), 'second text list skips owners already texted: ' + pg.inner_text('#sttCounts').replace('\n', ' ')[-110:])
     pg.evaluate("(()=>{const e=document.getElementById('sttSent'); e.checked=false; e.dispatchEvent(new Event('change',{bubbles:true}));})()"); pg.wait_for_timeout(1200); ok(re.search(r'\b[1-9]\d* numbers?\b', pg.inner_text('#sttCounts')) is not None, 'unchecking lets you re-text deliberately'); close_modal()
 

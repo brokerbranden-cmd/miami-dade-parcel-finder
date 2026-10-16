@@ -35,7 +35,7 @@ def pull(kind, start, end):
                 if len(rows) >= int(j.get('recordsFiltered') or 0) or not d: break
                 off += len(d)
             for d in rows: fh.write(json.dumps({k: (v.strip() if isinstance(v, str) else v) for k, v in d.items()}) + '\n')
-            fh.flush(); open(done, 'a').write(key + '\n'); print(kind, key, len(rows), flush=True); m = nxt; time.sleep(0.3)
+            fh.flush(); open(done, 'a').write(key + '\n'); print(kind, key, len(rows), flush=True); m = nxt; time.sleep(float(os.environ.get("MCE_SLEEP", "1.2")))
 if __name__ == '__main__':
     kinds = sys.argv[1:] or ['permits', 'code']
     if 'permits' in kinds: pull('permits', dt.date(1998, 1, 1), dt.date(2022, 12, 1))

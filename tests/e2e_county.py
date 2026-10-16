@@ -16,8 +16,11 @@ with sync_playwright() as pw:
     check(pg.inner_text('header.top h1').lower().startswith('monroe'), 'header says Monroe: ' + pg.inner_text('header.top h1'))
     check(pg.input_value('#countySel') == 'monroe', 'switcher shows Monroe')
     check(pg.inner_text('#srcCount').replace(',', '') == str(total), f'source line count {pg.inner_text("#srcCount")} == meta {total}')
-    for sel in ('.grp.distress', '.grp.permits', '.grp.vacancy', '#asmGrp', '[data-need="zoning"]'):
+    for sel in ('.grp.distress', '.grp.permits', '.grp.vacancy', '#asmGrp', '.grp[data-need="zoning"]'):
         check(not pg.is_visible(sel), f'{sel} hidden')
+    for sel in ('#mrGrp', '.grp[data-need="mzoning"]'):
+        check(pg.is_visible(sel), f'{sel} visible for Monroe (zoning + buildability layers now exist)')
+    check(pg.evaluate("PFCounty.has('monroe') && PFCounty.has('mzoning') && !PFCounty.has('zoning') && !PFCounty.has('distress')"), 'Monroe layer list')
     ideas = pg.eval_on_selector_all('#ideas .chip', 'n=>n.map(x=>x.textContent)')
     check(not any('Hottest' in t or 'Assemblage' in t or 'Commercial distress' in t for t in ideas), f'ideas without missing layers ({len(ideas)})')
     check(pg.inner_text('label[for="cra"]') == 'FEMA flood zone', 'flood zone filter label')
@@ -46,6 +49,9 @@ with sync_playwright() as pw:
     pg.select_option('#countySel', 'miami-dade'); pg.wait_for_selector('#results:not([hidden])', timeout=180000)
     check(pg.evaluate('PFCounty.id') == 'miami-dade' and 'county=miami-dade' in pg.url, 'switched to Miami-Dade (URL ' + pg.url[:80] + ')')
     check(pg.is_visible('.grp.distress'), 'Miami-Dade shows distress filters')
+    check(not pg.is_visible('#mrGrp') and pg.evaluate("!PFCounty.has('monroe')"), 'Miami-Dade hides the Monroe-only buildability group')
+    check(pg.query_selector('#cards .card .mrb') is None, 'no Monroe buildability badges on Miami-Dade cards')
+    check(not any('Buildable' in t or 'ROGO' in t for t in pg.eval_on_selector_all('#ideas .chip', 'n=>n.map(x=>x.textContent)')), 'no Monroe presets on Miami-Dade')
     check(pg.evaluate("localStorage.getItem('pf.county')") == 'miami-dade', 'choice remembered')
     b.close()
 check(not errs, 'no page errors ' + '; '.join(errs[:3]))

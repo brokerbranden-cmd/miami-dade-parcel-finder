@@ -10,7 +10,7 @@
   const saveP=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(P)); }catch(e){} };
   const B=document.body; B.classList.add('simple'); if(P.legacy) B.classList.add('legacy'); if(P.detail) B.classList.add('detail');
   const phone=()=>matchMedia('(max-width:899px)').matches;
-  const DEFAULT_OPEN=new Set(['search','start with an idea','distress signals',"what's on the property",'market value','lot size']);
+  const DEFAULT_OPEN=new Set(['search','start with an idea','distress signals','buildability (monroe screen)',"what's on the property",'market value','lot size']);
 
   /* ---- filter groups ---- */
   const gkey=g=>{ const h=g.querySelector(':scope>.grp-h h2'); return h?h.textContent.trim().toLowerCase():''; };
@@ -42,8 +42,8 @@
   let rt=0; const sched=()=>{ clearTimeout(rt); rt=setTimeout(refreshBadges,120); };
 
   /* ---- presets: 8 + More ideas (grouped) ---- */
-  const TOP=[/hottest/i,/pre-foreclosure/i,/tax deeds/i,/likely vacant/i,/strong teardowns/i,/^🧩 assemblages$/i,/vacant infill/i,/estates and heirs/i];
-  const CATS=[['Distress',/unsafe|motivated|foreclos|tax|hottest|vacant \/ neglected/i],['Land, teardown & zoning',/teardown|lot|multifamily land|split|assemblage|zone minimum|small multifamily|infill/i],['Owners',/owner|landlord|estate|far away/i]];
+  const TOP=[/^buildable lots$/i,/rogo allocation awarded/i,/buildable teardowns/i,/hottest/i,/pre-foreclosure/i,/tax deeds/i,/likely vacant/i,/strong teardowns/i,/^🧩 assemblages$/i,/vacant infill/i,/estates and heirs/i];
+  const CATS=[['Distress',/unsafe|motivated|foreclos|tax|hottest|vacant \/ neglected/i],['Land, teardown & zoning',/buildable|rogo|teardown|lot|multifamily land|split|assemblage|zone minimum|small multifamily|infill/i],['Owners',/owner|landlord|estate|far away/i]];
   function setupIdeas(){
     const ideas=$('ideas'); if(!ideas || ideas.dataset.simple) return; const chips=[...ideas.querySelectorAll('.chip[data-i]')]; if(!chips.length) return; ideas.dataset.simple='1';
     const top=[], rest=[]; chips.forEach(c=>{ const t=c.textContent.trim(); (TOP.some(r=>r.test(t))&&top.length<8?top:rest).push(c); });
@@ -84,7 +84,7 @@
     if(!e.target.closest('.sendline')) document.querySelectorAll('.card.menu-open').forEach(x=>x.classList.remove('menu-open')); },true);
 
   /* ---- drawer: overview first, other sections collapsible ---- */
-  const DOPEN=new Set(['the property','owner','value estimate (comps)','outreach','commercial distress']);
+  const DOPEN=new Set(['buildability screen','the property','owner','value estimate (comps)','outreach','commercial distress']);
   function sectionDrawer(d){
     if(d.dataset.sx) return; d.dataset.sx='1';
     const kids=[...d.children]; let sec=null, secs=[];

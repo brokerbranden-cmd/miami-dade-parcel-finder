@@ -1168,7 +1168,8 @@ function mrCardLine(c,i){ const bits=[]; const t=c.tier[i]; if(t) bits.push(['',
 function mrHTML(p,i){ const c=p.c, b=c.bld?c.bld[i]:0; if(!b) return ''; const t=MR_TONE[b], l=MR_RATE.find(x=>x[0]===t); const raw=p.s.reasons?getStr(p,'reasons',i):''; const items=raw?raw.split('¦').map(x=>{ const j=x.indexOf('~'); return [x.slice(0,j),x.slice(j+1)]; }):[];
   const ICON={R:'✕',Y:'!',G:'✓',i:'·'}, LAB={R:'Blocker',Y:'Caution',G:'Positive',i:'Note'}; const zi=p.s.zinfo?getStr(p,'zinfo',i):'', rt=p.s.rogo_txt?getStr(p,'rogo_txt',i):'';
   const jur=MZ[c.mz[i]]?MZ[c.mz[i]][1]:D.city[c.city[i]];
-  return `<h3>Buildability screen <span class="mrb ${t} big">${l[1]} · ${l[2]}</span></h3>
+  return `<h3>Buildability screen</h3>
+  <div class="mrhead"><span class="mrb ${t} big">${l[1]} · ${l[2]}</span></div>
   <div class="mrnote"><b>Screening tool, not a determination.</b> Built from public map layers (zoning, ROGO / Tier, conservation lands, wetlands, habitat, CBRS, FEMA flood) and the property roll. <b>Confirm with Monroe County Planning &amp; Environmental Resources (305-453-8739) or the city planning department</b> before you rely on it.</div>
   <ul class="mrlist">${items.map(([s,x])=>`<li class="mr-${s}"><span class="mri" title="${LAB[s]}">${ICON[s]}</span><span>${esc(x)}</span></li>`).join('')||'<li class="mr-i"><span class="mri">·</span><span>Reasons load with the property details.</span></li>'}</ul>
   <div class="dl">${rows2([['Tier',c.tier[i]?['','Tier I (Natural Area)','Tier II (Big Pine Key / No Name Key)','Tier III (infill)','Tier III-A (Special Protection Area)','Military'][c.tier[i]]:'City (no county Tier) or not mapped'],['ROGO / allocation',rt?esc(rt):(c.rogo[i]?esc(MR_ROGO.find(x=>x[0]===c.rogo[i])[1]):'No allocation record')],

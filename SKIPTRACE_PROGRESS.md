@@ -9,3 +9,5 @@ Don't commit data/*.gz, meta.json, shots/, tests/export_sample.csv. Never git cl
 ## TODO after runner is green
 - add keydown (Enter/Space) on #stImportLbl; screenshots check; push; verify live (e2e_skiptrace + e2e_export/sendmark/deterrents vs live URL)
 - 17:27 first full regression runner ALL GREEN (desktop+mobile all suites + county). Added Enter/Space on import label; rerunning skiptrace/deterrents/sendmark (full_st2.sh) then push + live verify
+- 17:40 pushed 20319da; verifying live
+- 17:46 LIVE verified (20319da): skiptrace/export/sendmark/deterrents desktop+mobile + county all PASS. DONE.

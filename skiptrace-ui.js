@@ -270,6 +270,7 @@
   function wire(B) {
     if (!$('stGrp')) return; let busy = false; const guard = fn => async () => { if (busy) return; busy = true; try { await fn(); } catch (e) { console.error(e); B.toast('Skip trace: ' + (e && e.message || e)); } busy = false; };
     $('stExportBtn').onclick = guard(() => exportModal(B)); $('stTextBtn').onclick = guard(() => textModal(B));
+    $('stImportLbl').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('stFile').click(); } });
     $('stFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (f) importFile(B, f); e.target.value = ''; });
     $('stHelpBtn').onclick = () => openModal('How skip tracing works', HELP + `<div class="stact"><button type="button" class="btn" data-stclose>Close</button></div>`);
     let armedClear = false; $('stClearData').onclick = () => { if (!armedClear) { armedClear = true; $('stClearData').textContent = `Yes, clear ${fmt.format(ST.count())} saved results`; setTimeout(() => { armedClear = false; $('stClearData').textContent = 'Clear skip trace data'; }, 6000); return; } armedClear = false; ST.clear(); $('stClearData').textContent = 'Clear skip trace data'; B.rerender(); B.toast(`Skip trace data cleared for ${PFC.cfg.name} County`); };

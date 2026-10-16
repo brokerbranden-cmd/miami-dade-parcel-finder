@@ -55,6 +55,10 @@ with sync_playwright() as pw:
     # deterrents: inputs / file picker stay usable
     ok(pg.evaluate("getComputedStyle(document.getElementById('stFile')).userSelect") in ('text', 'auto', 'contain') or True, 'file input present')
     pg.evaluate("document.getElementById('stImportLbl').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))")
+    with pg.expect_file_chooser(timeout=15000) as fc: pg.click('#stImportLbl')
+    ok(fc.value is not None, 'clicking Import results opens the file picker (deterrents leave it alone)')
+    with pg.expect_file_chooser(timeout=15000) as fc2: pg.focus('#stImportLbl'); pg.keyboard.press('Enter')
+    ok(fc2.value is not None, 'Import results opens the file picker from the keyboard')
     n_props = n_of(); ok(n_props > 20, f'Homestead "SW 2" search: {n_props} properties')
 
     # ---------- normal export unchanged ----------

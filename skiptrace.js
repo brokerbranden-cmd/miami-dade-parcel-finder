@@ -248,16 +248,20 @@
       if (useO && r._ok.length && r.mailStreet !== undefined && r.mailStreet) { r._mk = (addrKeys(r.mailStreet).base || '') + '|' + (r.mailZip || ''); for (const k of r._ok) push(byOwner, k + '||' + r._mk, i); }
     });
     const hits = rows.map(() => ({ folio: [], full: [], base: [], owner: [] }));
+    // cheap prefilters so a scan over ~1M parcels only normalizes the few that can match
+    const nums = new Set(), mq = new Set(); rows.forEach(r => { const m = /^\s*(\d+)/.exec(r.addr || ''); if (m) nums.add(m[1]); const n = /^\s*(\d+)/.exec(r.mailStreet || ''); if (n) mq.add(n[1] + '|' + (r.mailZip || '')); });
+    const snap = p => ({ folio: p.folio, addr: p.addr, zip: p.zip, owner: p.owner, mail: p.mail, gov: p.gov }), memo = new Map();
+    const once = p => { let q = memo.get(p.folio); if (!q) memo.set(p.folio, q = snap(p)); return q; };
     function visit(p) {
-      if (byFolio.size) { const f = p.folio; let a = byFolio.get(f); if (a) a.forEach(i => hits[i].folio.push(p)); if (f.length > 14) { a = byFolio.get(f.slice(-14)); if (a) a.forEach(i => hits[i].folio.push(p)); } }
-      if (byFull.size && p.addr) {
-        const k = addrKeys(p.addr); let a = byFull.get(k.full); if (a) a.forEach(i => hits[i].full.push(p));
-        if (k.base) { a = byBase.get(k.base); if (a) a.forEach(i => { if (!hits[i].full.includes(p)) hits[i].base.push(p); }); }
-      }
+      if (byFolio.size) { const f = p.folio; let a = byFolio.get(f); if (a) { const q = once(p); a.forEach(i => hits[i].folio.push(q)); } if (f.length > 14) { a = byFolio.get(f.slice(-14)); if (a) { const q = once(p); a.forEach(i => hits[i].folio.push(q)); } } }
+      if (byFull.size) { const ad = p.addr; if (!ad) return; const m = /^\s*(\d+)/.exec(ad); if (!m || !nums.has(m[1])) return;
+        const k = addrKeys(ad); let a = byFull.get(k.full); if (a) { const q = once(p); a.forEach(i => hits[i].full.push(q)); }
+        if (k.base) { a = byBase.get(k.base); if (a) { const q = once(p); a.forEach(i => { if (!hits[i].full.includes(q)) hits[i].base.push(q); }); } } }
     }
     function visitOwner(p) {
-      if (!byOwner.size || !p.mail) return; const mk = (addrKeys(parseMailing(p.mail).street).base || '') + '|' + zip5(p.mail); if (mk === '|') return;
-      for (const k of ownerKeys(p.owner, { order, gov: p.gov })) { const a = byOwner.get(k + '||' + mk); if (a) a.forEach(i => hits[i].owner.push(p)); }
+      if (!byOwner.size) return; const mail = p.mail; if (!mail) return; const n = /^\s*(\d+)/.exec(mail); if (!n || !mq.has(n[1] + '|' + zip5(mail))) return;
+      const mk = (addrKeys(parseMailing(mail).street).base || '') + '|' + zip5(mail); if (mk === '|') return;
+      for (const k of ownerKeys(p.owner, { order, gov: p.gov })) { const a = byOwner.get(k + '||' + mk); if (a) { const q = once(p); a.forEach(i => hits[i].owner.push(q)); } }
     }
     const nameHit = (r, p) => { if (!r._ok.length) return false; const ks = ownerKeys(p.owner, { order, gov: p.gov }); return ks.some(k => r._ok.includes(k)); };
     function resolve() {

@@ -1,0 +1,283 @@
+/* Skip trace UI: phone/email rendering for cards, drawer and table (tap to call / text), plus the Skip trace panel:
+   export for a provider, import their result CSV (column mapping + match report), Text list export that feeds Mark as sent.
+   Data layer: skiptrace.js (window.PFSkip). The page bridge (results, packs, sent tracking) is PF.skBridge from app.js.
+   Not legal advice: DNC / litigator flags come from the provider; flagged numbers get no tap links and stay out of the Text list. */
+(function () {
+  'use strict';
+  const SK = window.PFSkip, ST = SK.store, PFC = window.PFCounty;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = new Intl.NumberFormat('en-US'), $ = id => document.getElementById(id);
+  const TYPE = { m: 'mobile', l: 'landline', v: 'VoIP', '': '' };
+  const DNC_TIP = 'Flagged Do Not Call by your skip trace provider, so there is no tap-to-call / text link and it stays out of the Text list. TCPA caution: this is a reminder, not legal advice.';
+  const LIT_TIP = 'Flagged as a TCPA litigator by your skip trace provider: no tap link, excluded from the Text list. Reminder only, not legal advice.';
+
+  /* ---------- rendering (cards / drawer / table) ---------- */
+  function phoneHTML(q) {
+    const n = q[0], t = q[1], dnc = q[2] & 1, lit = q[2] & 2, flagged = dnc || lit;
+    const badges = (t ? `<span class="phty ${t}">${TYPE[t]}</span>` : '') + (dnc ? `<span class="dncb" title="${esc(DNC_TIP)}">DNC</span>` : '') + (lit ? `<span class="dncb lit" title="${esc(LIT_TIP)}">Litigator</span>` : '');
+    const call = flagged ? '' : `<a class="stl" href="tel:+1${n}" title="Call ${SK.fmtPhone(n)}">Call</a>`;
+    const text = SK.canText(q) ? `<a class="stl" href="sms:+1${n}" title="Text ${SK.fmtPhone(n)}">Text</a>` : '';
+    return `<span class="stph${flagged ? ' flagged' : ''}"><b class="stnum">${SK.fmtPhone(n)}</b>${badges}${call}${text}</span>`;
+  }
+  const mailto = e => `<a class="stl em" href="mailto:${esc(e)}" title="Email ${esc(e)}">${esc(e)}</a>`;
+  function cardLine(folio) {
+    const r = ST.get(folio); if (!r) return '';
+    if (!r.p.length && !r.e.length) return `<div class="line skl"><span class="k">Skip trace</span><span class="v"><span class="stnone">Traced, no phone found</span></span></div>`;
+    const ph = r.p.slice(0, 2).map(phoneHTML).join(''), more = r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2} more</span>` : '';
+    return `<div class="line skl"><span class="k">Phone</span><span class="v stv">${ph}${more}${r.e[0] ? mailto(r.e[0]) : ''}</span></div>`;
+  }
+  function cellHTML(folio) {
+    const r = ST.get(folio); if (!r) return '–'; if (!r.p.length && !r.e.length) return '<span class="stnone">traced · none</span>';
+    return (r.p.slice(0, 2).map(phoneHTML).join('') || '') + (r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2}</span>` : '') + (r.e[0] ? mailto(r.e[0]) : '');
+  }
+  function drawerBody(folio) {
+    const r = ST.get(folio);
+    if (!r) return `<div class="note">No skip trace results for this property yet. Use <b>Skip trace export</b> in the filters panel, run the file through your provider, then <b>Import results</b>.</div>`;
+    const anyDnc = r.p.some(q => q[2] & 3), none = !r.p.length && !r.e.length;
+    return `${none ? '<div class="note">Skip traced: the provider found no phone or email.</div>' : ''}
+      ${r.p.length ? `<ul class="stlist">${r.p.map(q => `<li>${phoneHTML(q)}</li>`).join('')}</ul>` : ''}
+      ${r.e.length ? `<div class="stemails">${r.e.map(mailto).join('')}</div>` : ''}
+      ${anyDnc ? '<div class="stwarn" role="note"><b>DNC / litigator flag.</b> Flagged numbers have no tap-to-call or text link and are never put on the Text list. TCPA and state calling/texting rules are your responsibility; this is a reminder, not legal advice.</div>' : ''}
+      <div class="note">${r.n ? 'Provider name: ' + esc(r.n) + ' · ' : ''}Imported ${esc(r.a || '')}${r.s ? ' from ' + esc(r.s) : ''}. <button type="button" class="lnk" data-stdel="${esc(folio)}">Remove this property's skip trace data</button></div>`;
+  }
+  const drawerHTML = folio => `<h3>Phones &amp; email</h3><div class="stdraw" data-stfolio="${esc(folio)}">${drawerBody(folio)}</div>`;
+
+  /* ---------- modal ---------- */
+  let modalEl = null;
+  function closeModal() { if (modalEl) { modalEl.remove(); modalEl = null; document.removeEventListener('keydown', onKey, true); } }
+  function onKey(e) { if (e.key === 'Escape') closeModal(); }
+  function openModal(title, html) {
+    closeModal(); const m = document.createElement('div'); m.className = 'stmodal'; m.id = 'stModal';
+    m.innerHTML = `<div class="stbox" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sth"><h2>${esc(title)}</h2><button type="button" class="btn" data-stclose>Close</button></div><div class="stbody">${html}</div></div>`;
+    m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-stclose]')) closeModal(); });
+    document.body.appendChild(m); modalEl = m; document.addEventListener('keydown', onKey, true); return m.querySelector('.stbody');
+  }
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const dayStr = () => new Date().toLocaleDateString('en-CA');
+  const stamp = () => dayStr().replace(/-/g, '');
+  const HELP = `<ol class="sthelp"><li><b>Export</b>: filter to the properties you care about, press <b>Skip trace export</b> and send the CSV to your skip tracing provider (BatchData, Terrakotta, REISkip, etc.). Owners are de-duplicated so you only pay for each owner once.</li>
+    <li><b>Import</b>: when the provider sends a result CSV back, press <b>Import results</b>, check the column mapping, and the phones / emails are matched to your properties (by folio, then property address, then owner + mailing address). A match report shows what matched.</li>
+    <li><b>Work the list</b>: use <b>Has phone</b> and <b>Skip traced</b> filters, tap Call / Text on a card or in the drawer, or press <b>Text list</b> to export name + phone + address for your texting tool, then <b>Mark as sent</b> so nobody is texted twice (use <b>Hide already sent</b>).</li>
+    <li><b>Privacy &amp; caution</b>: results are stored only in this browser for this county (about 5 MB of space). Numbers the provider flags DNC or litigator get no tap links and are kept out of the Text list. Calling and texting rules (TCPA, state rules) are your responsibility; this is a reminder, not legal advice.</li></ol>`;
+
+  /* ---------- panel ---------- */
+  function refreshPanel() {
+    const info = $('stInfo'); if (!info) return; const n = ST.count(), ph = ST.phoneCount();
+    info.textContent = n ? `${fmt.format(n)} skip traced · ${fmt.format(ph)} with a phone · ${Math.round(ST.size() / 1024)} KB used in this browser` : 'No skip trace results imported yet for this county.';
+    $('stClearData').disabled = !n;
+  }
+
+  /* ---------- export for skip trace ---------- */
+  async function exportModal(B) {
+    const ids = B.results(); if (!ids.length) { B.toast('Nothing to export yet.'); return; }
+    const body = openModal('Skip trace export', `
+      <p class="note">${fmt.format(ids.length)} ${ids.length === 1 ? 'property matches' : 'properties match'} your current filters in ${esc(PFC.cfg.name)} County. The file has one row per owner with the columns skip tracers ask for (property address, owner first / last or company, mailing address, folio, county).</p>
+      <div class="stopts">
+        <label class="check"><input type="checkbox" id="stxDedupe" checked> One row per owner (same owner + mailing address counted once)</label>
+        <label class="check"><input type="checkbox" id="stxContacted" checked> Skip properties already contacted or marked as sent</label>
+        <label class="check"><input type="checkbox" id="stxTraced" checked> Skip properties already skip traced</label>
+        <label class="stmax">Max rows <input type="number" id="stxMax" min="1" step="1" placeholder="all" aria-label="Maximum rows"></label>
+      </div>
+      <div class="stcounts" id="stxCounts" aria-live="polite">Preparing…</div>
+      <div class="stwarn" id="stxWarn" hidden role="alert"></div>
+      <div class="stact"><button type="button" class="btn primary" id="stxGo" disabled>Download CSV</button><button type="button" class="btn" data-stclose>Cancel</button></div>
+      <details class="sthelpd"><summary>How skip tracing works</summary>${HELP}</details>`);
+    const q = id => body.querySelector('#' + id); let plan = null, token = 0, armed = false, cache = new Map();
+    const info = id => { let x = cache.get(id); if (!x) { x = B.info(id); x.gk = null; if (ids.length < 250000) cache.set(id, x); } return x; };
+    async function compute() {
+      const my = ++token; armed = false; q('stxGo').disabled = true; q('stxGo').textContent = 'Download CSV'; q('stxWarn').hidden = true; q('stxCounts').textContent = 'Preparing…';
+      const dd = q('stxDedupe').checked, exC = q('stxContacted').checked, exT = q('stxTraced').checked, max = +q('stxMax').value || 0;
+      try { await B.ensureDetail(); } catch (e) { q('stxCounts').textContent = 'The property details did not load. Close and try again.'; return; }
+      let cont = 0, tr = 0; const groups = new Map(), order = [];
+      for (let j = 0; j < ids.length; j++) {
+        if (my !== token) return; if (j % 20000 === 19999) { q('stxCounts').textContent = `Preparing… ${Math.round(j / ids.length * 100)}%`; await tick(); }
+        const x = info(ids[j]);
+        if (exC && B.contacted(x.folio)) { cont++; continue; } if (exT && ST.has(x.folio)) { tr++; continue; }
+        const k = dd ? (x.gk || (x.gk = SK.ownerGroupKey(x.owner, x.mail, x.addr, { order: B.order, gov: x.gov }))) : x.folio;
+        let g = groups.get(k); if (!g) { groups.set(k, g = { x, folios: [], ids: [] }); order.push(g); } g.folios.push(x.folio); g.ids.push(ids[j]);
+      }
+      if (my !== token) return;
+      let rows = order; const total = rows.length; if (max && rows.length > max) rows = rows.slice(0, max);
+      const co = rows.filter(g => SK.parseOwner(g.x.owner, { order: B.order, gov: g.x.gov }).isCompany).length;
+      plan = { rows, total, cont, tr };
+      const props = rows.reduce((a, g) => a + g.folios.length, 0);
+      q('stxCounts').innerHTML = `<b>${fmt.format(rows.length)} ${rows.length === 1 ? 'row' : 'rows'}</b> to skip trace${max && total > max ? ` (first ${fmt.format(max)} of ${fmt.format(total)})` : ''} covering ${fmt.format(props)} ${props === 1 ? 'property' : 'properties'} · ${fmt.format(rows.length - co)} individuals, ${fmt.format(co)} companies / trusts / government` +
+        ((cont || tr) ? `<br><span class="note">Left out: ${fmt.format(cont)} already contacted / sent, ${fmt.format(tr)} already skip traced.</span>` : '');
+      const w = q('stxWarn'); if (rows.length > 1000) { w.hidden = false; w.innerHTML = `<b>Large list: ${fmt.format(rows.length)} rows.</b> Skip trace providers normally charge per record, so check your provider's pricing first. Consider narrowing the filters or setting <b>Max rows</b> to run a first batch. Companies are included at the provider's discretion; many tracers only find people.`; }
+      q('stxGo').disabled = !rows.length; if (!rows.length) q('stxCounts').innerHTML += '<br>Nothing left to export with these options.';
+      if (rows.length > 1000) q('stxGo').textContent = `Download ${fmt.format(rows.length)} rows…`;
+    }
+    body.addEventListener('change', e => { if (e.target.closest('.stopts')) compute(); }); body.querySelector('#stxMax').addEventListener('input', () => { clearTimeout(compute.t); compute.t = setTimeout(compute, 400); });
+    q('stxGo').onclick = () => {
+      if (!plan || !plan.rows.length) return; const big = plan.rows.length > 1000;
+      if (big && !armed) { armed = true; q('stxGo').textContent = `Yes, download ${fmt.format(plan.rows.length)} rows`; q('stxGo').classList.add('warn'); return; }
+      const out = [SK.EXPORT_HEAD]; const county = PFC.cfg.name;
+      for (const g of plan.rows) { const x = g.x; const city = /unincorporated/i.test(x.city) ? '' : x.city; out.push(SK.exportRow({ ...x, city, folioOut: B.folioOut(x.folio) }, { order: B.order, county, count: g.folios.length, folios: g.folios.map(B.folioOut) })); }
+      B.download(`${PFC.id}-skiptrace-${plan.rows.length}-${stamp()}.csv`, new Blob([SK.toCSV(out)], { type: 'text/csv' }));
+      B.toast(`${fmt.format(plan.rows.length)} rows exported for skip tracing`); closeModal();
+    };
+    compute();
+  }
+
+  /* ---------- text list ---------- */
+  async function textModal(B) {
+    const ids = B.results(); if (!ids.length) { B.toast('Nothing to export yet.'); return; }
+    const withPh = ids.filter(id => ST.hasPhone(B.folioOf(id))).length;
+    const body = openModal('Text list', `
+      <p class="note">${fmt.format(ids.length)} properties match your filters; ${fmt.format(withPh)} of them have a phone from skip tracing. The Text list has <b>name, phone and address</b> (plus phone type, email and folio) for your texting tool. After the download you can <b>Mark as sent</b> to Text / SMS so the same owners aren't texted twice.</p>
+      <div class="stopts">
+        <label class="check"><input type="checkbox" id="sttSent" checked> Skip owners already marked as texted (Text / SMS sent)</label>
+        <label class="check"><input type="checkbox" id="sttCont"> Also skip anything already contacted (calls, mailers, door knocks)</label>
+        <label class="stmax">Numbers per owner <select id="sttPer"><option value="1">Best number only</option><option value="3">Up to 3 numbers</option></select></label>
+      </div>
+      <div class="stwarn" role="note"><b>DNC / litigator numbers are always left out</b>, and so are numbers known to be landlines. Texting and cold-calling rules (TCPA, Florida's telephone solicitation law and others) are your responsibility. This is a reminder, not legal advice.</div>
+      <div class="stcounts" id="sttCounts" aria-live="polite">Preparing…</div>
+      <div class="stact"><button type="button" class="btn primary" id="sttGo" disabled>Download text list</button><button type="button" class="btn" data-stclose>Cancel</button></div>`);
+    const q = id => body.querySelector('#' + id); let plan = null;
+    async function compute() {
+      q('sttGo').disabled = true; q('sttCounts').textContent = 'Preparing…'; await B.ensureDetail();
+      const exS = q('sttSent').checked, exC = q('sttCont').checked, per = +q('sttPer').value || 1; const rows = [], byPhone = new Map(), folios = new Set(), idmap = new Map();
+      let noPh = 0, dnc = 0, lan = 0, sent = 0, cont = 0, dupes = 0;
+      for (let j = 0; j < ids.length; j++) {
+        if (j % 20000 === 19999) await tick(); const f = B.folioOf(ids[j]); const r = ST.get(f); if (!r || !r.p.length) { noPh++; continue; }
+        if (exS && B.sentOf(f, 'sms')) { sent++; continue; } if (exC && B.contacted(f)) { cont++; continue; }
+        const ok = [], cand = r.p; for (const q2 of cand) { if (q2[2] & 3) { dnc++; continue; } if (q2[1] === 'l') { lan++; continue; } ok.push(q2); }
+        if (!ok.length) continue; const x = B.info(ids[j]);
+        const o = SK.parseOwner(x.owner, { order: B.order, gov: x.gov }); let fn = o.first, ln = o.last;
+        if (o.isCompany || !fn) { const [a, b] = SK.splitName(r.n, 'first-last'); if (a || b) { fn = a; ln = b; } else if (o.isCompany) { fn = ''; ln = o.company; } }
+        const T = s => SK.title(s);
+        for (const p of ok.slice(0, per)) {
+          const prev = byPhone.get(p[0]); if (prev) { prev.folios.push(f); dupes++; folios.add(f); idmap.set(f, ids[j]); continue; }
+          const row = { f, vals: [T(fn), o.isCompany && !(fn) ? ln : T(ln), SK.fmtPhone(p[0]), TYPE[p[1]] || '', r.e[0] || '', x.addr, /unincorporated/i.test(x.city) ? '' : x.city, 'FL', SK.zip5(x.zip) || x.zip, x.owner.split(' | ').filter(Boolean).join('; '), B.folioOut(f), PFC.cfg.name], folios: [f] };
+          byPhone.set(p[0], row); rows.push(row); folios.add(f); idmap.set(f, ids[j]);
+        }
+      }
+      plan = { rows, folios: [...folios], idmap }; const props = folios.size;
+      q('sttCounts').innerHTML = `<b>${fmt.format(rows.length)} ${rows.length === 1 ? 'number' : 'numbers'}</b> for ${fmt.format(props)} ${props === 1 ? 'property' : 'properties'}.<br><span class="note">Left out: ${fmt.format(noPh)} without a phone, ${fmt.format(dnc)} DNC / litigator numbers, ${fmt.format(lan)} landlines, ${fmt.format(sent)} already texted${cont ? ', ' + fmt.format(cont) + ' already contacted' : ''}${dupes ? '; ' + fmt.format(dupes) + ' repeat numbers merged' : ''}.</span>`;
+      q('sttGo').disabled = !rows.length;
+    }
+    body.addEventListener('change', e => { if (e.target.closest('.stopts')) compute(); });
+    q('sttGo').onclick = () => {
+      if (!plan || !plan.rows.length) return; const out = [SK.TEXT_HEAD, ...plan.rows.map(r => r.vals)]; const day = B.dayStr(new Date());
+      B.download(`${PFC.id}-text-list-${plan.rows.length}-${stamp()}.csv`, new Blob([SK.toCSV(out)], { type: 'text/csv' }));
+      B.setPending({ folios: plan.folios, ids: plan.idmap, day, team: 'sms', list: 'Text list ' + day, what: `${fmt.format(plan.rows.length)} numbers for ${fmt.format(plan.folios.length)} properties` });
+      B.toast(`${fmt.format(plan.rows.length)} numbers exported`); closeModal();
+    };
+    compute();
+  }
+
+  /* ---------- import ---------- */
+  function importFile(B, file) {
+    const rd = new FileReader();
+    rd.onerror = () => B.toast('Could not read that file.');
+    rd.onload = () => mapModal(B, file.name, String(rd.result || ''));
+    rd.readAsText(file);
+  }
+  function mapModal(B, fname, text) {
+    const parsed = SK.parseCSV(text); const rows = parsed.rows;
+    if (rows.length < 2) { openModal('Import skip trace results', `<div class="stwarn">That file has no data rows. Save the provider's result file as CSV and try again.</div><div class="stact"><button type="button" class="btn" data-stclose>Close</button></div>`); return; }
+    const headers = rows[0].map((h, i) => String(h || '').trim() || 'Column ' + (i + 1)), data = rows.slice(1).filter(r => r.some(c => String(c).trim()));
+    const map = SK.detectMapping(headers); while (map.phones.length < 5) map.phones.push({ num: -1, type: -1, dnc: -1, lit: -1, implied: '' }); while (map.emails.length < 3) map.emails.push(-1);
+    const sample = i => { for (const r of data.slice(0, 30)) { const v = String(r[i] || '').trim(); if (v) return v.length > 28 ? v.slice(0, 27) + '…' : v; } return ''; };
+    const opt = sel => `<option value="-1">— none —</option>` + headers.map((h, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${esc(h)}${sample(i) ? ' (' + esc(sample(i)) + ')' : ''}</option>`).join('');
+    const sel = (id, v) => `<select id="${id}" data-map="${id}">${opt(v)}</select>`;
+    const fieldRows = SK.FIELDS.map(([k, label]) => `<tr><th scope="row"><label for="m_${k}">${esc(label)}</label></th><td>${sel('m_' + k, map[k])}</td></tr>`).join('');
+    const phoneRows = map.phones.map((p, j) => `<tr data-slot="${j}" data-implied="${esc(p.implied || '')}"><th scope="row">Phone ${j + 1}</th><td><div class="stslot"><label>Number ${sel('p_num_' + j, p.num)}</label><label>Type (mobile / landline) ${sel('p_type_' + j, p.type)}</label><label>DNC flag ${sel('p_dnc_' + j, p.dnc)}</label><label>Litigator flag ${sel('p_lit_' + j, p.lit)}</label></div></td></tr>`).join('');
+    const emailRows = map.emails.map((e, j) => `<tr><th scope="row">Email ${j + 1}</th><td>${sel('e_' + j, e)}</td></tr>`).join('');
+    const nPh = map.phones.filter(p => p.num >= 0).length, nEm = map.emails.filter(e => e >= 0).length;
+    const body = openModal('Import skip trace results', `
+      <p class="note"><b>${esc(fname)}</b> · ${fmt.format(data.length)} rows · importing into <b>${esc(PFC.cfg.name)} County</b> only. Columns were detected automatically (${nPh} phone, ${nEm} email). Check them, change any that are wrong, and choose how rows are matched to your properties.</p>
+      <div class="stmapgrid"><table class="stmap"><tbody>${fieldRows}${phoneRows}${emailRows}</tbody></table></div>
+      <div class="stopts"><div class="note"><b>Match rows to properties by</b> (tried in this order):</div>
+        <label class="check"><input type="checkbox" id="mkFolio" checked> 1. Folio / parcel ID</label>
+        <label class="check"><input type="checkbox" id="mkAddr" checked> 2. Property address (normalized: SW 2nd Street = SW 2 ST)</label>
+        <label class="check"><input type="checkbox" id="mkOwner" checked> 3. Owner name + mailing address</label>
+        <label class="check"><input type="checkbox" id="mkSib" checked> Also apply to the same owner's other properties (same owner + mailing address)</label></div>
+      <div class="stprev" id="stPrev"></div>
+      <div class="stwarn" role="note">Numbers your provider flags <b>DNC</b> or litigator are kept and shown with a warning, but get no tap-to-call / text link and are left out of the Text list. Reminder only, not legal advice.</div>
+      <div class="stact"><button type="button" class="btn primary" id="stImpGo">Import</button><button type="button" class="btn" data-stclose>Cancel</button></div>
+      <div class="note" id="stImpMsg" aria-live="polite"></div>`);
+    const q = id => body.querySelector('#' + id), gv = id => +q(id).value;
+    const readMap = () => { const m = { phones: [], emails: [] }; for (const [k] of SK.FIELDS) m[k] = gv('m_' + k);
+      map.phones.forEach((p, j) => { const num = gv('p_num_' + j); if (num >= 0) m.phones.push({ num, type: gv('p_type_' + j), dnc: gv('p_dnc_' + j), lit: gv('p_lit_' + j), implied: num === p.num ? p.implied : '' }); });
+      map.emails.forEach((e, j) => { const v = gv('e_' + j); if (v >= 0) m.emails.push(v); }); return m; };
+    function preview() {
+      const m = readMap(); const rs = data.slice(0, 3).map(r => SK.readRow(r, m));
+      const has = { f: m.folio >= 0, a: m.addr >= 0, o: (m.owner >= 0 || m.first >= 0 || m.last >= 0 || m.company >= 0) && m.mail >= 0 };
+      q('mkFolio').disabled = !has.f; q('mkAddr').disabled = !has.a; q('mkOwner').disabled = !has.o;
+      q('stPrev').innerHTML = `<div class="note"><b>Preview of the first ${rs.length} rows</b></div><ul>` + rs.map((r, i) => `<li>${esc(r.addr || r.owner || r.folio || 'row ' + (i + 1))}: ${r.phones.length ? r.phones.map(p => SK.fmtPhone(p[0]) + (p[1] ? ' ' + TYPE[p[1]] : '') + (p[2] ? ' DNC' : '')).join(', ') : 'no phone'}${r.emails.length ? ' · ' + esc(r.emails.join(', ')) : ''}</li>`).join('') + '</ul>';
+      const none = !(has.f || has.a || has.o); q('stImpGo').disabled = none || (!m.phones.length && !m.emails.length);
+      q('stImpMsg').textContent = none ? 'Map at least a folio, a property address, or owner name + mailing address so rows can be matched.' : (!m.phones.length && !m.emails.length ? 'Map at least one phone or email column.' : '');
+    }
+    body.addEventListener('change', preview); preview();
+    q('stImpGo').onclick = async () => { q('stImpGo').disabled = true; try { await runImport(B, fname, data, readMap(), { folio: q('mkFolio').checked && !q('mkFolio').disabled, addr: q('mkAddr').checked && !q('mkAddr').disabled, owner: q('mkOwner').checked && !q('mkOwner').disabled, sib: q('mkSib').checked }, headers, body); } catch (e) { console.error(e); body.innerHTML = `<div class="stwarn">Import failed: ${esc(e && e.message || e)}</div><div class="stact"><button type="button" class="btn" data-stclose>Close</button></div>`; } };
+  }
+  async function runImport(B, fname, data, map, mk, headers, body) {
+    const msg = t => { body.innerHTML = `<div class="stcounts" aria-live="polite">${esc(t)}</div>`; };
+    msg('Loading all properties…'); await B.loadAll();
+    const rows = data.map(r => SK.readRow(r, map)); const order = B.order;
+    const mt = SK.matcher(rows, { order, folio: mk.folio, addr: mk.addr, owner: mk.owner });
+    await B.scan(p => mt.visit(p), n => msg(`Matching on folio / address… ${n}%`));
+    let res = mt.resolve();
+    const needOwner = mk.owner && mt.flags.owner && res.some((r, i) => !r.how && rows[i]._mk);
+    let sibs = null;
+    if (needOwner || mk.sib) {
+      // second pass: owner + mailing matches, and the same owner's other properties (found by exact mailing string + owner/mailing key)
+      const targets = new Map();
+      if (mk.sib) res.forEach(r => { if (r.how === 'folio' || r.how === 'address') r.parcels.forEach(p => { const gk = SK.ownerGroupKey(p.owner, p.mail, p.addr, { order, gov: p.gov }); if (p.mail && !gk.endsWith('|')) { let t = targets.get(p.mail); if (!t) targets.set(p.mail, t = new Map()); t.set(gk, true); } }); });
+      sibs = new Map();
+      await B.scan(p => { if (needOwner) mt.visitOwner(p); if (targets.size) { const mailStr = p.mail; const t = mailStr && targets.get(mailStr); if (t) { const gk = SK.ownerGroupKey(p.owner, mailStr, p.addr, { order, gov: p.gov }); if (t.has(gk)) { let a = sibs.get(gk); if (!a) sibs.set(gk, a = []); a.push({ folio: p.folio, addr: p.addr }); } } } }, n => msg(`Matching owners and their other properties… ${n}%`));
+      res = mt.resolve();
+    }
+    msg('Saving…'); await tick();
+    const day = dayStr(); const seen = new Set(); const rep = { rows: rows.length, how: { folio: 0, address: 0, owner: 0 }, unmatched: [], ambiguous: 0, dup: 0, props: new Set(), sibs: 0, noContact: 0, nums: new Set(), mobile: new Set(), land: new Set(), dnc: new Set(), emails: new Set() };
+    const recs = new Map();
+    res.forEach((m, i) => {
+      const r = rows[i]; const hasData = r.phones.length || r.emails.length;
+      if (!m.how || m.how === 'ambiguous') { if (m.how === 'ambiguous') rep.ambiguous++; rep.unmatched.push([i, m.how === 'ambiguous' ? `Ambiguous: ${m.n} properties share this address` : 'No match']); return; }
+      rep.how[m.how]++; if (!hasData) rep.noContact++;
+      let targets = m.parcels.map(p => p.folio);
+      if (sibs && (m.how === 'folio' || m.how === 'address')) { const p0 = m.parcels[0], gk = SK.ownerGroupKey(p0.owner, p0.mail, p0.addr, { order, gov: p0.gov }), list = sibs.get(gk); if (list) for (const s of list) if (!targets.includes(s.folio)) { targets.push(s.folio); rep.sibs++; } }
+      if (targets.every(f => seen.has(f))) rep.dup++; targets.forEach(f => seen.add(f));
+      for (const f of targets) { let rc = recs.get(f); if (!rc) recs.set(f, rc = { n: '', p: [], e: [] }); if (r.name || r.first || r.last) rc.n = rc.n || r.name || [r.first, r.last].filter(Boolean).join(' '); for (const q of r.phones) { const ex = rc.p.find(x => x[0] === q[0]); if (ex) { ex[2] |= q[2]; if (q[1]) ex[1] = q[1]; } else rc.p.push(q.slice()); } for (const e of r.emails) if (!rc.e.includes(e)) rc.e.push(e); }
+      r.phones.forEach(q => { rep.nums.add(q[0]); if (q[1] === 'm') rep.mobile.add(q[0]); if (q[1] === 'l') rep.land.add(q[0]); if (q[2] & 3) rep.dnc.add(q[0]); }); r.emails.forEach(e => rep.emails.add(e));
+    });
+    for (const [f, rc] of recs) { ST.merge(f, rc, fname, day); rep.props.add(f); }
+    const saved = ST.commit();
+    const matched = rep.rows - rep.unmatched.length;
+    const un = rep.unmatched.slice(0, 8).map(([i, why]) => { const r = rows[i]; return `<li>${esc(r.addr || r.owner || r.folio || 'row ' + (i + 2))} <span class="note">${esc(why)}</span></li>`; }).join('');
+    body.innerHTML = `<div class="strep" id="stReport"><h3>Import report</h3>
+      <table class="strt"><tbody><tr><th>Rows in file</th><td id="rpRows">${fmt.format(rep.rows)}</td></tr>
+      <tr><th>Matched</th><td id="rpMatched">${fmt.format(matched)}</td></tr>
+      <tr><th class="sub">by folio / address / owner + mailing</th><td>${rep.how.folio} / ${rep.how.address} / ${rep.how.owner}</td></tr>
+      <tr><th>Unmatched</th><td id="rpUnmatched">${fmt.format(rep.unmatched.length)}${rep.ambiguous ? ` (${rep.ambiguous} ambiguous)` : ''}</td></tr>
+      <tr><th>Duplicates (extra rows for a property already matched)</th><td id="rpDup">${fmt.format(rep.dup)}</td></tr>
+      <tr><th>Properties updated</th><td id="rpProps">${fmt.format(rep.props.size)}${rep.sibs ? ` (${fmt.format(rep.sibs)} more from the same owners)` : ''}</td></tr>
+      <tr><th>Phone numbers</th><td id="rpPhones">${fmt.format(rep.nums.size)} (${rep.mobile.size} mobile, ${rep.land.size} landline) · ${fmt.format(rep.emails.size)} emails</td></tr>
+      <tr><th>Flagged DNC / litigator</th><td id="rpDnc">${fmt.format(rep.dnc.size)}</td></tr>
+      <tr><th>Matched but no phone / email found</th><td>${fmt.format(rep.noContact)}</td></tr></tbody></table>
+      ${rep.dnc.size ? '<div class="stwarn" role="note"><b>' + fmt.format(rep.dnc.size) + ' number(s) are flagged DNC / litigator.</b> They are shown with a warning, get no tap-to-call / text link and are left out of the Text list. TCPA caution: reminder only, not legal advice.</div>' : ''}
+      ${saved ? '' : `<div class="stwarn" role="alert">${esc(ST.error || 'Could not save in this browser.')}</div>`}
+      ${rep.unmatched.length ? `<div class="note">Unmatched rows${rep.unmatched.length > 8 ? ' (first 8)' : ''}:</div><ul class="stun">${un}</ul><button type="button" class="btn" id="stUnDl">Download unmatched rows</button>` : ''}
+      <div class="stact"><button type="button" class="btn primary" id="stRepDone">Show properties with phones</button><button type="button" class="btn" data-stclose>Close</button></div></div>`;
+    const dl = body.querySelector('#stUnDl'); if (dl) dl.onclick = () => B.download(`unmatched-${stamp()}.csv`, new Blob([SK.toCSV([[...headers, 'Reason'], ...rep.unmatched.map(([i, why]) => [...data[i], why])])], { type: 'text/csv' }));
+    body.querySelector('#stRepDone').onclick = () => { closeModal(); B.showPhones(); };
+    window.PF_LAST_IMPORT = { rows: rep.rows, matched, unmatched: rep.unmatched.length, dup: rep.dup, props: rep.props.size, sibs: rep.sibs, how: rep.how, dnc: rep.dnc.size, phones: rep.nums.size };
+    B.rerender(); refreshPanel();
+  }
+
+  /* ---------- wiring ---------- */
+  function wire(B) {
+    if (!$('stGrp')) return; let busy = false; const guard = fn => async () => { if (busy) return; busy = true; try { await fn(); } catch (e) { console.error(e); B.toast('Skip trace: ' + (e && e.message || e)); } busy = false; };
+    $('stExportBtn').onclick = guard(() => exportModal(B)); $('stTextBtn').onclick = guard(() => textModal(B));
+    $('stFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (f) importFile(B, f); e.target.value = ''; });
+    $('stHelpBtn').onclick = () => openModal('How skip tracing works', HELP + `<div class="stact"><button type="button" class="btn" data-stclose>Close</button></div>`);
+    let armedClear = false; $('stClearData').onclick = () => { if (!armedClear) { armedClear = true; $('stClearData').textContent = `Yes, clear ${fmt.format(ST.count())} saved results`; setTimeout(() => { armedClear = false; $('stClearData').textContent = 'Clear skip trace data'; }, 6000); return; } armedClear = false; ST.clear(); $('stClearData').textContent = 'Clear skip trace data'; B.rerender(); B.toast(`Skip trace data cleared for ${PFC.cfg.name} County`); };
+    document.addEventListener('click', e => { const b = e.target.closest('[data-stdel]'); if (!b) return; ST.remove(b.dataset.stdel); const box = b.closest('.stdraw'); if (box) box.innerHTML = drawerBody(b.dataset.stdel); B.rerender(); });
+    ST.onChange(refreshPanel); refreshPanel();
+    window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text);
+  }
+  window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, closeModal };
+  const start = () => wire(window.PF.skBridge);
+  if (window.PF_READY && window.PF) start(); else document.addEventListener('pf:ready', start, { once: true });
+})();

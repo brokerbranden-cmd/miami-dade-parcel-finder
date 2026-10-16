@@ -1351,10 +1351,6 @@ const LUF=fam=>D.landuse.filter((v,i)=>{ const c=LU_CODE[i]; return cpCom(c)&&CP
 const IDEA_NEED=[[/Buildable lots|ROGO|Buildable teardowns/,'monroe'],[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/multifamily land|Strong teardowns|could be split/,'zoning'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm']];
 const ideaOk=l=>IDEA_NEED.every(([re,ly])=>!re.test(l)||HAS(ly));
 const IDEAS=[
-  ['Buildable lots', ()=>({...BLANK(), types:['vacant'], mr:{rate:['G','Y']}, sort:'bld_a'})],
-  ['Buildable lots, green only', ()=>({...BLANK(), types:['vacant'], mr:{rate:['G']}, sort:'bld_a'})],
-  ['ROGO allocation awarded', ()=>({...BLANK(), mr:{sig:['rogo_award']}, sort:'bld_a'})],
-  ['Buildable teardowns', ()=>({...BLANK(), mr:{rate:['G'], sig:['teardown']}, sort:'lp_d'})],
   ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
   ['Pre-foreclosure & auctions', ()=>({...BLANK(), dsig:['LP','FC'], sort:'ds_d'})],
   ['Tax deeds & delinquent', ()=>({...BLANK(), dsig:['TD','TC'], dsMin:35, sort:'ds_d'})],
@@ -1386,6 +1382,10 @@ const IDEAS=[
   ['🧩 Assemblages', ()=>({...BLANK(), asm:true, sort:'asm_d'})],
   ['Assemblages with combined-site upside', ()=>({...BLANK(), asm:true, asmUp:true, sort:'asm_d'})],
   ['Houses on lots under zone minimum', ()=>({...BLANK(), types:['sf'], lotz:['below'], sort:'lp_d'})],
+  ['Buildable lots', ()=>({...BLANK(), types:['vacant'], mr:{rate:['G','Y']}, sort:'bld_a'})],
+  ['Buildable lots, green only', ()=>({...BLANK(), types:['vacant'], mr:{rate:['G']}, sort:'bld_a'})],
+  ['ROGO allocation awarded', ()=>({...BLANK(), mr:{sig:['rogo_award']}, sort:'bld_a'})],
+  ['Buildable teardowns', ()=>({...BLANK(), mr:{rate:['G'], sig:['teardown']}, sort:'lp_d'})],
 ];
 const LOT_CHIPS=[[0,'Any'],[5000,'5,000+ sf'],[7500,'7,500+ sf'],[10000,'10,000+ sf'],[21780,'½ acre+'],[43560,'1 acre+'],[217800,'5 acres+']];
 

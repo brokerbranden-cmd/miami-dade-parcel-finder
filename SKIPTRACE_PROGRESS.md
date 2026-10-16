@@ -8,3 +8,4 @@ Don't commit data/*.gz, meta.json, shots/, tests/export_sample.csv. Never git cl
 - 16:47 started regression runner /workspace/tmp/full_st.sh -> test_runs/summary_st_*.txt (unit, skiptrace, export, sendmark, deterrents, outreach, monroe, scenarios, simplified, saved x desktop+mobile, county)
 ## TODO after runner is green
 - add keydown (Enter/Space) on #stImportLbl; screenshots check; push; verify live (e2e_skiptrace + e2e_export/sendmark/deterrents vs live URL)
+- 17:27 first full regression runner ALL GREEN (desktop+mobile all suites + county). Added Enter/Space on import label; rerunning skiptrace/deterrents/sendmark (full_st2.sh) then push + live verify

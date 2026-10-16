@@ -7,6 +7,8 @@ Soft signals only: absentee / out of state, long hold, low building value (teard
 import json, os, re, sys, gzip, datetime as dt, numpy as np, pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__)); SCR = os.path.abspath(os.path.join(HERE, '..', '..')); sys.path.insert(0, SCR)
 import owner_kind, owners_lib
+sys.path.insert(0, HERE)
+import monroe_enrich as ME
 RAW = os.path.join(os.environ.get('RAW', '/workspace/raw'), 'monroe')
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(SCR, '..', 'data', 'monroe'); os.makedirs(OUT, exist_ok=True)
 GEO0 = (24.0, -83.2)   # pack lat/lon origin (Monroe reaches -82.9 at the Dry Tortugas; Miami-Dade's origin -81.5 would clip Key West)
@@ -82,16 +84,33 @@ def _cls(t):
     if r is None: r = _kc[t] = owner_kind.classify(t, _given)
     return r
 res = [_cls((a, '', '')) for a in o1]; kinds = [r[0] for r in res]; subs = [r[1] for r in res]
+# agencies the generic classifier misses (Monroe has ~26k federal / state conservation parcels: NPS, USFWS, TIIF trustees, FDOT, water management)
+GOVT_RE = re.compile(r"^(USA\b|U S A\b|UNITED STATES|US FISH|US DEPT|BOT TIIF|BOARD OF TRUSTEES|TIITF|TRUSTEES OF THE INTERNAL|DOT/ST|DOT ST|FLORIDA DEPT|FLORIDA DEPARTMENT|STATE OF FLORIDA|ST OF FL|FISH AND WILDLIFE|FL FISH|SOUTH FLORIDA WATER|SFWMD|MONROE COUNTY\b|CITY OF |CITY OF$|FLORIDA KEYS AQUEDUCT|KEYS ENERGY|FKAA|FLORIDA KEYS MOSQUITO|MONROE CO |SCHOOL BOARD)")
+for _k, _o in enumerate(o1):
+    if GOVT_RE.search(_o.upper().strip()): kinds[_k] = 'govt'; subs[_k] = subs[_k] or 'agency'
+
 EST = re.compile(r"\b(EST|ESTATE|EST OF|ESTATE OF|HEIRS?|DECEASED|DECD|DEC'D)\b")
 est = np.array([k in ('person', 'trust') and bool(EST.search(re.sub(r'\b(LIFE|REAL|REALTY|RE|RL|R E) EST(ATE)?\b', ' ', (a + ' ' + f).upper())))
                 for a, f, k in zip(o1, fidu, kinds)])
 mst = S('OWN_STATE').str.upper(); mst2 = S('OWN_STATE_').str.upper()
 mstate = np.where(mst2 != '', mst2, mst)
-oos = (mstate != '') & (mstate != 'FL')
 mzip5 = S('OWN_ZIPCD').str.replace(r'\.0$', '', regex=True).str[:5]
-absz = ((mzip5 != '') & (zip5 != '') & (mzip5 != zip5)).values
 homestead = (N('JV_HMSTD') > 0).values
 kinds_a = np.array(kinds)
+# ---- absentee / out-of-area owner (fixed): the old rule 'mailing ZIP differs from site ZIP' flagged 60,676 of 88,552 (68%) - it counted the ~26k federal / state conservation
+# parcels (NPS mails to DC 20240, Tallahassee 32399 TIIF, USFWS Atlanta 30345), Keys-local owners (PO box in another Keys ZIP) and vacant lots.
+# New rule: private owner, no homestead exemption, mailing address is NOT the site address, and the mailing ZIP is outside the Keys (330xx Monroe ZIPs).
+KEYS_ZIPS = {'33001', '33036', '33037', '33040', '33041', '33042', '33043', '33044', '33045', '33050', '33051', '33052', '33070', '33034'}
+def _st(a): return re.sub(r'\b(STREET|ST|AVENUE|AVE|ROAD|RD|DRIVE|DR|LANE|LN|BOULEVARD|BLVD|COURT|CT|CIRCLE|CIR|TERRACE|TER|PLACE|PL|WAY|HIGHWAY|HWY|KEY)\b', '', re.sub(r'[^A-Z0-9 ]', ' ', a.upper())).split()[:2]
+same_addr = np.array([bool(a) and bool(m) and _st(a) == _st(m) and _st(a) != [] for a, m in zip(S('PHY_ADDR1'), S('OWN_ADDR1'))])
+govt_k = kinds_a == 'govt'
+in_keys = mzip5.isin(KEYS_ZIPS).values
+oos = (mstate != '') & (mstate != 'FL') & ~govt_k & ~homestead & ~same_addr
+absz = (mzip5 != '').values & ~in_keys & ~govt_k & ~homestead & ~same_addr
+keys_local_other = in_keys & ~govt_k & ~homestead & ~same_addr & (mzip5 != zip5).values
+absentee_stats = {'old_rule_zip_differs': int(((mzip5 != '') & (zip5 != '') & (mzip5 != zip5)).sum()), 'govt_owned': int(govt_k.sum()), 'homestead': int(homestead.sum()), 'same_address_mailing': int((same_addr & ~govt_k).sum()),
+                  'absentee_new': int(absz.sum()), 'out_of_state': int(oos.sum()), 'florida_outside_keys': int((absz & ~oos).sum()), 'keys_local_other_address_not_flagged': int(keys_local_other.sum())}
+print('absentee', absentee_stats)
 flags = (homestead * 1 | oos * 2 | absz * 4 | (kinds_a == 'corp') * 8 | (kinds_a == 'trust') * 16 | (kinds_a == 'govt') * 32 | est * 64).astype(np.uint8)
 mail = []
 for a1, a2, c, st, z, s2 in zip(S('OWN_ADDR1'), S('OWN_ADDR2'), S('OWN_CITY'), S('OWN_STATE'), S('OWN_ZIPCD'), S('OWN_STATE_')):
@@ -145,7 +164,13 @@ G = np.array(owners['n']); GF = np.array(owners['fl']); GD = np.array(owners['nd
 owner_stats = {'groups': int(len(G) - 1), 'parcels_in_groups': int((og > 0).sum()), 'mail_links': owners['linkedMail'], 'groups_5plus': int((G[1:] >= 5).sum()),
                'groups_2plus_distressed': 0, 'groups_2plus_distressed_non_institutional': 0}
 
-cols_main = {'city': u8(city_i), 'zip': u16(zip_i), 'cra': u8(flood_i), 'landuse': u16(landuse_i), 'zoning': z(np.uint16), 'mz': z(np.uint16),
+# ---- Monroe enrichment (zoning, ROGO/tier, environment, Clerk, permits/code, buildability rating)
+_geo = ME.load_geo(list(df.FOLIO)); _kinds = list(kinds)
+ecols, estrs, mzone, zrules, estats = ME.enrich(df, _geo, uc.values, bv, lot, yb, N('TOT_LVG_AR').values, mk, _kinds, est, flood_s, absz, list(o1), addr)
+print('enrich', json.dumps(estats)[:1500])
+zoning_s = np.where(ecols['mz'] > 0, '', [('No digital zoning map - ' + j) for j in _geo.jur.values])
+zoning_d, zoning_i = dict_index(list(zoning_s))
+cols_main = {'city': u8(city_i), 'zip': u16(zip_i), 'cra': u8(flood_i), 'landuse': u16(landuse_i), 'zoning': u16(zoning_i), 'mz': ecols['mz'], 'tier': ecols['tier'], 'rogo': ecols['rogo'], 'env': ecols['env'], 'sigm': ecols['sigm'], 'bld': ecols['bld'],
     'lot': u32(lot), 'mkt': u32(mk), 'land': u32(landv), 'bldg': u32(bv), 'sqft': u32(N('TOT_LVG_AR')), 'yb': u16(yb), 'units': u16(N('NO_RES_UNT')),
     'beds': z(np.uint8), 'baths': z(np.uint8), 'stories': z(np.uint8), 'sd1': u16(sd1), 'sale1': u32(N('SALE_PRC1')), 'sq1': u8(qf('QUAL_CD1')), 'flags': flags,
     'prv': z(np.uint32), 'dscore': u8(dscore), 'dsig': u16(dsig), 'og': og.astype(np.uint32), 'vscore': u8(vscore), 'vsig': u16(vsig), 'pcs': z(np.uint16)}
@@ -153,8 +178,8 @@ legal = [re.sub(r'\s+', ' ', s).strip() for s in S('S_LEGAL')]
 book = [f'{b}-{p}' if b.strip('0 ') else '' for b, p in zip(S('OR_BOOK1'), S('OR_PAGE1'))]
 str_main = {'folio': list(df.FOLIO), 'addr': addr, 'owner': [re.sub(r'\s+', ' ', o).strip() for o in o1]}
 cols_det = {'assd': u32(N('AV_SD')), 'taxable': u32(N('TV_NSD')), 'sd2': u16(sd2), 'sale2': u32(N('SALE_PRC2')), 'sq2': u8(qf('QUAL_CD2')), 'sd3': z(np.uint16),
-            'sale3': z(np.uint32), 'bcount': u16(N('NO_BULDNG')), 'lperm': z(np.uint16), 'pn5': z(np.uint16), 'cn_open': z(np.uint8), 'cn5': z(np.uint16), 'clast': z(np.uint16)}
-str_det = {'mail': mail, 'legal': legal, 'psum': [''] * n, 'csum': [''] * n, 'grantor': [''] * n, 'book': book}
+            'sale3': z(np.uint32), 'bcount': u16(N('NO_BULDNG')), 'lperm': ecols['lperm'], 'pn5': ecols['pn5'], 'cn_open': ecols['cn_open'], 'cn5': ecols['cn5'], 'clast': ecols['clast']}
+str_det = {'mail': mail, 'legal': legal, 'psum': estrs['psum'], 'csum': estrs['csum'], 'grantor': [''] * n, 'book': book, 'reasons': estrs['reasons'], 'rogo_txt': estrs['rogo_txt'], 'zinfo': estrs['zinfo']}
 cols_geo = {'lat': np.where(lat != 0, (lat - GEO0[0]) * 1e6, 0).clip(0, 4e9).astype(np.uint32), 'lon': np.where(lon != 0, (lon - GEO0[1]) * 1e6, 0).clip(0, 4e9).astype(np.uint32)}
 
 def write_pack(path, rows, cols, strs):
@@ -179,7 +204,7 @@ for name, rows in (('main', np.where(~is_condo)[0]), ('condo', np.where(is_condo
     print(name, len(rows), f'main {b1/1e6:.2f}MB detail {b2/1e6:.2f}MB geo {b3/1e6:.2f}MB')
 
 # simple comps: qualified sales (FDOR codes 01/02) in the last 12 months (commercial 24), same rows layout as scripts/build_comps.py
-MONTHS, COMM = 12, 24
+MONTHS, COMM = 36, 60
 cut = int((dt.date.today() - dt.timedelta(days=int(MONTHS * 30.4))).strftime('%Y%m%d')); cutC = int((dt.date.today() - dt.timedelta(days=int(COMM * 30.4))).strftime('%Y%m%d'))
 crow = []; bp = pd.Series(book); multi = set(np.where(bp.duplicated(keep=False) & (bp != ''))[0])
 q1 = qf('QUAL_CD1'); q2 = qf('QUAL_CD2'); p1 = N('SALE_PRC1').values; p2 = N('SALE_PRC2').values; sqft = N('TOT_LVG_AR').values
@@ -205,10 +230,12 @@ meta = {'ver': ver, 'county': 'monroe', 'total': int(n), 'built': dt.datetime.no
         'rollYear': int(pd.to_numeric(df.ASMNT_YR, errors='coerce').max()), 'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%Y'),
         'geoOrigin': list(GEO0), 'stats': stats, 'packs': packs, 'distress': None, 'owners': owner_stats,
         'vacancy': {'ge40': int((vscore >= 40).sum()), 'ge60': int((vscore >= 60).sum())}, 'permitCov': None, 'ownersFile': 'owners.json.gz', 'distressFile': None,
-        'flood': fstats, 'fetch': fst,
-        'dicts': {'city': city, 'zip': zips, 'cra': flood, 'landuse': landuse, 'zoning': [''], 'mzone': [None]},
+        'flood': fstats, 'fetch': fst, 'absentee': absentee_stats, 'enrich': estats, 'screening': 'Buildability is a screening tool built from public map layers (zoning, ROGO/Tier, FNAI, NWI, habitat, CBRS, FEMA flood). It is not a determination - confirm with Monroe County / city planning.',
+        'dicts': {'city': city, 'zip': zips, 'cra': flood, 'landuse': landuse, 'zoning': zoning_d, 'mzone': mzone},
         'sources': {'roll': 'https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0 (CO_NO=54)',
                     'flood': 'https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28 (DFIRM_ID 12087)'}}
 json.dump(meta, open(os.path.join(OUT, 'meta.json'), 'w'), separators=(',', ':'))
+json.dump({'built': dt.date.today().isoformat(), 'source': 'Monroe County LDC / Key West / Marathon / Islamorada district tables (scripts/counties/monroe/monroe_zoning.py)',
+           'fields': ['upa', 'stories', 'min_lot_sf', 'lot_cov', 'far', 'height_ft', 'zone_type', 'planned_dev', 'source'], 'counts': {'codes': len(zrules)}, 'rules': zrules}, open(os.path.join(OUT, 'zoning-rules.json'), 'w'), separators=(',', ':'))
 print('meta', n, 'est', int(est.sum()), 'oos', int(oos.sum()), 'absentee', int(absz.sum()), 'homestead', int(homestead.sum()), 'teardown-ish', int(tear.sum()),
       'held20', int((yrs >= 20).sum()), 'vacant lots', int(sum(1 for s in lu_s if 'VACANT' in s)), 'owners', owner_stats)

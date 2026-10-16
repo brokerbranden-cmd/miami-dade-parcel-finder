@@ -115,3 +115,23 @@ body.simple:not(.detail) .card .uline{display:none} /* compact cards: the type t
 .countysel{margin:4px 0 0;font:inherit;font-size:13px;padding:3px 6px;border-radius:8px;border:1px solid rgba(0,0,0,.2);background:#fff;color:inherit;max-width:200px}
 [data-county-hidden]{display:none!important}
 .tt.hot{color:#b42318} .tt.warm{color:#b54708}
+
+/* ===== Monroe buildability screen ===== */
+.mrrow{display:flex;gap:10px;align-items:flex-start;margin-top:8px}
+.mrlab{flex:0 0 118px;font-size:12px;font-weight:700;color:var(--muted);padding-top:7px;letter-spacing:.02em}
+.mrrow .chips{flex:1;min-width:0}
+.mrdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.mrdot.G,.mrb.G{--mrc:#1a7f37}.mrdot.Y,.mrb.Y{--mrc:#b54708}.mrdot.R,.mrb.R{--mrc:#b42318}
+.mrdot{background:var(--mrc,#888)} .mrdot.G{background:#1a7f37}.mrdot.Y{background:#d99a06}.mrdot.R{background:#b42318}
+.chip small{font-weight:500;opacity:.75}
+.mrb{font-size:11.5px;font-weight:700;letter-spacing:.02em;border-radius:4px;padding:2px 7px;border:1px solid var(--mrc);color:var(--mrc);background:color-mix(in srgb,var(--mrc) 9%,var(--surface,#fff));line-height:1.3;white-space:nowrap}
+.mrb.big{font-size:12.5px;margin-left:8px;vertical-align:2px;text-transform:none;letter-spacing:0}
+.mrline .v{overflow-wrap:anywhere}
+.mrneg{color:#b42318;font-weight:600}
+.mrnote{font-size:13px;line-height:1.45;background:color-mix(in srgb,#d99a06 12%,var(--surface,#fff));border:1px solid color-mix(in srgb,#d99a06 45%,transparent);border-radius:8px;padding:9px 11px;margin:6px 0 10px}
+.mrlist{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:5px}
+.mrlist li{display:flex;gap:9px;font-size:13.5px;line-height:1.4;align-items:flex-start}
+.mri{flex:0 0 20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;background:#8a8f98;margin-top:1px}
+.mr-R .mri{background:#b42318}.mr-Y .mri{background:#d99a06}.mr-G .mri{background:#1a7f37}.mr-i .mri{background:#8a8f98}
+[data-county="monroe"] .mzrow{display:none}
+@media (max-width:640px){.mrrow{flex-direction:column;gap:2px}.mrlab{flex:none;padding-top:2px}}

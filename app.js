@@ -48,7 +48,7 @@ const MZ_MIAMI=[['T3','Sub-urban (single family, duplex)'],['T4','General urban 
 const MZ_COUNTY=[['RU-1','Single family'],['RU-2','Duplex'],['RU-TH','Townhouse'],['RU-3','Small multifamily'],['RU-4','Apartments'],['RU-5','Residential / office'],['EU','Estates'],['BU','Business'],['IU','Industrial'],['GU','Interim'],['PAD','Planned area development']];
 const OWNER_KINDS = [['all','All owners'],['person','Individuals'],['corp','Companies & organizations'],['trust','Trusts']];
 const OWNER_ROWS = [
-  ['homestead','Owner lives there (homestead)'],['oos','Owner mails from out of state'],['absz','Owner mails to a different ZIP'],
+  ['homestead','Owner lives there (homestead)'],['oos','Owner mails from out of state'],['absz',window.PFCounty&&PFCounty.id==='monroe'?'Absentee: owner mails outside the Keys':'Owner mails to a different ZIP'],
   ['corp','Owned by a company or organization'],['trust','Owned by a trust'],['estate','Estate or heirs'],['senior','Senior exemption']];
 const dec = new TextDecoder();
 
@@ -108,7 +108,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { cont:false, hideSent:false, cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { mr:{rate:new Set(),tier:new Set(),rogo:new Set(),sig:new Set(),avoid:new Set(),zt:new Set()}, cont:false, hideSent:false, cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 /* teardown rule, zone rules (data/zoning-rules.json), construction + adverse possession (data/extras.json.gz) */
@@ -123,7 +123,7 @@ const parseAmt=v=>{ v=String(v==null?'':v).trim().toLowerCase().replace(/[$,\s]/
 const fmtAmt=v=>v==null||v===''?'':v>=1e6&&v%1e4===0?(v/1e6)+'m':v>=1e3&&v%1e3===0?(v/1e3)+'k':String(v);
 const MONEY_IDS=new Set(['mvMin','mvMax','spMin','spMax']);
 async function loadZoneRules(){
-  if(HAS('zoning')) try{ const r=await fetch(DP+'zoning-rules.json?v='+META.ver+'-'+EXTRA_VER); if(r.ok) ZR=await r.json(); }catch(e){}
+  if(HAS('zoning')||HAS('mzoning')) try{ const r=await fetch(DP+'zoning-rules.json?v='+META.ver+'-'+EXTRA_VER); if(r.ok) ZR=await r.json(); }catch(e){}
   ZREC=MZ.map((e,i)=>{ const r=ZR&&e&&ZR.rules[e[1]+'|'+String(e[0]).toUpperCase()]; if(!r) return null; const n=v=>v==null||v===''?null:+v;
     return {upa:n(r[0]),stories:n(r[1]),min_lot_sf:n(r[2]),lot_cov:n(r[3]),far:n(r[4]),height_ft:n(r[5]),zt:r[6]||null,sf:r[6]?(r[6]==='sf'?1:0):null,pd:!!r[7]||r[6]==='pad',src:r[8]||''}; });
   LU_CODE=D.landuse.map(s=>{ const m=/^\s*(\d{4})/.exec(s); return m?parseInt(m[1],10):-1; });
@@ -400,7 +400,7 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.cont=S.cont; st.hideSent=S.hideSent; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; return st;
+  st.cont=S.cont; st.hideSent=S.hideSent; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; st.mr=mrRead(); return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem(PFC.key('mdpf.v2'),JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
@@ -419,6 +419,7 @@ function applyState(st){
   S.vsig=new Set((st.vsig||[]).filter(k=>k in VBIT)); S.pcs=new Set((st.pcs||[]).filter(k=>k in PBIT)); $('vsMin').value=VS_STEPS.some(x=>x[0]===+st.vsMin)?String(+st.vsMin):'0'; $('vsMine').checked=!!st.vsMine;
   S.saved=!!st.saved; S.svSt=new Set((st.svSt||[]).filter(x=>SV.STATUSES.includes(x)));
   S.bbox=Array.isArray(st.bbox)&&st.bbox.length===4&&st.bbox.every(Number.isFinite)?st.bbox:null; $('areaRow').hidden=!S.bbox;
+  mrApply(st.mr);
 }
 
 function sanRules(r){ const o={...TD.DEFAULT_RULES}; for(const k of RULE_KEYS){ if(k==='enforce_min_lot'){ if(r[k]!=null) o[k]=!!r[k]; } else { const v=+r[k]; if(r[k]!=null&&r[k]!==''&&isFinite(v)&&v>=0) o[k]=v; } } return o; }
@@ -462,6 +463,7 @@ function run(){
   const tierW=S.tier==='strong'?2:S.tier==='basic'?1:0, tcn=new Uint32Array(3), lzSel=S.lotz, lzc={split:0,minok:0,below:0}, cnSel=S.cons, cnc=new Uint32Array(6);
   const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0; const outSet=outFolios(), cSet=S.cont||S.hideSent?contSet():null, sentAny=S.hideSent?new Set(Object.keys(SEND.sent).filter(wasSent)):null; const cmMin=S.cm, cgOn=S.cgas, ceMask=S.cent==='dis'?4:S.cent?6:0, pfOn=S.pf, pbMask=S.pb==='h'?2:S.pb?6:0; let pfN=0, pbN=0;
   const asmOn=S.asm&&!!ASM, asmUp=S.asmUp, asmJ=S.asmGroup&&ASM?ASM.byId.get(S.asmGroup):undefined, asmSeen=asmOn?new Set():null;
+  const MRs=HAS('monroe')?mrPrep():null;
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
@@ -480,6 +482,7 @@ function run(){
       if(pfOn && !(SGa[i]&1)) continue; if(pbMask && !(SGa[i]&pbMask)) continue;
       if(asmOn){ const gx=AGa?AGa[i]:-1; if(gx<0) continue; if(asmJ!==undefined && gx!==asmJ) continue; if(asmUp && !ASM.groups[gx].upside) continue; }
       if(vsMin && VS[i]<vsMin) continue;
+      if(MRs && !mrPass(MRs,c,i)) continue;
       if(useOg){ const g=c.og[i]; if(!g || (ogMin && OWN.n[g]<ogMin) || (ogDist && OWN.nd[g]<ogDist) || (exInst && OWN.fl[g])) continue; }
       if(gl){ const la=gl.lat[i], lo=gl.lon[i]; if(!(la>=bb[0]&&la<=bb[2]&&lo>=bb[1]&&lo<=bb[3])) continue; }
       if(cityI>=0 && c.city[i]!==cityI) continue;
@@ -527,7 +530,7 @@ const SORTS=[
   ['mv_a','Lowest value first','mkt',1],['mv_d','Highest value first','mkt',-1],
   ['held_d','Owned the longest','sd1',1],['sold_d','Sold most recently','sd1',-1],
   ['yb_a','Oldest building first','yb',1],['lp_d','Most value in the land','landpct',-1],['un_d','Most units','units',-1],['asm_d','Assemblage score (groups together)','asm',-1],['um_d','Highest unit multiple (zoning ÷ existing)','um',-1],['au_d','Most units allowed by zoning','al',-1],['qm_d','Highest buildable sq ft multiple','qm',-1],['ppl_a','Lowest value per lot sq ft','ppl',1],
-  ['addr_a','Address A–Z','addr',1]];
+  ['bld_a','Best buildability first (green to red)','bld',1],['addr_a','Address A–Z','addr',1]];
 const SORT_MAP=Object.fromEntries(SORTS.map(s=>[s[0],s]));
 function doSort(){
   if(!results.length) return;
@@ -542,7 +545,7 @@ function doSort(){
     for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id), g=c.og[i]; key[j]=(g&&!(OWN.fl[g]&&!inst)?A[g]:(k==='ogn'?1:(c.dsig[i]&4095?1:0)))*256+c.dscore[i]; } }
   else if(k==='saved'){ for(let j=0;j<n;j++){ const id=results[j], it=SV.get(getStr(P(id),'folio',I(id))); key[j]=it?Date.parse(it.savedAt):0; } }
   else for(let j=0;j<n;j++){ const id=results[j], c=P(id).c, i=I(id);
-    key[j] = k==='cm' ? (()=>{ const a=P(id).cm; return a&&a[i]?a[i]*256+c.dscore[i]:-1; })() : k==='asm' ? (()=>{ const g=asmOf(P(id),i); return g?g.score*1e6+(1e6-g.id):-1; })() : (k==='um'||k==='al'||k==='qm') ? (()=>{ const t=P(id).td; const v=t?t[k][i]:NaN; return v===v?v:-1; })() : k==='vscore' ? (c.vscore?c.vscore[i]:0) : k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
+    key[j] = k==='cm' ? (()=>{ const a=P(id).cm; return a&&a[i]?a[i]*256+c.dscore[i]:-1; })() : k==='asm' ? (()=>{ const g=asmOf(P(id),i); return g?g.score*1e6+(1e6-g.id):-1; })() : (k==='um'||k==='al'||k==='qm') ? (()=>{ const t=P(id).td; const v=t?t[k][i]:NaN; return v===v?v:-1; })() : k==='bld' ? ((c.bld&&c.bld[i]||9)*1e9-c.lot[i]) : k==='vscore' ? (c.vscore?c.vscore[i]:0) : k==='landpct' ? (c.mkt[i]?c.land[i]/c.mkt[i]:-1) : k==='yb' ? (c.yb[i]||9999) : k==='ppl' ? (c.lot[i]&&c.mkt[i]?c.mkt[i]/c.lot[i]:1e12) : c[k][i]; }
   const idx=new Uint32Array(n); for(let i=0;i<n;i++) idx[i]=i;
   const k2=k==='dscore'?(j=>{ const id=results[j]; return P(id).c.mkt[I(id)]; }):k==='vscore'?(j=>{ const id=results[j]; return P(id).c.dscore[I(id)]; }):null;
   idx.sort((a,b)=>(key[a]-key[b])*dir || (k2?k2(b)-k2(a):0) || a-b);
@@ -552,6 +555,7 @@ function doSort(){
 /* chips & summary */
 const short=n=> n>=1e6?(n/1e6).toFixed(1)+'M' : n>=1e4?Math.round(n/1e3)+'K' : fmt.format(n);
 function renderChips(){
+  if(HAS('monroe')) mrRender();
   const tc={}, zc={};
   for(let i=0;i<D.landuse.length;i++) tc[LU_T[i]]=(tc[LU_T[i]]||0)+facet.lc[i];
   for(let i=0;i<D.zoning.length;i++) zc[Z_G[i]]=(zc[Z_G[i]]||0)+facet.zc[i];
@@ -611,7 +615,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.pf?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
+  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+mrCount()+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.pf?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
   let badBox=0; HASH_NUM.forEach(id=>{ const el=$(id), v=el.value.trim(), bad=!!v && parseAmt(v)==null; if(bad) badBox++; if(bad) { el.setAttribute('aria-invalid','true'); el.title='Not a number. Try 500k, 1.2m or 750000'; } else if(el.hasAttribute('aria-invalid')){ el.removeAttribute('aria-invalid'); el.title=''; } });
   const tot=k+main; $('onCount').hidden=!tot; $('resetBtn').disabled=!tot&&!badBox; $('onCount').textContent=tot+(tot===1?' filter on':' filters on');
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
@@ -626,7 +630,7 @@ function renderFacet(f){
 /* cards */
 const PAGE=60; let shown=0;
 function ownerBadges(fl){
-  const b=[]; if(fl&64) b.push('<span class="hot">Estate / heirs</span>'); if(fl&2) b.push('<span class="warm">Out-of-state owner</span>'); else if((fl&4) && !(fl&1)) b.push('<span>Absentee owner</span>');
+  const b=[]; if(fl&64) b.push('<span class="hot">Estate / heirs</span>'); if(fl&2) b.push('<span class="warm">Out-of-state owner</span>'); else if((fl&4) && !(fl&1)) b.push('<span>'+(HAS('monroe')?'Absentee (mails outside the Keys)':'Absentee owner')+'</span>');
   if(fl&8) b.push('<span>Company / organization</span>'); if(fl&16) b.push('<span>Trust</span>'); if(fl&1) b.push('<span>Owner lives there</span>'); if(fl&128) b.push('<span>Senior</span>'); return b.join('');
 }
 function mzLabel(mi){ const e=MZ[mi]; if(!e) return ''; const bits=[]; if(e[4]) bits.push(e[4]+' stories'); if(e[3]&&+e[3]>0) bits.push(e[3]+' units/acre'); return e[2]+(bits.length?' ('+bits.join(', ')+')':''); }
@@ -645,7 +649,7 @@ function cardHTML(id){
   const sale = c.sd1[i]? `${monYr(c.sd1[i])}${c.sale1[i]>100?' for '+money(c.sale1[i]):''} · owned ${Math.max(0,Math.floor((today-c.sd1[i])/365.25))} yrs` : 'No sale on record';
   const folio=getStr(p,'folio',i), sv=SV.get(folio);
   return `<article class="card ${sv?'is-saved':''}" data-id="${id}" data-folio="${folio}" tabindex="0" aria-label="${esc(addr)}. Open details">
-    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span>${HAS('zoning')?`<span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span>`:''}${floodTag(c,i)}${tdTag(p,i)}<span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
+    <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span>${HAS('zoning')?`<span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span>`:''}${floodTag(c,i)}${tdTag(p,i)}${HAS('monroe')?mrBadge(c,i):''}<span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
     ${sv?`<div class="svline"><span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span>${sv.vacant?'<span class="spill vmine" title="You marked it as looking vacant / damaged">Looks vacant (you)</span>':''}<span class="svd">Saved ${svDate(sv.savedAt)}</span>${sv.note||sv.cond?`<span class="svn" title="${esc([sv.note,sv.cond].filter(Boolean).join(' · '))}">${esc(sv.note||sv.cond)}</span>`:''}</div>`:''}
     <div><h3>${esc(addr)}</h3><div class="city">${esc(D.city[c.city[i]])}, FL ${D.zip[c.zip[i]]}</div></div>
     <div class="facts">
@@ -654,10 +658,11 @@ function cardHTML(id){
       <div><div class="k">Value</div><div class="v">${mv?money(mv):'–'}</div><div class="s">${mv&&c.land[i]?Math.round(c.land[i]/mv*100)+'% is land':'&nbsp;'}</div></div>
     </div>
     ${HAS('zoning')?`<div class="line"><span class="k">Zoning</span><span class="v" title="${esc(zn)}">${mzHTML(c.mz[i]) || esc(nice(zn)||'Not listed')}</span></div>`:HAS('flood')?`<div class="line"><span class="k">Flood</span><span class="v">${esc(D.cra[c.cra[i]]||'Not mapped')}</span></div>`:''}
+    ${HAS('monroe')?`<div class="line"><span class="k">Zoning</span><span class="v">${MZ[c.mz[i]]?mzHTML(c.mz[i]):esc(nice(zn)||'Not listed')}</span></div>`:''}
     <div class="line uline"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
-    ${upLine(p,i)}
+    ${HAS('monroe')?mrCardLine(c,i):''}${upLine(p,i)}
     ${compsLine(id)}${cmLine(folio)}${auLine(folio)}${outLine(folio)}
     <div class="sendline">${sendBtns(folio)}${sentBadges(folio)}${p.ap&&p.ap[i]?'<span class="hot apb" title="Adverse possession claim noted in the Property Appraiser legal description">Adverse possession</span>':''}</div>
     <div class="ob">${dueBadge(folio)}${clerkBadges(folio)}${cmBadges(folio)}${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
@@ -721,7 +726,7 @@ function scoreParts(p,i,folio){
   for(const [k,v] of Object.entries(hp)) parts.push([DSIG[DBIT[k]][1],v]);
   if((fl&64) && !hp.PR) parts.push(['Estate / heirs in the owner name', hp.DC?7:15]);
   const soft=[]; const gov=fl&32, corp=fl&8;
-  if(fl&2) soft.push(['Out-of-state owner',6]); else if(fl&4) soft.push(['Absentee owner (mails to another ZIP)',4]);
+  if(fl&2) soft.push(['Out-of-state owner',6]); else if(fl&4) soft.push([HAS('monroe')?'Absentee owner (mails outside the Keys)':'Absentee owner (mails to another ZIP)',4]);
   const yrs=c.sd1[i]?(today-c.sd1[i])/365.25:0; if(yrs>=20) soft.push(['Owned 20+ years',5]); else if(yrs>=10) soft.push(['Owned 10+ years',2]);
   const bv=c.bldg[i], mv=c.mkt[i]; if(bv>0&&mv>0&&bv/mv<0.2) soft.push(['Building under 20% of value (teardown)',6]); else if(!bv&&c.lot[i]>0&&!corp&&!gov) soft.push(['Vacant lot',3]);
   if(!(fl&1)&&!corp&&!gov) soft.push(['No homestead exemption',3]);
@@ -888,12 +893,12 @@ async function openDrawer(id,opts){
     <div id="finBox">${finHTML(folio)}</div>
     ${distressHTML(p,i,folio)}${clerkHTML(folio)}${cmHTML(folio)}
     ${vacancyHTML(p,i,folio)}
-    ${permitsHTML(p,i,folio)}
-    ${asmHTML(p,i)}${teardownHTML(p,i)}
+    ${HAS('monroe')?mrPermitsHTML(p,i):permitsHTML(p,i,folio)}
+    ${HAS('monroe')?mrHTML(p,i):''}${asmHTML(p,i)}${teardownHTML(p,i)}
     <h3>The property</h3><div class="dl">${rows([
       ['What it is', `${TYPE_LABEL[LU_T[c.landuse[i]]]}<small>${esc(lu)}</small>`],
       ['City zoning', MZ[c.mz[i]] ? `<span class="mzcode">${esc(MZ[c.mz[i]][0])}</span> · ${esc(MZ[c.mz[i]][1])}<small>${esc(mzLabel(c.mz[i]))}${MZ[c.mz[i]][5]?' · min lot '+fmt.format(+MZ[c.mz[i]][5])+' sq ft':''}</small>` : 'Not found on the zoning map'],
-      ['Zoning type (appraiser)', `${ZONE_LABEL[Z_G[c.zoning[i]]]}${nice(zn)?' · '+esc(nice(zn)):''}<small>${esc(zn)}</small>`],
+      ['Zoning type (appraiser)', HAS('monroe')?'':`${ZONE_LABEL[Z_G[c.zoning[i]]]}${nice(zn)?' · '+esc(nice(zn)):''}<small>${esc(zn)}</small>`],
       ['Lot size', c.lot[i]? fmt.format(c.lot[i])+' sq ft · '+(c.lot[i]/SQFT_AC).toFixed(3)+' acres':'Not listed'],
       ['Building', c.sqft[i]?fmt.format(c.sqft[i])+' sq ft living area':'No building on record'],
       ['Beds / baths', (c.beds[i]||c.baths[i])? c.beds[i]+' beds / '+(c.baths[i]/10)+' baths':''],
@@ -1082,7 +1087,7 @@ function writeHash(st){
     HASH_NUM.forEach(id=>{ if(st[id]!=null && st[id]!=='' && !(id.startsWith('mv')&&!st[id])) h.set(id,st[id]); });
     if(!st.hideGov) h.set('gov','1'); if(st.noBldg) h.set('land','1'); if(st.qualOnly) h.set('mkt','1');
     if(st.sort&&st.sort!=='lot_d') h.set('sort',st.sort); if(st.view&&st.view!=='cards') h.set('view',st.view);
-    if(st.bbox) h.set('area',st.bbox.join(','));
+    if(st.bbox) h.set('area',st.bbox.join(',')); mrHashWrite(h,st);
     if(st.ogf) h.set('ogf',st.ogf); if(st.ogMin) h.set('ogn',st.ogMin); if(st.ogDist) h.set('ogd','1'); if(st.ogInst) h.set('ogi','1');
     if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';')); if(st.asm) h.set('asm','1'); if(st.asmUp) h.set('asmup','1'); if(st.asmGroup) h.set('asmg',st.asmGroup);
     if(st.rules&&!RULE_KEYS.every(k=>st.rules[k]===TD.DEFAULT_RULES[k])) h.set('tdr',RULE_KEYS.map(k=>k==='enforce_min_lot'?(st.rules[k]?1:0):st.rules[k]).join(','));
@@ -1111,9 +1116,68 @@ function parseHash(){
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
   st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.due=h.get('due')==='1'; st.stage=h.get('stage')||''; st.pf=h.get('pf')==='1'; st.cm=+h.get('cm')||0; st.cont=h.get('cont')==='1'; st.hideSent=h.get('hs')==='1'; st.cgas=h.get('cgas')==='1'; st.cent=h.get('cent')||''; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
   const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length){ st.rules={}; RULE_KEYS.forEach((k,j)=>st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]); }
-  const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null;
+  const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null; mrHashRead(h,st,list);
   return st;
 }
+
+
+/* ===== Monroe County: buildability screen, ROGO / Tier, environment, signals (data/monroe/*, scripts/counties/monroe/) =====
+   Packs carry bld (1 green, 2 yellow, 3 red), tier, rogo, env (bitmask), sigm (bitmask); detail carries the reasons text ("R~text¦Y~text¦G~text¦i~text").
+   SCREENING TOOL only - built from public map layers; confirm with Monroe County / city planning. */
+const MR_RATE=[['G','Green','Likely buildable','No blockers found'],['Y','Yellow','Needs work','Allocation, habitat or flood issues to clear'],['R','Red','Blocked / unlikely','Conservation, wetland, Tier I or public land']];
+const MR_TIER=[[1,'Tier I'],[2,'Tier II'],[3,'Tier III'],[4,'Tier III-A'],[0,'City / none']];
+const MR_ROGO=[[1,'ROGO awarded'],[2,'Applied, not awarded'],[3,'Dedicated (retired)'],[4,'Dedication record'],[0,'No record']];
+const MR_SIG=[['rogo_award','ROGO awarded',4096],['vacant','Vacant lot',512],['teardown','Teardown',16384],['dup','Duplex / multifamily zoning',2048],['absentee','Owner mails outside the Keys',256],['fc_open','Foreclosure case open',1],['pr_open','Probate case open',4],['taxdeed','Tax-deed notice',16],['code','Code case',32]];
+const MR_AVOID=[['wet','Wetland / mangrove / water',4|8|16|16384],['fnai','Conservation land',1],['ff','Florida Forever',2],['upland','Hammock / pineland',32],['cbrs','CBRS',64],['species','Protected species',128|256],['ve','Flood VE',-1]];
+const MR_ZT=[['sf','Single-family'],['duplex','Duplex'],['mf','Multifamily'],['mixed','Mixed use'],['com','Commercial'],['ind','Industrial / marine'],['civic','Public'],['other','Conservation / other'],['none','No digital map']];
+const MR_BITS=Object.fromEntries(MR_SIG.map(([k,,b])=>[k,b])), MR_AV=Object.fromEntries(MR_AVOID.map(([k,,b])=>[k,b]));
+const MR_ENVL=[[1,'Conservation land'],[2,'Florida Forever'],[4,'Freshwater wetland'],[8,'Estuarine wetland'],[16,'Mangrove / marsh'],[32,'Hammock / pineland'],[64,'CBRS'],[128,'Protected species'],[256,'Key deer area'],[512,'Historic district'],[1024,'Substantial damage'],[16384,'Open water']];
+const mrArr=(a,ok)=>[...(a||[])].filter(x=>ok.includes(x));
+function mrRead(){ const m=S.mr; return {rate:[...m.rate],tier:[...m.tier],rogo:[...m.rogo],sig:[...m.sig],avoid:[...m.avoid],zt:[...m.zt]}; }
+function mrApply(st){ st=st||{}; const m=S.mr; m.rate=new Set(mrArr(st.rate,['G','Y','R'])); m.tier=new Set((st.tier||[]).map(Number).filter(x=>MR_TIER.some(t=>t[0]===x))); m.rogo=new Set((st.rogo||[]).map(Number).filter(x=>MR_ROGO.some(t=>t[0]===x)));
+  m.sig=new Set(mrArr(st.sig,MR_SIG.map(x=>x[0]))); m.avoid=new Set(mrArr(st.avoid,MR_AVOID.map(x=>x[0]))); m.zt=new Set(mrArr(st.zt,MR_ZT.map(x=>x[0]))); }
+function mrHashWrite(h,st){ const m=st.mr; if(!m) return; if(m.rate.length) h.set('bld',m.rate.join('')); if(m.tier.length) h.set('mtier',m.tier.join(',')); if(m.rogo.length) h.set('mrogo',m.rogo.join(',')); if(m.sig.length) h.set('msig',m.sig.join(',')); if(m.avoid.length) h.set('mavoid',m.avoid.join(',')); if(m.zt.length) h.set('mzt',m.zt.join(',')); }
+function mrHashRead(h,st,list){ st.mr={rate:(h.get('bld')||'').split('').filter(x=>'GYR'.includes(x)),tier:list('mtier'),rogo:list('mrogo'),sig:list('msig'),avoid:list('mavoid'),zt:list('mzt')}; }
+const mrCount=()=>HAS('monroe')?S.mr.rate.size+S.mr.tier.size+S.mr.rogo.size+S.mr.sig.size+S.mr.avoid.size+S.mr.zt.size:0;
+function mrPrep(){ const m=S.mr; if(!mrCount()) return null; let sg=0, av=0, ve=false; for(const k of m.sig) sg|=MR_BITS[k]; for(const k of m.avoid){ if(k==='ve') ve=true; else av|=MR_AV[k]; }
+  const rate=new Uint8Array(4); for(const k of m.rate) rate['_GYR'.indexOf(k)]=1;
+  let zt=null; if(m.zt.size){ zt=new Uint8Array(MZ.length); for(let j=0;j<MZ.length;j++){ const z=j&&ZREC&&ZREC[j]?ZREC[j].zt:null; zt[j]=m.zt.has(j===0||!z?'none':z)?1:0; } }
+  const veI=ve?new Uint8Array(D.cra.length).map((_,j)=>/^V/.test(D.cra[j]||'')?1:0):null;
+  return {rate:m.rate.size?rate:null,tier:m.tier.size?m.tier:null,rogo:m.rogo.size?m.rogo:null,sg,av,zt,veI}; }
+function mrPass(R,c,i){ if(R.rate && !R.rate[c.bld[i]]) return false; if(R.tier && !R.tier.has(c.tier[i])) return false; if(R.rogo && !R.rogo.has(c.rogo[i])) return false;
+  if(R.sg && !(c.sigm[i]&R.sg)) return false; if(R.av && (c.env[i]&R.av)) return false; if(R.veI && R.veI[c.cra[i]]) return false; if(R.zt && !R.zt[c.mz[i]]) return false; return true; }
+const mrChip=(g,k,l,on,n)=>`<button type="button" class="chip ${on?'on':''} ${n===0&&!on?'zero':''}" data-mr="${g}:${k}" aria-pressed="${on}">${l}${n==null?'':`<span class="n">${short(n)}</span>`}</button>`;
+function mrRender(){ if(!$('mrGrp')||!results) return; const m=S.mr, cnt={rate:{},tier:{},rogo:{},sig:{},avoid:{},zt:{}};
+  const sigB=MR_SIG, avB=MR_AVOID; for(let j=0;j<results.length;j++){ const id=results[j], p=P(id), i=I(id), c=p.c; const b='_GYR'[c.bld[i]]; cnt.rate[b]=(cnt.rate[b]||0)+1; cnt.tier[c.tier[i]]=(cnt.tier[c.tier[i]]||0)+1; cnt.rogo[c.rogo[i]]=(cnt.rogo[c.rogo[i]]||0)+1;
+    const sg=c.sigm[i]; for(const [k,,bt] of sigB) if(sg&bt) cnt.sig[k]=(cnt.sig[k]||0)+1; const ev=c.env[i]; for(const [k,,bt] of avB){ if(k==='ve'? /^V/.test(D.cra[c.cra[i]]||'') : (ev&bt)) cnt.avoid[k]=(cnt.avoid[k]||0)+1; }
+    const z=c.mz[i]&&ZREC&&ZREC[c.mz[i]]?ZREC[c.mz[i]].zt:'none'; cnt.zt[z]=(cnt.zt[z]||0)+1; }
+  $('mrRate').innerHTML=MR_RATE.map(([k,l,s])=>mrChip('rate',k,`<span class="mrdot ${k}"></span>${l}<small> ${s}</small>`,m.rate.has(k),cnt.rate[k]||0)).join('');
+  $('mrTier').innerHTML=MR_TIER.map(([k,l])=>mrChip('tier',k,l,m.tier.has(k),cnt.tier[k]||0)).join('');
+  $('mrRogo').innerHTML=MR_ROGO.map(([k,l])=>mrChip('rogo',k,l,m.rogo.has(k),cnt.rogo[k]||0)).join('');
+  $('mrSig').innerHTML=MR_SIG.map(([k,l])=>mrChip('sig',k,l,m.sig.has(k),cnt.sig[k]||0)).join('');
+  $('mrAvoid').innerHTML=MR_AVOID.map(([k,l])=>mrChip('avoid',k,l,m.avoid.has(k),cnt.avoid[k]||0)).join('');
+  $('mrZt').innerHTML=MR_ZT.map(([k,l])=>mrChip('zt',k,l,m.zt.has(k),cnt.zt[k]||0)).join(''); }
+function mrWire(){ const g=$('mrGrp'); if(!g) return; g.addEventListener('click',e=>{ const b=e.target.closest('[data-mr]'); if(!b) return; const [grp,k]=b.dataset.mr.split(':'); const set=S.mr[grp], v=(grp==='tier'||grp==='rogo')?+k:k; set.has(v)?set.delete(v):set.add(v); clearIdea(); run(); });
+  $('clrMr').onclick=()=>{ for(const k of Object.keys(S.mr)) S.mr[k].clear(); clearIdea(); run(); }; }
+const MR_TONE={1:'G',2:'Y',3:'R'};
+const mrBadge=(c,i)=>{ const b=c.bld?c.bld[i]:0; if(!b) return ''; const t=MR_TONE[b], l=MR_RATE.find(x=>x[0]===t); return `<span class="mrb ${t}" title="Buildability screen: ${l[1]} - ${l[2]}. Screening only; confirm with county / city planning.">Build ${l[1]}</span>`; };
+function mrCardLine(c,i){ const bits=[]; const t=c.tier[i]; if(t) bits.push(['','Tier I','Tier II','Tier III','Tier III-A','Military'][t]); const r=c.rogo[i]; if(r===1) bits.push('<b>ROGO awarded</b>'); else if(r===2) bits.push('ROGO applied'); else if(r===3) bits.push('<span class="mrneg">ROGO dedicated</span>');
+  const e=c.env[i]; for(const [b,l] of MR_ENVL) if((e&b) && [1,4,8,16,16384,128,256].includes(b)) { bits.push(`<span class="mrneg">${l}</span>`); if(bits.length>5) break; }
+  const sg=c.sigm[i]; if(sg&1) bits.push('<span class="hot">Foreclosure case</span>'); if(sg&4) bits.push('<span class="hot">Probate case</span>'); if(sg&16) bits.push('<span class="hot">Tax-deed notice</span>'); if(sg&2048) bits.push('Duplex-capable zoning');
+  return bits.length?`<div class="line mrline"><span class="k">Screen</span><span class="v">${bits.join(' · ')}</span></div>`:''; }
+function mrHTML(p,i){ const c=p.c, b=c.bld?c.bld[i]:0; if(!b) return ''; const t=MR_TONE[b], l=MR_RATE.find(x=>x[0]===t); const raw=p.s.reasons?getStr(p,'reasons',i):''; const items=raw?raw.split('¦').map(x=>{ const j=x.indexOf('~'); return [x.slice(0,j),x.slice(j+1)]; }):[];
+  const ICON={R:'✕',Y:'!',G:'✓',i:'·'}, LAB={R:'Blocker',Y:'Caution',G:'Positive',i:'Note'}; const zi=p.s.zinfo?getStr(p,'zinfo',i):'', rt=p.s.rogo_txt?getStr(p,'rogo_txt',i):'';
+  const jur=MZ[c.mz[i]]?MZ[c.mz[i]][1]:D.city[c.city[i]];
+  return `<h3>Buildability screen <span class="mrb ${t} big">${l[1]} · ${l[2]}</span></h3>
+  <div class="mrnote"><b>Screening tool, not a determination.</b> Built from public map layers (zoning, ROGO / Tier, conservation lands, wetlands, habitat, CBRS, FEMA flood) and the property roll. <b>Confirm with Monroe County Planning &amp; Environmental Resources (305-453-8739) or the city planning department</b> before you rely on it.</div>
+  <ul class="mrlist">${items.map(([s,x])=>`<li class="mr-${s}"><span class="mri" title="${LAB[s]}">${ICON[s]}</span><span>${esc(x)}</span></li>`).join('')||'<li class="mr-i"><span class="mri">·</span><span>Reasons load with the property details.</span></li>'}</ul>
+  <div class="dl">${rows2([['Tier',c.tier[i]?['','Tier I (Natural Area)','Tier II (Big Pine Key / No Name Key)','Tier III (infill)','Tier III-A (Special Protection Area)','Military'][c.tier[i]]:'City (no county Tier) or not mapped'],['ROGO / allocation',rt?esc(rt):(c.rogo[i]?esc(MR_ROGO.find(x=>x[0]===c.rogo[i])[1]):'No allocation record')],
+    ['Environment',MR_ENVL.filter(([bt])=>c.env[i]&bt).map(x=>x[1]).join(', ')],['Zoning notes',esc(zi)],['Planning contact',jur==='Key West'?'<a href="https://www.cityofkeywest-fl.gov/Departments/Planning" target="_blank" rel="noopener">City of Key West Planning</a>':jur==='Marathon'?'<a href="https://www.cityofmarathonfl.gov/planning" target="_blank" rel="noopener">City of Marathon Planning</a>':jur==='Islamorada'?'<a href="https://www.islamorada.fl.us/305/Planning-Development-Services" target="_blank" rel="noopener">Islamorada Planning</a>':'<a href="https://www.monroecounty-fl.gov/186/Planning-Environmental-Resources" target="_blank" rel="noopener">Monroe County Planning &amp; Environmental Resources</a> · <a href="https://www.monroecounty-fl.gov/1024/ROGO-NROGO" target="_blank" rel="noopener">ROGO / NROGO</a>']])}</div>`; }
+const rows2=pairs=>pairs.filter(x=>x[1]!==''&&x[1]!=null).map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join('');
+function mrPermitsHTML(p,i){ const c=p.c, ps=getStr(p,'psum',i), cs=getStr(p,'csum',i), sg=c.sigm[i];
+  const dl=[['County permits (legacy, to 9/2022)',ps?esc(ps):''],['Code cases',cs?esc(cs):''],['Tax deed',sg&16?'Tax-deed application advertised Feb-Mar 2026 (Keys Weekly legal notices; sale 3/25/2026). Check the Clerk tax-deed sale site for the current status.':'']];
+  return `<h3>Permits, code cases &amp; legal notices</h3>${dl.some(x=>x[1])?`<div class="dl">${rows2(dl)}</div>`:'<div class="note">Nothing on record in the public sources covered.</div>'}
+  <div class="note">Coverage: Monroe County legacy permits (before 10/2022) and county code cases (before 2024) come from MCeSearch where it could be fetched; newer county permits and the Key West / Marathon / Islamorada permit systems are per-property portals (no bulk download). Marathon code cases come from magistrate hearing agendas. Clerk foreclosure / probate cases are matched by name (precision first). Tax-collector delinquent lists are behind Cloudflare, so unpaid taxes are not loaded.</div>`; }
 
 /* owner portfolio (same first owner name) */
 /* how many loaded parcels share this parcel's last deed (same book-page and sale date): flags bulk sales */
@@ -1283,9 +1347,13 @@ async function openDeep(f){
 /* commercial presets by Property Appraiser DOR land use family (see CP_FAM) */
 const LUF=fam=>D.landuse.filter((v,i)=>{ const c=LU_CODE[i]; return cpCom(c)&&CP_FAM(c)===fam; });
 /* ideas that need a data layer the active county may not have (counties.js layers) */
-const IDEA_NEED=[[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/multifamily land|Strong teardowns|could be split/,'zoning'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm']];
+const IDEA_NEED=[[/Buildable lots|ROGO|Buildable teardowns/,'monroe'],[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/multifamily land|Strong teardowns|could be split/,'zoning'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm']];
 const ideaOk=l=>IDEA_NEED.every(([re,ly])=>!re.test(l)||HAS(ly));
 const IDEAS=[
+  ['Buildable lots', ()=>({...BLANK(), types:['vacant'], mr:{rate:['G','Y']}, sort:'bld_a'})],
+  ['Buildable lots, green only', ()=>({...BLANK(), types:['vacant'], mr:{rate:['G']}, sort:'bld_a'})],
+  ['ROGO allocation awarded', ()=>({...BLANK(), mr:{sig:['rogo_award']}, sort:'bld_a'})],
+  ['Buildable teardowns', ()=>({...BLANK(), mr:{rate:['G'], sig:['teardown']}, sort:'lp_d'})],
   ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
   ['Pre-foreclosure & auctions', ()=>({...BLANK(), dsig:['LP','FC'], sort:'ds_d'})],
   ['Tax deeds & delinquent', ()=>({...BLANK(), dsig:['TD','TC'], dsMin:35, sort:'ds_d'})],
@@ -1493,6 +1561,7 @@ function wire(){
   $('ideas').innerHTML=IDEAS.map(([l],i)=>ideaOk(l)?`<button type="button" class="chip" data-i="${i}">${l}</button>`:'').join('');
   $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); clearIdea(); b.classList.add('on'); });
   $('toResults').onclick=()=>{ const r=$('results'); const y=r.getBoundingClientRect().top+window.scrollY-($('stickybar').offsetHeight+16); window.scrollTo({top:y,behavior:'smooth'}); };
+  if(HAS('monroe')) mrWire();
   $('resetBtn').onclick=()=>{ applyState({...BLANK(), view:S.view}); clearIdea(); run(); };
   $('sortSel').addEventListener('change',async()=>{ S.sort=$('sortSel').value; if(S.sort.startsWith('og')) await ensureOg(); doSort(); save(); renderResults(true); });
   $('vCards').onclick=()=>{ S.view='cards'; save(); renderResults(true); };
@@ -1549,7 +1618,7 @@ async function boot(){
       $('pcCov').innerHTML=`<table class="covt"><thead><tr><th>City</th><th>Permits</th><th>Code cases</th><th>Source</th></tr></thead><tbody>`+cs.map(([m,c])=>`<tr><td>${esc(c.city)}</td><td>${c.permit_from?`since ${esc(c.permit_from.slice(0,7))} (${lv[c.permit_level]})`:'none'}</td><td>${c.code_from?`since ${esc(c.code_from.slice(0,7))}`:'none'}</td><td>${c.portal?`<a href="${esc(c.portal)}" target="_blank" rel="noopener">${esc(c.tech||'portal')}</a>`:''}${c.reason?` <small>${esc(c.reason)}</small>`:''}</td></tr>`).join('')+'</tbody></table>'; }
     if(META.vacancy){ const v=META.vacancy; $('vsSrc').textContent=`${fmt.format(v.ge40)} parcels score 40+ (likely), ${fmt.format(v.ge60)} score 60+. Built ${META.built}.`; }
     if(META.owners){ const o=META.owners; $('ogSrc').textContent=`${fmt.format(o.groups)} owners hold 2+ properties; ${fmt.format(o.groups_2plus_distressed_non_institutional)} (excluding banks, government and big institutions) have 2+ parcels with public-record distress signals.`; }
-    $('sortSel').innerHTML=SORTS.map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');
+    $('sortSel').innerHTML=SORTS.filter(s=>s[0]!=='bld_a'||HAS('monroe')).map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');
     $('ownerGrid').innerHTML=OWNER_ROWS.map(([k,l])=>`<label for="ow_${k}">${l}</label><select id="ow_${k}"><option value="any">Either</option><option value="yes">Only</option><option value="no">Hide</option></select>`).join('');
     OWNER_ROWS.forEach(([k])=>$('ow_'+k).addEventListener('change',e=>{ S.flags[k]=e.target.value; clearIdea(); schedule(0); }));
     await loadZoneRules();

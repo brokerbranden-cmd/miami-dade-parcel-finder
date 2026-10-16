@@ -7,7 +7,7 @@
 (function(){
   "use strict";
   // layers: which data the county has. The UI hides filter groups / ideas that need a missing layer.
-  const ALL = ['distress','signals','permits','vacancy','zoning','asm','teardown','commercial','comps','owners','construction','cra','flood'];
+  const ALL = ['distress','signals','permits','vacancy','zoning','asm','teardown','commercial','comps','owners','construction','cra','flood','mzoning'];
   const COUNTIES = {
     'miami-dade': { id:'miami-dade', name:'Miami-Dade', state:'FL', dataDir:'data/', storeSuffix:'',
       center:[25.76,-80.30], bounds:[[25.13,-80.88],[25.98,-80.11]],
@@ -17,9 +17,10 @@
       searchHint:'Search an address, owner name or folio number' },
     'monroe': { id:'monroe', name:'Monroe', state:'FL', dataDir:'data/monroe/', storeSuffix:'.monroe',
       center:[24.75,-81.20], bounds:[[24.45,-82.20],[25.40,-80.25]],
-      layers: ['owners','teardown','comps','flood'],
-      source:'Florida statewide cadastral (FDOR roll, Monroe County) + FEMA flood maps', roll:'Monroe County Property Appraiser roll (via Florida DOR)',
-      paUrl:f=>`https://qpublic.schneidercorp.com/Application.aspx?AppID=605&LayerID=9946&PageTypeID=4&KeyValue=${encodeURIComponent(f.length===14?f.slice(0,8)+'-'+f.slice(8):f)}`,
+      layers: ['owners','teardown','comps','flood','mzoning','monroe'],
+      source:'Florida statewide cadastral (FDOR roll, Monroe County), county / city zoning + ROGO / Tier, FNAI / NWI / FEMA layers', roll:'Monroe County Property Appraiser roll (via Florida DOR)',
+      // qPublic key = the RE number (last 14 digits of the 20-digit roll id, 8-6 with a dash), e.g. 00065780-000206
+      paUrl:f=>{ const d=String(f).replace(/\D/g,'').slice(-14); const re=d.length===14?d.slice(0,8)+'-'+d.slice(8):String(f); return `https://qpublic.schneidercorp.com/Application.aspx?AppID=605&LayerID=9946&PageTypeID=4&PageID=7635&KeyValue=${encodeURIComponent(re)}`; },
       auctionHost:'https://monroe.realforeclose.com', searchHint:'Search an address, owner name or RE number' }
     // 'broward': {...}, 'palm-beach': {...}   (add when their packs exist)
   };

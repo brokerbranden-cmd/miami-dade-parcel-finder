@@ -6,6 +6,7 @@ URL = (sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/').rstrip('/
 MODE = sys.argv[2] if len(sys.argv) > 2 else 'desktop'
 errs, fails = [], []
 def check(ok, msg): print(('ok   ' if ok else 'FAIL ') + msg); ok or fails.append(msg)
+MOB = MODE == 'mobile'
 cnt = lambda pg: int(pg.inner_text('#sCount').replace(',', '') or 0)
 with sync_playwright() as pw:
     b = pw.chromium.launch(args=['--js-flags=--max-old-space-size=1024'])
@@ -13,7 +14,8 @@ with sync_playwright() as pw:
     ctx = b.new_context(viewport=vp, service_workers='block', is_mobile=MODE == 'mobile', has_touch=MODE == 'mobile')
     pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.goto(URL + '?county=monroe#hg=0'); pg.wait_for_selector('#results:not([hidden])', timeout=120000); pg.wait_for_selector('#cards .card', timeout=60000)
-    check(pg.evaluate("PFCounty.has('monroe')"), 'Monroe has the monroe layer')
+    sheet = lambda: (pg.click('#filtersBtn'), pg.wait_for_timeout(400)) if MOB and not pg.is_visible('#panel') else None
+    check(pg.evaluate("PFCounty.has('monroe')"), 'Monroe has the monroe layer'); sheet()
     check(pg.is_visible('#mrGrp'), 'buildability group visible'); check('Screening tool' in pg.inner_text('#mrGrp') or 'screening tool' in pg.inner_text('#mrGrp').lower(), 'group labelled screening tool')
     chips = pg.eval_on_selector_all('#mrRate .chip', 'n=>n.map(x=>x.textContent)'); check(len(chips) == 3 and 'Green' in chips[0], f'rating chips {chips}')
     n0 = cnt(pg)
@@ -46,16 +48,18 @@ with sync_playwright() as pw:
         check(pg.locator('.drawer .mrlist li:visible').count() >= 3, f'drawer lists reasons ({pg.locator(".drawer .mrlist li:visible").count()})')
         href = pg.get_attribute('.drawer a:has-text("Property Appraiser page")', 'href') or ''
         check(bool(re.search(r'KeyValue=\d{8}-\d{6}$', href)), 'qPublic link uses RE number: ' + href[-40:])
-        pg.keyboard.press('Escape'); pg.click('#resetBtn'); pg.wait_for_timeout(800)
+        pg.keyboard.press('Escape'); pg.wait_for_timeout(500)
     # absentee wording
+    sheet()
     check('outside the Keys' in pg.inner_text('body') or pg.evaluate("document.getElementById('ow_absz')&&document.getElementById('ow_absz').closest('label,div').innerText").lower().count('outside the keys') > 0, 'absentee label says outside the Keys')
     # hash round trip
-    pg.goto(URL + '?county=monroe#bld=R&mtier=1'); pg.wait_for_selector('#results:not([hidden])', timeout=120000); pg.wait_for_timeout(1500)
+    pg.goto(URL + '?county=monroe#bld=R&mtier=1'); pg.wait_for_selector('#results:not([hidden])', timeout=120000); pg.wait_for_timeout(1500); sheet()
     check(pg.eval_on_selector_all('#mrRate .chip.on', 'n=>n.map(x=>x.dataset.mr)') == ['rate:R'], 'rating restored from the URL')
     check(pg.eval_on_selector_all('#cards .card .mrb', 'n=>n.length>0 && n.every(x=>x.classList.contains("R"))'), 'URL filter shows only red')
     # sort option
     check('bld_a' in pg.eval_on_selector_all('#sortSel option', 'n=>n.map(x=>x.value)'), 'sort by best buildability available')
     # zoning code filter exists for Monroe
+    pg.goto(URL + '?county=monroe#hg=0'); pg.wait_for_selector('#cards .card', timeout=120000); sheet()
     check(pg.is_visible('.grp[data-need="mzoning"]'), 'city zoning code filter group visible')
     pg.click('.grp[data-need="mzoning"] .gtog'); pg.wait_for_timeout(300); check(pg.is_visible('#mzq') and pg.is_visible('#mzCities'), 'zoning code box + by-city list open')
     pg.goto(URL + '?county=monroe#code=R1'); pg.wait_for_selector('#cards .card', timeout=120000); pg.wait_for_timeout(1500); nzz = cnt(pg); check(0 < nzz < 20000, f'zoning code R1 (Islamorada) filter -> {nzz}')

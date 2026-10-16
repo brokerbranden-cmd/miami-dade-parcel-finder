@@ -65,7 +65,7 @@
   // key for a street address: 'NUMBER DIR NAME TYPE [UNIT]' normalized; also base (without a trailing unit)
   function addrKeys(raw) {
     let s = String(raw == null ? '' : raw).toUpperCase().replace(/&/g, ' AND ');
-    if (s.includes(',')) { const parts = s.split(','); const withNum = parts.find(p => /\d/.test(p) && !/^\s*(C\/O|ATTN|%)/.test(p)); s = withNum != null ? withNum : parts[0]; }
+    if (s.includes(',')) { const parts = s.split(','); const wi = parts.findIndex(p => /\d/.test(p) && !/^\s*(C\/O|ATTN|%)/.test(p)); const at = wi >= 0 ? wi : 0; s = parts[at]; for (let j = at + 1; j < parts.length && /^\s*(APT|APARTMENT|UNIT|STE|SUITE|BLDG|FL|FLOOR|LOT|RM|ROOM|#)\b/.test(parts[j]); j++) s += ' ' + parts[j]; }
     s = s.replace(/#/g, ' # ').replace(/[^A-Z0-9# ]+/g, ' ').replace(/\s+/g, ' ').trim();
     if (!s) return { full: '', base: '' };
     const toks = []; for (let t of s.split(' ')) {
@@ -139,7 +139,9 @@
     const cl = segs.map(s => classifySeg(s, opts)).filter(Boolean);
     const full = segs.join('; ');
     const peopleSegs = cl.filter(c => c.people); const people = []; for (const c of peopleSegs) for (const p of c.people) people.push(p);
-    if (people.length) {
+    // roll names wrap over lines ("NEW JERUSALEM PRIMITIVE | BAPTIST CHURCH INC"): any company-looking line makes the whole owner a company
+    const coSeg = cl.some(c => (c.kind === 'company' || c.kind === 'gov') && !/^(C\/O|ATTN|%)/.test(c.u));
+    if (people.length && !coSeg) {
       const prim = peopleSegs[0];
       return { type: prim.kind === 'trustee' ? 'Trust' : prim.kind === 'estate' ? 'Estate' : 'Individual', isCompany: false, first: people[0].first, last: people[0].last, first2: (people[1] || {}).first || '', last2: (people[1] || {}).last || '', company: '', full, people };
     }

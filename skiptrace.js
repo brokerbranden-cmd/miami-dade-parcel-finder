@@ -215,7 +215,7 @@
   function readRow(row, map, opts) {
     opts = opts || {};
     const r = { folio: '', addr: '', zip: '', owner: '', first: '', last: '', company: '', mail: '', name: '', phones: [], emails: [] };
-    r.folio = getv(row, map.folio).replace(/\D/g, ''); r.addr = getv(row, map.addr); r.zip = zip5(getv(row, map.zip)) || zip5(r.addr);
+    r.folio = getv(row, map.folio).replace(/[^0-9A-Za-z]/g, '').toUpperCase(); r.addr = getv(row, map.addr); r.zip = zip5(getv(row, map.zip)) || zip5(r.addr);
     const first = getv(row, map.first), last = getv(row, map.last), company = getv(row, map.company), owner = getv(row, map.owner);
     r.first = first; r.last = last; r.company = company; r.owner = owner || [first, last].filter(Boolean).join(' ') || company;
     const mailStreet = getv(row, map.mail), mc = getv(row, map.mailCity), mz = getv(row, map.mailZip);
@@ -243,7 +243,7 @@
       r._ok = ownerKeys(r.owner || r.name, { order: opts.rowOrder || 'first-last' });
       if (r.first && r.last) { const k = personKey(r.first, r.last); if (k) r._ok = ['P:' + k]; }
       else if (r.company) { const k = companyKey(r.company); if (k) r._ok = ['C:' + k]; }
-      if (useF && r.folio) { const d = r.folio.length <= 13 ? r.folio.padStart(13, '0') : r.folio.length <= 14 ? r.folio.padStart(14, '0') : r.folio; push(byFolio, d, i); }
+      if (useF && r.folio) { const d = (!/^\d+$/.test(r.folio) || (window.PFCounty && PFCounty.id === 'broward')) ? r.folio : r.folio.length <= 13 ? r.folio.padStart(13, '0') : r.folio.length <= 14 ? r.folio.padStart(14, '0') : r.folio; push(byFolio, d, i); }
       if (useA && r.addr) { const k = addrKeys(r.addr); r._ak = k; push(byFull, k.full, i); if (k.base !== k.full) push(byBase, k.base, i); else push(byBase, k.base, i); }
       if (useO && r._ok.length && r.mailStreet !== undefined && r.mailStreet) { r._mk = (addrKeys(r.mailStreet).base || '') + '|' + (r.mailZip || ''); for (const k of r._ok) push(byOwner, k + '||' + r._mk, i); }
     });

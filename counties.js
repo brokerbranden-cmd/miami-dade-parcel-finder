@@ -34,7 +34,7 @@
       planning:{ who:'the city planning / zoning department (Broward County Planning for unincorporated areas)', rateY:'Flood, small lot or unmapped zoning to clear', rateR:'Public / conservation land, VE flood or non-residential zoning' },
       source:'FDOR roll (Broward County Property Appraiser), BCPA parcels, county Land Use Plan, city zoning layers, FEMA flood', roll:'Broward County Property Appraiser roll (via Florida DOR NAL)',
       // BCPA record page keyed by the 12-digit folio
-      paUrl:f=>`https://bcpa.net/RecInfo.asp?URL_Folio=${String(f).replace(/\D/g,'')}`,
+      paUrl:f=>`https://bcpa.net/RecInfo.asp?URL_Folio=${String(f).replace(/[^0-9A-Za-z]/g,'').toUpperCase()}`,
       auctionHost:'https://www.broward.realforeclose.com', searchHint:'Search an address, owner name or folio number' }
     // 'palm-beach': {...}   (add when its packs exist)
   };

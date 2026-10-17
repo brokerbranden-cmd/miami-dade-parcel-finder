@@ -20,3 +20,12 @@ Started 2026-10-17. Raw inputs: /workspace/raw/broward/. Scripts: scripts/counti
 - app.js/index.html: Monroe buildability screen generalized to layer `mscreen` (+`rogo` for Tier/ROGO rows); Broward auction/legal-notice drawer section; Broward presets (duplex, foreclosure/tax-deed sale scheduled).
 - RealAuction: broward.realtaxdeed.com works WITHOUT www; only status=scheduled sales used.
 - TODO: run build_broward.py once centroids.jsonl exists, tests/e2e_broward.py, regression suites, push.
+
+## 17:xx PHASE 1 DATA BUILT (data/broward/, not yet committed)
+- KEY FIX: Broward folios are 12 CHARACTERS and condo units carry letters (474131AA0010). Folio kept alnum-uppercase end to end (pack, saved.js normFolio, skiptrace import, search, deep link, BCPA RecInfo link). Fixes a latent saved.js truncation to 13 digits for Monroe too.
+- Counts: 753,239 parcels (487,944 main + 265,295 condo/unit pack); 39,903 comps; 39,514 owner groups (6,606 with 5+ parcels).
+- Flood (BCGIS FloodZones2024): X 490k, AE 196k, AH 61k, AO 1.6k, VE 382. Zoning: city/BMSD layers cover 258k (Fort Lauderdale, Miramar, Deerfield, Dania, Cooper City, Pembroke Park, Pompano, Lauderhill, BMSD), the rest uses the county Land Use Plan (flagged in the drawer). Buildability screen: green 321k, yellow 100k, red 3.3k (AE/AH is informational, VE red).
+- Absentee = mailing outside Broward ZIPs (112,596 flagged incl. 75,621 out of state); government owners excluded (17,510).
+- Auctions (RealAuction): 129 foreclosure + 56 tax-deed parcels matched (RealAuction drops the letters from condo folios; matched by digits then address+unit).
+- NOT public: tax collector delinquent / certificates (Cloudflare), Clerk lis pendens / probate, code violations, permits, unsafe structures -> drawer says so, drafts 05/06 written.
+- e2e_broward desktop passes (2 expectation tweaks); regression runner /workspace/tmp/full_bw.sh running.

@@ -12,15 +12,15 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(SCR, '..', 'data', 'bro
 GEO0 = (25.0, -81.0)
 COLS = ['PARCEL_ID', 'ASMNT_YR', 'DOR_UC', 'PA_UC', 'JV', 'AV_SD', 'TV_NSD', 'JV_HMSTD', 'LND_VAL', 'LND_SQFOOT', 'EFF_YR_BLT', 'ACT_YR_BLT', 'TOT_LVG_AREA', 'NO_BULDNG', 'NO_RES_UNTS',
         'SALE_PRC1', 'SALE_YR1', 'SALE_MO1', 'QUAL_CD1', 'OR_BOOK1', 'OR_PAGE1', 'SALE_PRC2', 'SALE_YR2', 'SALE_MO2', 'QUAL_CD2', 'OR_BOOK2', 'OR_PAGE2',
-        'OWN_NAME', 'OWN_ADDR1', 'OWN_ADDR2', 'OWN_CITY', 'OWN_STATE', 'OWN_ZIPCD', 'OWN_STATE_DOM', 'FIDU_NAME', 'S_LEGAL', 'PHY_ADDR1', 'PHY_CITY', 'PHY_ZIPCD', 'PUBLIC_LND', 'EXMPT_01', 'EXMPT_02', 'EXMPT_03']
+        'OWN_NAME', 'OWN_ADDR1', 'OWN_ADDR2', 'OWN_CITY', 'OWN_STATE', 'OWN_ZIPCD', 'OWN_STATE_DOM', 'FIDU_NAME', 'S_LEGAL', 'PHY_ADDR1', 'PHY_ADDR2', 'PHY_CITY', 'PHY_ZIPCD', 'PUBLIC_LND', 'EXMPT_01', 'EXMPT_02', 'EXMPT_03']
 df = pd.read_csv(NAL, dtype=str, usecols=COLS, keep_default_na=False)
 n_raw = len(df)
-df['FOLIO'] = df.PARCEL_ID.str.replace(r'\D', '', regex=True)
+df['FOLIO'] = df.PARCEL_ID.str.replace(r'[^0-9A-Za-z]', '', regex=True).str.upper()   # Broward folios are 12 chars; condo units carry letters (e.g. 474131AA0010)
 df = df[df.FOLIO != ''].drop_duplicates('FOLIO').reset_index(drop=True); n_roll = len(df)
 cen = {}
 for l in open(os.path.join(RAWB, 'centroids.jsonl')):
     a = json.loads(l)
-    if a[1]: cen[re.sub(r'\D', '', str(a[0]))] = (a[2], a[1])
+    if a[1]: cen[re.sub(r'[^0-9A-Za-z]', '', str(a[0])).upper()] = (a[2], a[1])
 df['LAT'] = [cen.get(f, (0, 0))[0] for f in df.FOLIO]; df['LON'] = [cen.get(f, (0, 0))[1] for f in df.FOLIO]
 S = lambda c: df[c].fillna('').astype(str).str.strip()
 N = lambda c: pd.to_numeric(df[c], errors='coerce').fillna(0)
@@ -89,7 +89,7 @@ for name, jur, cf, df_ in (('z_bmsd', 'Unincorporated Broward (BMSD)', 'ZONING',
     if not os.path.exists(p): continue
     c = 0
     for a in load_jsonl(p):
-        i = folio_ix.get(re.sub(r'\D', '', str(a.get('FOLIO') or '')))
+        i = folio_ix.get(re.sub(r'[^0-9A-Za-z]', '', str(a.get('FOLIO') or '')).upper())
         if i is not None and a.get(cf) and not zj[i]: put(i, jur, a[cf], a.get(df_) or a.get('DESCRIPTION')); c += 1
     cnt_z[jur] = c
 CITY = [('z_fortlauderdale', 'Fort Lauderdale', 'ZONECLASS', 'ZONEDESC'), ('z_miramar', 'Miramar', 'ZONECODE', 'ZONEDESC'), ('z_deerfield', 'Deerfield Beach', 'ZONECLASS', 'ZONEDESC'),
@@ -202,12 +202,21 @@ tear = (bv > 0) & (mk > 0) & (bv / np.maximum(mk, 1) < 0.2) & ~is_condo
 
 # ---- scheduled foreclosure / tax-deed auctions (public RealAuction calendars)
 fc_txt = [''] * n; td_txt = [''] * n; fcb = np.zeros(n, bool); tdb = np.zeros(n, bool); auc_stats = {}
+normA = lambda a: re.sub(r'[^A-Z0-9]', '', str(a).upper())
+dig_ix, adr_ix = {}, {}
+for k, (f, a1, a2, z) in enumerate(zip(df.FOLIO, S('PHY_ADDR1'), S('PHY_ADDR2'), S('PHY_ZIPCD'))):
+    dig_ix.setdefault(re.sub(r'\D', '', f), []).append(k); adr_ix.setdefault((normA(a1 + a2), z[:5]), []).append(k)
 ap = os.path.join(RAWB, 'auctions.json')
 if os.path.exists(ap):
     A = json.load(open(ap)); auc_stats = {'pulled': A.get('pulled'), 'items': len(A['items'])}
     for it in A['items']:
         if it.get('status', '').lower() != 'scheduled': continue   # only future sales (closed / cancelled are history)
-        i = folio_ix.get(re.sub(r'\D', '', it.get('folio', '')))
+        fo = re.sub(r'[^0-9A-Za-z]', '', it.get('folio', '')).upper()
+        i = folio_ix.get(fo)
+        if i is None and fo.isdigit() and len(fo) >= 10:     # RealAuction drops the letters of condo folios (514215AA0010 -> 5142150010): digits-only key, then address + unit
+            c = dig_ix.get(fo, []); i = c[0] if len(c) == 1 else None
+        if i is None and it.get('address'):
+            zz = re.findall(r'\d{5}', it.get('city', '')); c = adr_ix.get((normA(it['address']), zz[0] if zz else ''), []); i = c[0] if len(c) == 1 else None
         if i is None: auc_stats['unmatched'] = auc_stats.get('unmatched', 0) + 1; continue
         t = f"{it['date']} {('Tax deed' if it.get('src') == 'taxdeed' else 'Foreclosure')} sale" + (f", case {it['case']}" if it.get('case') else '') + (f", opening bid {it['opening_bid']}" if it.get('opening_bid') else '') + (f", judgment {it['judgment']}" if it.get('judgment') else '') + f" ({it.get('status', '')})"
         if it.get('src') == 'taxdeed': tdb[i] = True; td_txt[i] = (td_txt[i] + ' | ' if td_txt[i] else '') + t
@@ -227,9 +236,9 @@ for i in np.where(cand)[0]:
     elif zt in ('civic', 'other'): R.append(f'County land use plan: {flu_lbl[i]} (not residential)')
     elif zt == 'none': Y.append('No zoning or land-use layer matched this parcel')
     else: G.append(f'{"Zoned" if zsrc[i]==1 else "Land use plan"}: {zd[i] or zc[i]} ({zj[i]})')
-    if zsrc[i] == 2: Y.append('City zoning layer not published: the county land use plan is shown, confirm the city zoning code')
+    if zsrc[i] == 2: (Y if (vacant[i] or tear[i]) else I).append('City zoning layer not published: the county land use plan is shown, confirm the city zoning code')   # yellow only for the lots / teardowns being screened
     if ve_f[i]: R.append('FEMA zone VE (coastal high hazard)')
-    elif hi_f[i]: Y.append(f'FEMA {flood_s[i].split(" - ")[0]} (high-risk flood zone, elevation / flood insurance)')
+    elif hi_f[i]: I.append(f'FEMA {flood_s[i].split(" - ")[0]} (special flood hazard area: elevation / flood insurance apply; common across Broward, not a blocker)')
     elif flood_s[i]: G.append('FEMA ' + flood_s[i].split(' - ')[0] + ' (not high risk)')
     if small[i] and lot[i] > 0: Y.append(f'Small lot ({int(lot[i]):,} sf)')
     elif lot[i] >= 7500: G.append(f'Lot {int(lot[i]):,} sf')

@@ -264,7 +264,7 @@ function asmDecode(o){ const nul=v=>v<0?null:v, groups=[], byFolio=new Map(), by
     for(const t of o.m[j].split(',')){ const [f,b,sl]=t.split('.'); g.mem.push([f,parseInt(b,16),+sl]); byFolio.set(f,j); }
     groups.push(g); byId.set(g.id,j); });
   return {meta:o.meta,mot:o.mot,gt:o.gt,groups,byFolio,byId}; }
-function loadAsm(){ return asmP||(asmP=(async()=>{ ASM=asmDecode(await gzJSON(DP+'asm.json.gz?v='+META.ver+'-'+ASM_VER)); PACKS.forEach(asmIndexPack); return ASM; })().catch(e=>{ asmP=null; throw e; })); }
+function loadAsm(){ if(!HAS('asm')) return Promise.resolve(null); return asmP||(asmP=(async()=>{ ASM=asmDecode(await gzJSON(DP+'asm.json.gz?v='+META.ver+'-'+ASM_VER)); PACKS.forEach(asmIndexPack); return ASM; })().catch(e=>{ asmP=null; throw e; })); }
 function loadTile(t){ const key=ASM.meta.tiles[t]; if(!apolyP.has(t)) apolyP.set(t,gzJSON(DP+'asm-polys/'+key+'.json.gz?v='+META.ver+'-'+ASM_VER).then(o=>{ o.j.forEach((j,x)=>APOLY.set(j,o.p[x])); }).catch(e=>{ apolyP.delete(t); throw e; })); return apolyP.get(t); }
 function asmIndexPack(p){ if(!p||!ASM||p.asmG) return; const f=strCol(p,'folio'), g=new Int32Array(p.n).fill(-1); for(let i=0;i<p.n;i++){ const x=ASM.byFolio.get(f[i]); if(x!==undefined) g[i]=x; } p.asmG=g; }
 const asmOf=(p,i)=>ASM&&p.asmG&&p.asmG[i]>=0?ASM.groups[p.asmG[i]]:null;
@@ -453,9 +453,10 @@ const rulesDefault=()=>RULE_KEYS.every(k=>S.rules[k]===TD.DEFAULT_RULES[k]);
 function textMatcher(st){
   if(!st.q) return null;
   const q=st.q.toUpperCase().replace(/\s+/g,' '), digits=q.replace(/[^0-9]/g,'');
-  const folioMode = st.qScope==='ao' && /^[\d\s-]+$/.test(q) && digits.length>=5;
+  const qa=q.replace(/[\s-]/g,''), alnumF=PFC.id==='broward' && /^\d{6}[A-Z]{2}\d{4}$/.test(qa);   // Broward condo folios carry letters (474131AA0010)
+  const folioMode = st.qScope==='ao' && (alnumF || (/^[\d\s-]+$/.test(q) && digits.length>=5));
   const cols = folioMode?['folio'] : st.qScope==='ao'?['addr','owner'] : [st.qScope];
-  const needle = folioMode?digits:q;
+  const needle = folioMode?(alnumF?qa:digits):q;
   return p=>{ const hit=new Uint8Array(p.n); for(const col of cols){ if(!p.s[col]){ loadDetail(p.idx).then(()=>schedule(0)); toast('Loading mailing and legal data…'); continue; } const a=strCol(p,col); for(let i=0;i<p.n;i++) if(!hit[i] && a[i].includes(needle)) hit[i]=1; } return hit; };
 }
 function allowLU(){ if(!S.types.size && !S.exL.size) return null; const a=new Uint8Array(D.landuse.length); for(let i=0;i<a.length;i++) a[i]=(!S.types.size||S.types.has(LU_T[i])) && (!S.exL.size||S.exL.has(i)) ? 1:0; return a; }
@@ -1062,7 +1063,7 @@ function nearStreet(p,i){ const g=addrGrid(); if(!g) return ''; const la=p.geo.l
   const cx=Math.floor(la*200), cy=Math.floor(-lo*200); let best=1e9, id=-1;
   for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){ const b=g.get((cx+dx)*100000+cy+dy); if(!b) continue; for(let k=0;k<b.length;k+=3){ const d=(b[k]-la)**2+((b[k+1]-lo)*0.9)**2; if(d<best){ best=d; id=b[k+2]; } } }
   return id<0?'':getStr(P(id),'addr',I(id)).replace(/^\d+[A-Z]?(-\d+)?\s+/,''); }
-const folio13=f=>{ const d=String(f||'').replace(/\D/g,''); if(!d) return ''; if(PFC.id!==PFC.DEFAULT) return d.length===14?d.slice(0,8)+'-'+d.slice(8):d; return folioFmt(d.padStart(13,'0')); };
+const folio13=f=>{ if(PFC.id==='broward') return String(f||'').toUpperCase(); const d=String(f||'').replace(/\D/g,''); if(!d) return ''; if(PFC.id!==PFC.DEFAULT) return d.length===14?d.slice(0,8)+'-'+d.slice(8):d; return folioFmt(d.padStart(13,'0')); };
 const EXPSTAT={real:0,near:0,legal:0,use:0};
 function exportAddr(p,i){ const a=getStr(p,'addr',i).trim(); if(a){ EXPSTAT.real++; return a; }
   const use=TYPE_LABEL[LU_T[p.c.landuse[i]]]||'Parcel', st=nearStreet(p,i); if(st){ EXPSTAT.near++; return `No site address – ${use}, near ${st}`; }
@@ -1369,10 +1370,10 @@ async function showMap(reset){
 /* ideas */
 const BLANK=()=>({hideGov:true,sort:'lot_d',flags:{},owner:'all'});
 /* folio deep links: ?folio=0131130310040 or #folio=01-3113-031-0040 opens that property's card + details */
-function deepFolio(){ const m=/[?&#]folio=([\d\-\s%20]+)/i.exec(location.search+location.hash); if(!m) return ''; const d=decodeURIComponent(m[1]).replace(/\D/g,''); return d.length>=4?d:''; }
+function deepFolio(){ const m=/[?&#]folio=([\w\-\s%]+)/i.exec(location.search+location.hash); if(!m) return ''; const d=decodeURIComponent(m[1]).replace(PFC.id==='broward'?/[^0-9A-Za-z]/g:/\D/g,'').toUpperCase(); return d.length>=4?d:''; }
 const folioLink=f=>location.origin+location.pathname+'?folio='+f;
 async function openDeep(f){
-  const find=()=>{ for(let j=0;j<results.length;j++){ const id=results[j]; if(getStr(P(id),'folio',I(id)).replace(/\D/g,'').endsWith(f.length>=13?f:f.padStart(13,'0'))) return id; } return results.length===1?results[0]:-1; };
+  const find=()=>{ for(let j=0;j<results.length;j++){ const id=results[j]; if((PFC.id==='broward'?getStr(P(id),'folio',I(id)).toUpperCase()===f:getStr(P(id),'folio',I(id)).replace(/\D/g,'').endsWith(f.length>=13?f:f.padStart(13,'0')))) return id; } return results.length===1?results[0]:-1; };
   let id=find(); if(id<0 && !S.types.has('condo')){ S.types=new Set(['condo']); await ensureCondo(); run(); id=find(); }
   if(id<0){ toast('Folio '+f+' was not found in this roll.'); return; }
   S.view='cards'; renderResults(true);

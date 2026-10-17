@@ -24,10 +24,11 @@
   let backend = localBackend, items = {}, rev = 1, lastError = '';
   const subs = new Set();
   const now = () => new Date().toISOString();
-  const normFolio = f => String(f == null ? '' : f).replace(/\D/g, '').padStart(13, '0').slice(-13);
+  // Miami-Dade folios are 13 digits (padded); Monroe has 14 digits, Broward 12 characters (condo units carry letters, e.g. 474131AA0010)
+  const normFolio = f => { const s = String(f == null ? '' : f).replace(/[^0-9A-Za-z]/g, '').toUpperCase(); const md = !window.PFCounty || PFCounty.id === 'miami-dade'; return /^\d+$/.test(s) ? (md && s.length < 13 ? s.padStart(13, '0') : !md && s.length < 12 ? s : s.slice(-14).length === 14 && s.length >= 14 ? s.slice(-14) : s.slice(-13)) : s; };
   function cleanItem(x, f){
     if(!x || typeof x !== 'object') return null;
-    const folio = normFolio(x.folio || f); if(!/^\d{13}$/.test(folio) || /^0+$/.test(folio)) return null;
+    const folio = normFolio(x.folio || f); if(!/^[0-9A-Z]{12,14}$/.test(folio) || /^0+$/.test(folio)) return null;
     const t = v => (typeof v === 'string' && !isNaN(Date.parse(v))) ? new Date(v).toISOString() : null;
     const savedAt = t(x.savedAt) || now();
     return { folio, savedAt, updatedAt: t(x.updatedAt) || savedAt,

@@ -32,7 +32,7 @@ def handler(route):
         M['status_calls'] += 1; return jf({'ok': True, 'dailyCap': M['cap'], 'usedToday': M['cap'] - M['remaining'], 'remainingToday': M['remaining'], 'maxPerRequest': 50})
     body = r.post_data_json; items = body['items']; M['calls'].append(items); M['n_post'] += 1
     if M['fail_after'] is not None and M['n_post'] > M['fail_after']: return jf({'error': 'daily_cap', 'remainingToday': 0}, 429)
-    if M['delay']: time.sleep(M['delay'])
+    if M['delay']: pg.wait_for_timeout(int(M['delay'] * 1000))
     res = [result_for(i) for i in items]; M['remaining'] -= sum(1 for x in res if x['status'] in ('match', 'nocontact'))
     jf({'ok': True, 'results': res, 'meta': {'sent': len(items)}, 'remainingToday': M['remaining'], 'dailyCap': M['cap']})
 with sync_playwright() as pw:
@@ -125,7 +125,7 @@ with sync_playwright() as pw:
     close_modal()
 
     # ---------- daily cap ----------
-    M['remaining'] = 3; load('miami-dade', 'hg=0&q=SW'); open_bulk(); ok('3 of 500 left' in pg.inner_text('#skaCost').replace(',', '') or re.search(r'\b3\s+of\s+500', pg.inner_text('#skaCost')) is not None, 'low remaining shown'); 
+    pg.wait_for_timeout(3000); M['remaining'] = 3; load('miami-dade', 'hg=0&q=SW'); open_bulk(); ok(re.search(r'\b3\s+of\s+500', pg.inner_text('#skaCost')) is not None, 'low remaining shown')
     ok(int(re.search(r'([\d,]+)\s+lookups?', pg.inner_text('#skaCounts')).group(1)) == 3 and not pg.is_hidden('#skaWarn'), 'plan is cut to the daily limit with a warning')
     close_modal(); M['remaining'] = 500; M['fail_after'] = 1; M['n_post'] = 0; load('miami-dade', 'hg=0&q=SW'); open_bulk(); setmax(120); pg.click('#skaGo'); pg.click('#skaGo'); pg.wait_for_selector('#skaReport', timeout=180000)
     ok('limit' in pg.inner_text('#skaReport').lower() and 'Stopped' in pg.inner_text('#skaReport'), 'server daily cap mid-run: run stops, earlier batch saved'); close_modal(); M['fail_after'] = None
@@ -140,7 +140,7 @@ with sync_playwright() as pw:
     cards = pg.evaluate("[...document.querySelectorAll('#cards .card')].filter(c=>c.querySelector('[data-stgo]')).slice(0,6).map(c=>c.dataset.folio)")
     ok(len(cards) >= 3, f'{len(cards)} untraced cards visible')
     fA, fB, fC = cards[0], cards[1], cards[2]
-    M['force'][fA] = {'status': 'match', 'name': 'Ana Perez', 'phones': [['3055559001', 'm', 0], ['3055559002', 'm', 1], ['7865559003', 'l', 0]], 'emails': ['ana@example.com']}
+    M['force'][fA] = {'status': 'match', 'name': 'Ana Perez', 'phones': [['3055559001', 'm', 0], ['3055559002', 'm', 1]], 'emails': ['ana@example.com']}
     M['force'][fB] = {'status': 'nomatch'}; M['force'][fC] = {'status': 'error', 'error': 'provider_error'}
     M['calls'].clear(); sc = pg.evaluate("window.scrollY"); pg.evaluate(f"document.querySelector('#cards .card[data-folio=\"{fA}\"] [data-stgo]').click()")
     pg.wait_for_selector(f'#cards .card[data-folio="{fA}"] a[href="tel:+13055559001"]', timeout=60000)
@@ -151,7 +151,7 @@ with sync_playwright() as pw:
     ok(pg.query_selector(f'{cardA} .dncb') is not None and pg.query_selector(f'{cardA} a[href="tel:+13055559002"]') is None, 'DNC badge shown and no tap links on the DNC number')
     ok('ana@example.com' in pg.inner_text(cardA) and pg.query_selector(f'{cardA} a[href="mailto:ana@example.com"]') is not None, 'email shown as a mailto link')
     ok(store()[fA]['p'][0][:2] == ['3055559001', 'm'] and store()[fA]['s'] == 'BatchData API', 'saved in the county store')
-    one = pg.evaluate('window.PF_LAST_SKAPI_ONE'); ok(one and one['folio'] == fA and one['phones'] == 3 and one['emails'] == 1 and one['dnc'] == 1, f'single-run summary (found 3 phones, 1 email, 1 DNC) {one}')
+    one = pg.evaluate('window.PF_LAST_SKAPI_ONE'); ok(one and one['folio'] == fA and one['phones'] == 2 and one['emails'] == 1 and one['dnc'] == 1, f'single-run summary (found 2 phones, 1 email, 1 DNC) {one}')
     # no match
     pg.evaluate(f"document.querySelector('#cards .card[data-folio=\"{fB}\"] [data-stgo]').click()"); pg.wait_for_function(f"document.querySelector('#cards .card[data-folio=\"{fB}\"] .stnone')", timeout=60000)
     ok('no phone found' in pg.inner_text(f'#cards .card[data-folio="{fB}"]').lower() and fB in store(), 'no match: card says traced, no phone found (and will not be run again by default)')

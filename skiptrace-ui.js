@@ -309,6 +309,7 @@
     busyFolios.add(folio); document.querySelectorAll('[data-stgo]').forEach(b => { if (b.dataset.stgo === folio) { b.disabled = true; b.textContent = 'Skip tracing…'; } });
     let sum;
     try {
+      await B.ensureDetail();
       const item = API.buildItem(B.info(id), { order: B.order });
       if (!API.hasAddress(item)) sum = Object.assign(API.newSummary(), { errors: 1, errorCodes: { bad_address: 1 } });
       else sum = await API.run([{ id: item.id, folios: [folio], item }], { store: ST, code, chunk: 1 });

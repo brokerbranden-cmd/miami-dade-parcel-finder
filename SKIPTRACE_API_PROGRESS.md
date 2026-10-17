@@ -17,3 +17,9 @@ Never print/commit BATCHDATA_API_KEY or ACCESS_CODE. Don't commit data/*.gz, met
 ## 2026-10-16 21:25 ET
 - Regression runner full_api.sh: all PASS desktop+mobile (unit, unit_api, unit_worker, skiptrace, export, sendmark, deterrents, scenarios, api, county). Pushing.
 - Follow-on (filters 3-6) is being built in /workspace/pf-fx, then ported here.
+
+## 2026-10-16 21:55 ET
+- Pushed (ac6c293). Live site serves sw v16 + skiptrace-api.js. Live regression (test_runs/summary_live_*) running.
+- LIVE 1-RECORD TEST BLOCKED: Worker returns provider_auth / upstreamStatus 401 "Invalid token." The Cloudflare MCP redacts the BatchData key to "[REDACTED]" (verified: value length seen by the sandbox = 10), so the Worker secret BATCHDATA_API_KEY currently holds that literal text. Not circumvented. Fix = Branden sets it: `cd worker && npx wrangler secret put BATCHDATA_API_KEY` or dashboard Workers > parcel-skiptrace > Settings > Variables and Secrets. Key itself verified valid directly against BatchData from the box (200 on a real request, 400 on empty), 0 records billed (no match).
+- Then run: python3 /workspace/tmp/live_one.py (1 record, prints counts only).
+- Follow-on (filters 3-6) built + e2e_fx green on desktop in /workspace/pf-fx; porting next.

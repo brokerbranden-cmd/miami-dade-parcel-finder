@@ -10,7 +10,7 @@
   const saveP=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(P)); }catch(e){} };
   const B=document.body; B.classList.add('simple'); if(P.legacy) B.classList.add('legacy'); if(P.detail) B.classList.add('detail');
   const phone=()=>matchMedia('(max-width:899px)').matches;
-  const DEFAULT_OPEN=new Set(['search','start with an idea','distress signals','buildability (monroe screen)',"what's on the property",'market value','lot size']);
+  const DEFAULT_OPEN=new Set(['search','start with an idea','distress signals','buildability screen',"what's on the property",'market value','lot size']);
 
   /* ---- filter groups ---- */
   const gkey=g=>{ const h=g.querySelector(':scope>.grp-h h2'); return h?h.textContent.trim().toLowerCase():''; };

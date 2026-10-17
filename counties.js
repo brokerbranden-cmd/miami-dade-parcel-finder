@@ -19,12 +19,24 @@
     'monroe': { id:'monroe', name:'Monroe', state:'FL', dataDir:'data/monroe/', storeSuffix:'.monroe',
       nameOrder:'last-first',   // Monroe roll names read LAST FIRST MIDDLE
       center:[24.75,-81.20], bounds:[[24.45,-82.20],[25.40,-80.25]],
-      layers: ['owners','teardown','comps','flood','mzoning','monroe'],
+      layers: ['owners','teardown','comps','flood','mzoning','monroe','mscreen','rogo'],
+      area:'the Keys',   // wording for the absentee rule: owner mails from outside this area
+      planning:{ who:'Monroe County Planning & Environmental Resources (305-453-8739) or the city planning department', rateY:'Allocation, habitat or flood issues to clear', rateR:'Conservation, wetland, Tier I or public land' },
       source:'Florida statewide cadastral (FDOR roll, Monroe County), county / city zoning + ROGO / Tier, FNAI / NWI / FEMA layers', roll:'Monroe County Property Appraiser roll (via Florida DOR)',
       // qPublic key = the RE number (last 14 digits of the 20-digit roll id, 8-6 with a dash), e.g. 00065780-000206
       paUrl:f=>{ const d=String(f).replace(/\D/g,'').slice(-14); const re=d.length===14?d.slice(0,8)+'-'+d.slice(8):String(f); return `https://qpublic.schneidercorp.com/Application.aspx?AppID=605&LayerID=9946&PageTypeID=4&PageID=7635&KeyValue=${encodeURIComponent(re)}`; },
       auctionHost:'https://monroe.realforeclose.com', searchHint:'Search an address, owner name or RE number' }
-    // 'broward': {...}, 'palm-beach': {...}   (add when their packs exist)
+    ,'broward': { id:'broward', name:'Broward', state:'FL', dataDir:'data/broward/', storeSuffix:'.broward',
+      nameOrder:'last-first',   // Broward roll names read LAST,FIRST & SECOND (comma after the surname; the pack stores them with a space)
+      center:[26.15,-80.32], bounds:[[25.95,-80.92],[26.40,-79.98]],
+      layers: ['owners','teardown','comps','flood','mzoning','mscreen','broward'],
+      area:'Broward',
+      planning:{ who:'the city planning / zoning department (Broward County Planning for unincorporated areas)', rateY:'Flood, small lot or unmapped zoning to clear', rateR:'Public / conservation land, VE flood or non-residential zoning' },
+      source:'FDOR roll (Broward County Property Appraiser), BCPA parcels, county Land Use Plan, city zoning layers, FEMA flood', roll:'Broward County Property Appraiser roll (via Florida DOR NAL)',
+      // BCPA record page keyed by the 12-digit folio
+      paUrl:f=>`https://bcpa.net/RecInfo.asp?URL_Folio=${String(f).replace(/\D/g,'')}`,
+      auctionHost:'https://www.broward.realforeclose.com', searchHint:'Search an address, owner name or folio number' }
+    // 'palm-beach': {...}   (add when its packs exist)
   };
   const DEF = 'miami-dade';
   let id = null;

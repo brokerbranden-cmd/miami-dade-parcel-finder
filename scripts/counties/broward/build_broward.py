@@ -206,7 +206,7 @@ ap = os.path.join(RAWB, 'auctions.json')
 if os.path.exists(ap):
     A = json.load(open(ap)); auc_stats = {'pulled': A.get('pulled'), 'items': len(A['items'])}
     for it in A['items']:
-        if it.get('status', '').lower().startswith('cancel'): continue
+        if it.get('status', '').lower() != 'scheduled': continue   # only future sales (closed / cancelled are history)
         i = folio_ix.get(re.sub(r'\D', '', it.get('folio', '')))
         if i is None: auc_stats['unmatched'] = auc_stats.get('unmatched', 0) + 1; continue
         t = f"{it['date']} {('Tax deed' if it.get('src') == 'taxdeed' else 'Foreclosure')} sale" + (f", case {it['case']}" if it.get('case') else '') + (f", opening bid {it['opening_bid']}" if it.get('opening_bid') else '') + (f", judgment {it['judgment']}" if it.get('judgment') else '') + f" ({it.get('status', '')})"

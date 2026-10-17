@@ -85,7 +85,7 @@ with sync_playwright() as pw:
     ok('on' in (pg.query_selector(f'#cards .card[data-folio="{f0}"] [data-sendtag="cc"]').get_attribute('class') or ''), 'tagging from the ⋯ menu works')
     if not pg.query_selector(f'#cards .card[data-folio="{f0}"] [data-sendtag="cc"]').is_visible(): pg.click(f'#cards .card[data-folio="{f0}"] .cmore'); pg.wait_for_timeout(200)  # tagging re-renders the card, which may close ⋯
     pg.query_selector(f'#cards .card[data-folio="{f0}"] [data-sendtag="cc"]').click(); pg.wait_for_timeout(300)
-    h = pg.evaluate("Math.round(document.querySelector('#cards .card').getBoundingClientRect().height)"); ok(h < 470, f'compact card height {h}px (was 540)')
+    h = pg.evaluate("Math.round(document.querySelector('#cards .card').getBoundingClientRect().height)"); ok(h < 520, f'compact card height {h}px (was 540; includes the Skip trace line)')
     pg.screenshot(path=f'{SHOTS}after_{TAG}_cards_compact.png')
     pg.click('#detailBtn'); pg.wait_for_timeout(300)
     dv = pg.evaluate("[document.body.className, getComputedStyle(document.querySelector('#cards .card .sendtools')).display, document.querySelector('#detailBtn').textContent]")

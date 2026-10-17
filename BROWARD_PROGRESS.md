@@ -29,3 +29,8 @@ Started 2026-10-17. Raw inputs: /workspace/raw/broward/. Scripts: scripts/counti
 - Auctions (RealAuction): 129 foreclosure + 56 tax-deed parcels matched (RealAuction drops the letters from condo folios; matched by digits then address+unit).
 - NOT public: tax collector delinquent / certificates (Cloudflare), Clerk lis pendens / probate, code violations, permits, unsafe structures -> drawer says so, drafts 05/06 written.
 - e2e_broward desktop passes (2 expectation tweaks); regression runner /workspace/tmp/full_bw.sh running.
+
+## 16:30 PHASE 1 PUSHED (2cc9612) + LIVE VERIFIED
+- Regression runner all PASS: e2e_broward, monroe, export, sendmark, deterrents, skiptrace, scenarios, saved (desktop+mobile), county, unit_skiptrace.
+- Live: e2e_broward desktop PASS, e2e_county PASS on the Pages site.
+- MCeSearch (Monroe): reachable again but connection-resets after ~25 monthly windows (resumed to 2000-01); a backoff loop (/workspace/tmp/mce_loop.sh) retries every 5 min; Monroe pack NOT rebuilt with the partial pull. Draft 03 stays the route for full permits/code history.

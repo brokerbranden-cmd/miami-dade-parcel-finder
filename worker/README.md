@@ -15,6 +15,8 @@ Live URL: `https://parcel-skiptrace.brokerbranden.workers.dev` (Cloudflare accou
 | `DAILY_CAP` | variable | Default `500` records per New York day, counted across all callers. Raise it in Cloudflare (Workers > parcel-skiptrace > Settings > Variables) when you need more |
 | `LIMITER` | Durable Object binding | Counters only (daily usage, per IP request times, failed-code times). No personal data is stored or logged |
 
+Troubleshooting: an upstream failure returns `upstreamStatus` (and BatchData's short message, e.g. `Invalid token.`) next to the error code, so a wrong or expired `BATCHDATA_API_KEY` secret shows up as `provider_auth` / 401. Fix it with `npx wrangler secret put BATCHDATA_API_KEY` (or the dashboard). The key is never returned or logged.
+
 Change the access code: Cloudflare dashboard > Workers & Pages > parcel-skiptrace > Settings > Variables and Secrets > `ACCESS_CODE` > Edit. Devices then get "access code not accepted" and ask again.
 
 ## API

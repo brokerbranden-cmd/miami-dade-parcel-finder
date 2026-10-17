@@ -139,16 +139,19 @@ async function handle(req, env, ctx, fetchImpl) {
   if (sendIdx.length) {
     const rsv = await limiter(env, { op: 'reserve', day, n: sendIdx.length, cap: c.cap });
     if (!rsv.ok) return json({ error: 'daily_cap', dailyCap: c.cap, remainingToday: rsv.remaining }, 429, cors);
-    let up = null, failure = '';
+    let up = null, failure = '', upStatus = 0, upMsg = '';
     const ac = new AbortController(), timer = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT);
     try {
       const r = await fetchImpl(BD_URL, { method: 'POST', signal: ac.signal, headers: { 'Authorization': 'Bearer ' + env.BATCHDATA_API_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ requests: sendIdx.map((i, k) => toRequest(items[i], k)), options: { includeTCPABlacklistedPhones: true, prioritizeMobilePhones: true } }) });
+      upStatus = r.status;
+      if (!r.ok) { try { const eb = await r.json(); upMsg = S(eb && eb.status && eb.status.message, 120); } catch (e) { /* not JSON */ } }
+      if (upMsg && env.BATCHDATA_API_KEY && upMsg.includes(env.BATCHDATA_API_KEY)) upMsg = '';
       if (r.status === 401 || r.status === 403) failure = 'provider_auth'; else if (r.status === 429) failure = 'provider_rate_limited'; else if (r.status === 402) failure = 'provider_payment'; else if (!r.ok) failure = 'provider_error';
       else { try { up = await r.json(); } catch (e) { failure = 'provider_bad_response'; } }
     } catch (e) { failure = e && e.name === 'AbortError' ? 'provider_timeout' : 'provider_unreachable'; }
     clearTimeout(timer);
-    if (failure) { await limiter(env, { op: 'refund', day, n: sendIdx.length }); return json({ error: failure, ...(await usage()) }, failure === 'provider_rate_limited' ? 429 : 502, cors); }
+    if (failure) { await limiter(env, { op: 'refund', day, n: sendIdx.length }); return json({ error: failure, ...(upStatus ? { upstreamStatus: upStatus } : {}), ...(upMsg ? { upstreamMessage: upMsg } : {}), ...(await usage()) }, failure === 'provider_rate_limited' ? 429 : 502, cors); }
     const parsed = parseUpstream(up, sendIdx);
     sendIdx.forEach((i, k) => { Object.assign(results[i], parsed[k] || { status: 'error', error: 'no_result' }); });
     // billed by BatchData = matched properties with a person; keep the daily cap close to that: refund everything else

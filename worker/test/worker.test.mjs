@@ -94,7 +94,7 @@ await t('rate limit per IP', async () => {
 await t('upstream failures: 401/429/500/non-json/network -> mapped error, reservation refunded, no key leak', async () => {
   for (const [st, code] of [[401, 'provider_auth'], [403, 'provider_auth'], [429, 'provider_rate_limited'], [500, 'provider_error'], [402, 'provider_payment']]) {
     const { env } = mkEnv(); const r = await run(req('POST', '/skiptrace', { body: { items: [item('1')] } }), env, mkFetch(() => ({ message: 'secret ' + FAKEKEY }), st));
-    assert.equal(r.j.error, code); assert.equal(r.j.usedToday, 0); assert.ok(!JSON.stringify(r.j).includes(FAKEKEY)); }
+    assert.equal(r.j.error, code); assert.equal(r.j.upstreamStatus, st); assert.equal(r.j.usedToday, 0); assert.ok(!JSON.stringify(r.j).includes(FAKEKEY)); }
   const { env } = mkEnv(); let r = await run(req('POST', '/skiptrace', { body: { items: [item('1')] } }), env, async () => new Response('<html>', { status: 200 })); assert.equal(r.j.error, 'provider_bad_response');
   r = await run(req('POST', '/skiptrace', { body: { items: [item('1')] } }), env, async () => { throw new Error('boom ' + FAKEKEY); }); assert.equal(r.j.error, 'provider_unreachable'); assert.ok(!JSON.stringify(r.j).includes(FAKEKEY)); assert.equal(r.j.usedToday, 0);
 });

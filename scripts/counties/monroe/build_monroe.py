@@ -239,3 +239,6 @@ json.dump({'built': dt.date.today().isoformat(), 'source': 'Monroe County LDC / 
            'fields': ['upa', 'stories', 'min_lot_sf', 'lot_cov', 'far', 'height_ft', 'zone_type', 'planned_dev', 'source'], 'counts': {'codes': len(zrules)}, 'rules': zrules}, open(os.path.join(OUT, 'zoning-rules.json'), 'w'), separators=(',', ':'))
 print('meta', n, 'est', int(est.sum()), 'oos', int(oos.sum()), 'absentee', int(absz.sum()), 'homestead', int(homestead.sum()), 'teardown-ish', int(tear.sum()),
       'held20', int((yrs >= 20).sum()), 'vacant lots', int(sum(1 for s in lu_s if 'VACANT' in s)), 'owners', owner_stats)
+# sale-qualification bits (relative transfer / life estate) are added as a small column to the packs just built
+import subprocess, sys as _sys
+subprocess.run([_sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add_salex.py'), OUT], check=True)

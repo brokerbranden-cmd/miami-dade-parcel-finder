@@ -3,15 +3,16 @@
    strong = basic AND (lot is not under the zone minimum, when that toggle is on) AND zoning allows
             min_unit_multiple x the existing units (density), else min_sqft_multiple x the building (FAR or
             lot coverage x stories), else min_story_multiple x the stories.
+   Companies / organizations that bought within the last `exclude_corp_years` years (default 3, 0 = off) are left out: a recent corporate buyer is usually mid-project.
    Zone record z = {upa, stories, min_lot_sf, lot_cov, far, sf (1 single-family zone), pd (planned dev)}; null = unknown. */
 (function (root) {
   'use strict';
   const SQFT_AC = 43560;
-  const DEFAULT_RULES = Object.freeze({ min_land_share: 0.80, max_year_built: 1969, min_unit_multiple: 3, min_sqft_multiple: 3, min_story_multiple: 3, lot_split_factor: 2, enforce_min_lot: true });
+  const DEFAULT_RULES = Object.freeze({ min_land_share: 0.80, max_year_built: 1969, min_unit_multiple: 3, min_sqft_multiple: 3, min_story_multiple: 3, lot_split_factor: 2, enforce_min_lot: true, exclude_corp_years: 3 });
   const pos = x => x != null && x > 0;
   const r1 = x => Math.round(x * 10) / 10;
   const isTarget = code => code != null && ((code >= 100 && code < 200) || (code >= 800 && code < 900));
-  // p = {code, land, total, yb, lot, units, stories, bldg}
+  // p = {code, land, total, yb, lot, units, stories, bldg, corpHeld (years since a company / organization owner bought; null / undefined when not a company or unknown)}
   function upside(p, z) {
     z = z || {};
     const eu = Math.max(p.units || 0, 1), es = Math.max(p.stories || 0, 1);
@@ -34,6 +35,7 @@
     else if (p.land > p.total) reasons.push('land value exceeds total value');
     else if (p.land / p.total < rules.min_land_share) reasons.push(`land is ${Math.round(p.land / p.total * 100)}% of value, under ${Math.round(rules.min_land_share * 100)}%`);
     if (!(p.yb > 0 && p.yb <= rules.max_year_built)) reasons.push(`year built ${p.yb || 'unknown'} is after ${rules.max_year_built}`);
+    if (rules.exclude_corp_years > 0 && p.corpHeld != null && p.corpHeld < rules.exclude_corp_years) reasons.push(`owned by a company that bought ${r1(p.corpHeld)} years ago (rule skips companies that bought in the last ${rules.exclude_corp_years} years)`);
     const up = upside(p, z), basic = reasons.length === 0;
     let strong = false;
     if (basic) {
@@ -47,8 +49,10 @@
     return Object.assign({ basic, strong, tier: strong ? 2 : basic ? 1 : 0, reasons, split }, up);
   }
   // fast path: um/qm/sm NaN = unknown, below 0/1. Must agree with evaluate().
-  function tierFast(code, land, total, yb, um, qm, sm, below, r) {
+  // corpHeld: years since a company owner bought (Infinity / undefined = not a company or unknown)
+  function tierFast(code, land, total, yb, um, qm, sm, below, r, corpHeld) {
     if (!isTarget(code)) return 0;
+    if (r.exclude_corp_years > 0 && corpHeld < r.exclude_corp_years) return 0;
     if (!(total > 0) || land > total || land / total < r.min_land_share) return 0;
     if (!(yb > 0 && yb <= r.max_year_built)) return 0;
     if (r.enforce_min_lot && below) return 1;

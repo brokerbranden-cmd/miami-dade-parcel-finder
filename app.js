@@ -50,6 +50,13 @@ const OWNER_KINDS = [['all','All owners'],['person','Individuals'],['corp','Comp
 const OWNER_ROWS = [
   ['homestead','Owner lives there (homestead)'],['oos','Owner mails from out of state'],['absz',window.PFCounty&&PFCounty.id==='monroe'?'Absentee: owner mails outside the Keys':'Owner mails to a different ZIP'],
   ['corp','Owned by a company or organization'],['trust','Owned by a trust'],['estate','Estate or heirs'],['senior','Senior exemption']];
+/* transfer / owner-situation filters (derived per pack, see fxRel / fxLife): relative transfer (family sale in the last 3 years), life estate owner, death recorded.
+   Miami-Dade: relative = unqualified sale in the last 3 years whose grantor shares a surname with a different owner (roll grantor names); death = Clerk death certificate / probate decedent match (distress layer).
+   Monroe: relative = FDOR sale code 30 (affiliated parties) on the latest sale (pack column sx); no Clerk death data, so the death row is hidden there (the 'Estate or heirs' owner row still reads the roll names). */
+const FX_ROWS=[['fam','Relative transfer in the last 3 years'],['famoos','Relative transfer + owner mails from out of state'],['life','Life estate owner'],['death','Death recorded (owner deceased)']];
+const FX_YEARS=3, LIFE_RE=/\bLIFE\s+(EST(ATE)?|TENANT|TENANCY)\b|\bL\/E\b|\bLE\b(?=\s*(\||&|$))/;
+const fxAvail=k=>k==='death'?HAS('distress'):true;
+const fxTri=(v,on)=>on==='yes'?!!v:on==='no'?!v:true;
 const dec = new TextDecoder();
 
 /* plain-language categories */
@@ -108,7 +115,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { mr:{rate:new Set(),tier:new Set(),rogo:new Set(),sig:new Set(),avoid:new Set(),zt:new Set()}, cont:false, hideSent:false, hasPhone:false, traced:'', cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { mr:{rate:new Set(),tier:new Set(),rogo:new Set(),sig:new Set(),avoid:new Set(),zt:new Set()}, cont:false, hideSent:false, hasPhone:false, traced:'', cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, fx:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
 /* teardown rule, zone rules (data/zoning-rules.json), construction + adverse possession (data/extras.json.gz) */
@@ -117,8 +124,8 @@ let ZR=null, ZREC=null, LU_CODE=null, EX=null, CNMAP=null, APSET=null;
 const CN_CATS=[[1,'Concrete block (CBS)'],[2,'Wood frame'],[3,'Other masonry / brick'],[4,'Steel / reinforced concrete'],[5,'Other'],[0,'Unknown']];
 const CN_LABEL=Object.fromEntries(CN_CATS);
 const LOTZ=[['split','Lot could be split'],['minok','Lot meets zone minimum'],['below','Lot under zone minimum']];
-const RULE_IDS=[['td_land','min_land_share',100],['td_yb','max_year_built',1],['td_um','min_unit_multiple',1],['td_qm','min_sqft_multiple',1],['td_sm','min_story_multiple',1],['td_split','lot_split_factor',1]];
-const RULE_KEYS=['min_land_share','max_year_built','min_unit_multiple','min_sqft_multiple','min_story_multiple','lot_split_factor','enforce_min_lot'];
+const RULE_IDS=[['td_corp','exclude_corp_years',1],['td_land','min_land_share',100],['td_yb','max_year_built',1],['td_um','min_unit_multiple',1],['td_qm','min_sqft_multiple',1],['td_sm','min_story_multiple',1],['td_split','lot_split_factor',1]];
+const RULE_KEYS=['min_land_share','max_year_built','min_unit_multiple','min_sqft_multiple','min_story_multiple','lot_split_factor','enforce_min_lot','exclude_corp_years'];
 const parseAmt=v=>{ v=String(v==null?'':v).trim().toLowerCase().replace(/[$,\s]/g,''); if(!v) return null; const m=/^(-?\d*\.?\d+)([km]?)$/.exec(v); if(!m) return null; let x=parseFloat(m[1]); if(m[2]==='k') x*=1e3; if(m[2]==='m') x*=1e6; return isFinite(x)?Math.round(x*100)/100:null; };
 const fmtAmt=v=>v==null||v===''?'':v>=1e6&&v%1e4===0?(v/1e6)+'m':v>=1e3&&v%1e3===0?(v/1e3)+'k':String(v);
 const MONEY_IDS=new Set(['mvMin','mvMax','spMin','spMax']);
@@ -147,12 +154,26 @@ function prepPack(p){
 }
 function tierPack(p){
   if(!p||!p.td) return; const r=S.rules, key=JSON.stringify(r); if(p.td.key===key) return; const t=p.td, c=p.c, f=r.lot_split_factor;
-  for(let i=0;i<p.n;i++){ t.tier[i]=TD.tierFast(LU_CODE[c.landuse[i]],c.land[i],c.mkt[i],c.yb[i],t.um[i],t.qm[i],t.sm[i],t.below[i]===1,r);
+  for(let i=0;i<p.n;i++){ t.tier[i]=TD.tierFast(LU_CODE[c.landuse[i]],c.land[i],c.mkt[i],c.yb[i],t.um[i],t.qm[i],t.sm[i],t.below[i]===1,r,(c.flags[i]&8)&&c.sd1[i]?(today-c.sd1[i])/365.25:Infinity);
     const mn=t.zmin[i]; t.split[i]=(mn>0&&t.sfz[i]>=0)?((t.sfz[i]===1&&c.lot[i]>=f*mn)?1:0):-1; }
   t.key=key;
 }
+/* relative transfer / life estate derived columns (cached per pack) */
+const FX_STOP=new Set(['JR','SR','II','III','IV','LE','REM','ETAL','ETUX','TR','TRS','TRUSTEE','EST','ESTATE','OF','THE','AND','DEC','DECD','DECEASED','JTRS','HEIRS','UX','VIR','ET','AL','W','H']);
+function fxPersons(s){ const out=[]; for(const seg of String(s||'').split(/\s*\|\s*|\s*&\s*/)){ const t=seg.toUpperCase().replace(/[^A-Z ]+/g,' ').split(/\s+/).filter(Boolean); while(t.length&&FX_STOP.has(t[t.length-1])) t.pop(); while(t.length&&FX_STOP.has(t[0])) t.shift(); if(t.length<2) continue; out.push({k:t[0]+' '+t[t.length-1],sur:t[t.length-1]}); } return out; }
+function fxRel(p){
+  if(p.fxRel) return p.fxRel; const c=p.c, n=p.n, out=new Uint8Array(n), lim=today-Math.round(FX_YEARS*365.25);
+  if(c.sx){ for(let i=0;i<n;i++) if((c.sx[i]&1) && c.sd1[i]>=lim && !(c.flags[i]&(8|16|32))) out[i]=1; return p.fxRel=out; }   // Monroe: FDOR sale code 30
+  if(!p.s.grantor){ if(p.idx!=null && !p.fxLoading){ p.fxLoading=true; loadDetail(p.idx).then(()=>{ p.fxLoading=false; schedule(0); }); toast('Loading transfer data…'); } return null; }
+  const ow=strCol(p,'owner'), gr=strCol(p,'grantor');
+  for(let i=0;i<n;i++){ if(c.sq1[i]!==2 || c.sd1[i]<lim || (c.flags[i]&(8|16|32))) continue; const g=gr[i]; if(!g) continue;
+    const op=fxPersons(ow[i]); if(!op.length) continue; const sur=new Set(op.map(x=>x.sur)), keys=new Set(op.map(x=>x.k));
+    for(const x of fxPersons(g)) if(sur.has(x.sur) && !keys.has(x.k)){ out[i]=1; break; } }
+  return p.fxRel=out;
+}
+function fxLife(p){ if(p.fxLife) return p.fxLife; const ow=strCol(p,'owner'), out=new Uint8Array(p.n), sx=p.c.sx; for(let i=0;i<p.n;i++) if(LIFE_RE.test(ow[i]) || (sx&&(sx[i]&2))) out[i]=1; return p.fxLife=out; }
 function zoneOf(p,i){ return ZREC?ZREC[p.c.mz[i]]:null; }
-function tdEval(p,i){ const c=p.c; return TD.evaluate({code:LU_CODE[c.landuse[i]],land:c.land[i],total:c.mkt[i],yb:c.yb[i],lot:c.lot[i],units:c.units[i],stories:c.stories[i],bldg:c.sqft[i]},zoneOf(p,i)||{},S.rules); }
+function tdEval(p,i){ const c=p.c; return TD.evaluate({code:LU_CODE[c.landuse[i]],land:c.land[i],total:c.mkt[i],yb:c.yb[i],lot:c.lot[i],units:c.units[i],stories:c.stories[i],bldg:c.sqft[i],corpHeld:(c.flags[i]&8)&&c.sd1[i]?(today-c.sd1[i])/365.25:null},zoneOf(p,i)||{},S.rules); }
 /* Assemblages (data/asm.json.gz, scripts/build_assemblages.py): adjoining parcels, same zoning, 2+ owners, each with a reason to sell.
    Loaded on demand (filter / preset / a few seconds after start for card badges); outlines (data/asm-polys.json.gz) only for the map. */
 const HIST={last:0,url:null,restoring:false};
@@ -401,7 +422,7 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.cont=S.cont; st.hideSent=S.hideSent; st.hasPhone=S.hasPhone; st.traced=S.traced; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; st.mr=mrRead(); return st;
+  st.cont=S.cont; st.hideSent=S.hideSent; st.hasPhone=S.hasPhone; st.traced=S.traced; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.fx={...S.fx}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; st.mr=mrRead(); return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem(PFC.key('mdpf.v2'),JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
@@ -414,6 +435,7 @@ function applyState(st){
   S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]); S.dsig=new Set((st.dsig||[]).filter(k=>k in DBIT)); $('dsMin').value=DS_STEPS.some(x=>x[0]===+st.dsMin)?String(+st.dsMin):'0';
   S.exZ=new Set((st.exZ||[]).map(v=>D.zoning.indexOf(v)).filter(i=>i>=0)); S.exL=new Set((st.exL||[]).map(v=>D.landuse.indexOf(v)).filter(i=>i>=0));
   S.owner=OWNER_KINDS.some(o=>o[0]===st.owner)?st.owner:'all'; S.flags={}; OWNER_ROWS.forEach(([k])=>{ S.flags[k]=(st.flags&&st.flags[k])||'any'; $('ow_'+k).value=S.flags[k]; });
+  S.fx={}; FX_ROWS.forEach(([k])=>{ const v=st.fx&&st.fx[k]; S.fx[k]=fxAvail(k)&&(v==='yes'||v==='no')?v:'any'; const el=$('fx_'+k); if(el) el.value=S.fx[k]; });
   S.sort=SORT_MAP[st.sort]?st.sort:'lot_d'; $('sortSel').value=S.sort; S.view=['cards','table','map','pipe'].includes(st.view)?st.view:(S.view||'cards');
   $('ogMin').value=[0,2,3,5,10,25].includes(+st.ogMin)?String(+st.ogMin):'0'; $('ogDist').checked=!!st.ogDist; $('ogInst').checked=!!st.ogInst;
   if((st.ogf||'')!==S.ogf){ S.ogf=st.ogf||''; S.og=0; } $('ogRow').hidden=!S.ogf;
@@ -465,10 +487,12 @@ function run(){
   const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0; const outSet=outFolios(), phoneSet=S.hasPhone?SKS.phoneSet():null, trSet=S.traced?SKS.tracedSet():null, cSet=S.cont||S.hideSent?contSet():null, sentAny=S.hideSent?new Set(Object.keys(SEND.sent).filter(wasSent)):null; const cmMin=S.cm, cgOn=S.cgas, ceMask=S.cent==='dis'?4:S.cent?6:0, pfOn=S.pf, pbMask=S.pb==='h'?2:S.pb?6:0; let pfN=0, pbN=0;
   const asmOn=S.asm&&!!ASM, asmUp=S.asmUp, asmJ=S.asmGroup&&ASM?ASM.byId.get(S.asmGroup):undefined, asmSeen=asmOn?new Set():null;
   const MRs=HAS('monroe')?mrPrep():null;
+  const fxF=S.fx, wantRel=fxF.fam!=='any'||fxF.famoos!=='any', wantLife=fxF.life!=='any', wantDeath=fxF.death!=='any'&&HAS('distress'), fxOn=wantRel||wantLife||wantDeath, DCB=1<<DBIT.DC;
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
     prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), SGa=(sigIndexPack(p),p.sg||new Uint8Array(p.n)), CMa=(cmIndexPack(p),p.cm||new Uint8Array(p.n)), CXa=p.cx||new Uint8Array(p.n), FO=sendSet||outSet||cSet||phoneSet||trSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null;
+    let REL=null, LIF=null; if(wantRel){ REL=fxRel(p); if(!REL) continue; } if(wantLife) LIF=fxLife(p);
     const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n), PG=c.pcs||new Uint16Array(n);
     if(bb && !gl) continue;
     for(let i=0;i<n;i++){
@@ -502,6 +526,7 @@ function run(){
       if(st.spMin!=null && c.sale1[i]<st.spMin) continue; if(st.spMax!=null && c.sale1[i]>st.spMax) continue;
       if(st.qualOnly && c.sq1[i]!==1) continue;
       const fl=c.flags[i]; if((fl&fMust)!==fMust || (fl&fNot)) continue;
+      if(fxOn){ const rel=REL?REL[i]:0; if(wantRel && (!fxTri(rel,fxF.fam) || !fxTri(rel&&(fl&2),fxF.famoos))) continue; if(wantLife && !fxTri(LIF[i],fxF.life)) continue; if(wantDeath && !fxTri(c.dsig[i]&DCB,fxF.death)) continue; }
       if(dsMin && c.dscore[i]<dsMin) continue;
       const sg=c.dsig[i], fsg=sigMask&&!(sg&sigMask)?1:0;
       const li=c.landuse[i], zi=c.zoning[i];
@@ -1087,6 +1112,7 @@ function writeHash(st){
     if(st.dsig&&st.dsig.length) h.set('sig',st.dsig.join(',')); if(st.dsMin) h.set('ds',st.dsMin);
     if(st.vsig&&st.vsig.length) h.set('vsig',st.vsig.join(',')); if(st.pcs&&st.pcs.length) h.set('pcs',st.pcs.join(',')); if(st.vsMin) h.set('vs',st.vsMin); if(st.vsMine) h.set('vme','1');
     OWNER_ROWS.forEach(([k])=>{ const v=st.flags[k]; if(v==='yes'||v==='no') h.set('o_'+k,v); });
+    FX_ROWS.forEach(([k])=>{ const v=st.fx&&st.fx[k]; if(v==='yes'||v==='no') h.set('x_'+k,v); });
     HASH_NUM.forEach(id=>{ if(st[id]!=null && st[id]!=='' && !(id.startsWith('mv')&&!st[id])) h.set(id,st[id]); });
     if(!st.hideGov) h.set('gov','1'); if(st.noBldg) h.set('land','1'); if(st.qualOnly) h.set('mkt','1');
     if(st.sort&&st.sort!=='lot_d') h.set('sort',st.sort); if(st.view&&st.view!=='cards') h.set('view',st.view);
@@ -1111,6 +1137,7 @@ function parseHash(){
   st.q=h.get('q')||''; st.qScope=h.get('in')||'ao'; st.city=h.get('city')||''; st.zips=h.get('zip')||''; st.cra=h.get('cra')||''; st.mzq=h.get('code')||'';
   st.types=list('type'); st.zones=list('zone'); st.exZ=byCode(D.zoning,list('pz')); st.exL=byCode(D.landuse,list('lu'));
   st.dsig=list('sig'); st.dsMin=+h.get('ds')||0; st.vsig=list('vsig'); st.pcs=list('pcs'); st.vsMin=+h.get('vs')||0; st.vsMine=h.get('vme')==='1';
+  st.fx={}; FX_ROWS.forEach(([k])=>{ const v=h.get('x_'+k); if(v==='yes'||v==='no') st.fx[k]=v; });
   st.owner=h.get('owner')||'all'; st.flags={}; OWNER_ROWS.forEach(([k])=>{ const v=h.get('o_'+k); if(v==='yes'||v==='no') st.flags[k]=v; });
   HASH_NUM.forEach(id=>{ const v=h.get(id); st[id]=(v==null||v==='')?null:(isFinite(+v)?+v:null); });
   st.hideGov=h.get('gov')!=='1'; st.noBldg=h.get('land')==='1'; st.qualOnly=h.get('mkt')==='1';
@@ -1118,7 +1145,7 @@ function parseHash(){
   st.ogf=(h.get('ogf')||'').replace(/\D/g,''); st.ogMin=+h.get('ogn')||0; st.ogDist=h.get('ogd')==='1'; st.ogInst=h.get('ogi')==='1';
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
   st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.due=h.get('due')==='1'; st.stage=h.get('stage')||''; st.pf=h.get('pf')==='1'; st.cm=+h.get('cm')||0; st.cont=h.get('cont')==='1'; st.hideSent=h.get('hs')==='1'; st.hasPhone=h.get('ph')==='1'; st.traced=['y','n'].includes(h.get('trc'))?h.get('trc'):''; st.cgas=h.get('cgas')==='1'; st.cent=h.get('cent')||''; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
-  const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length){ st.rules={}; RULE_KEYS.forEach((k,j)=>st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]); }
+  const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length||tr.length===RULE_KEYS.length-1){ st.rules={}; RULE_KEYS.forEach((k,j)=>{ if(j>=tr.length) st.rules[k]=TD.DEFAULT_RULES[k]; else st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]; }); }
   const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null; mrHashRead(h,st,list);
   return st;
 }
@@ -1351,7 +1378,7 @@ async function openDeep(f){
 /* commercial presets by Property Appraiser DOR land use family (see CP_FAM) */
 const LUF=fam=>D.landuse.filter((v,i)=>{ const c=LU_CODE[i]; return cpCom(c)&&CP_FAM(c)===fam; });
 /* ideas that need a data layer the active county may not have (counties.js layers) */
-const IDEA_NEED=[[/Buildable lots|ROGO|Buildable teardowns/,'monroe'],[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/multifamily land|Strong teardowns|could be split/,'zoning'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm']];
+const IDEA_NEED=[[/Buildable lots|ROGO|Buildable teardowns/,'monroe'],[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/Strong teardowns|could be split/,'zoning'],[/Death recorded/,'distress'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm']];
 const ideaOk=l=>IDEA_NEED.every(([re,ly])=>!re.test(l)||HAS(ly));
 const IDEAS=[
   ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
@@ -1361,13 +1388,17 @@ const IDEAS=[
   ['🏚 Likely vacant / neglected', ()=>({...BLANK(), vsMin:40, sort:'vs_d'})],
   ['🏘 Multi-property motivated owners', ()=>({...BLANK(), ogMin:2, ogDist:true, sort:'ogd_d'})],
   ['Owners with 5+ properties', ()=>({...BLANK(), ogMin:5, sort:'og_d'})],
-  ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:5000, lotMax:87120, sort:'lot_a'})],
-  ['Houses on multifamily land', ()=>({...BLANK(), types:['sf'], zones:['mf'], sort:'lot_d'})],
+  ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:2500, lotMax:21780, sort:'lot_a'})],
+  ['Houses on multifamily land', ()=>HAS('monroe')?({...BLANK(), types:['sf'], mr:{zt:['mf']}, sort:'lot_d'}):({...BLANK(), types:['sf'], zones:['mf'], sort:'lot_d'})],
   ['Teardowns', ()=>({...BLANK(), tier:'basic', sort:'lp_d'})],
   ['Out-of-state owners, 15+ years', ()=>({...BLANK(), types:['sf','th','mf29','vacant'], hdMin:15, flags:{oos:'yes',homestead:'no'}, sort:'held_d'})],
   ['Estates and heirs', ()=>({...BLANK(), flags:{estate:'yes'}, sort:'held_d'})],
   ['Small multifamily (2–9 units)', ()=>({...BLANK(), types:['mf29'], flags:{homestead:'no'}, sort:'un_d'})],
   ['Big lots, 1 acre+', ()=>({...BLANK(), types:['sf','vacant'], lotMin:43560, sort:'lot_a'})],
+  ['Family transfers (last 3 yrs)', ()=>({...BLANK(), types:['sf','th','mf29','vacant'], fx:{fam:'yes'}, sort:'sold_d'})],
+  ['Family transfers, owner out of state', ()=>({...BLANK(), types:['sf','th','mf29','vacant'], fx:{famoos:'yes'}, sort:'sold_d'})],
+  ['Life estate owners', ()=>({...BLANK(), fx:{life:'yes'}, sort:'held_d'})],
+  ['Death recorded (owner deceased)', ()=>({...BLANK(), fx:{death:'yes'}, sort:'held_d'})],
   ['Tired landlords (absentee, 20+ yrs)', ()=>({...BLANK(), types:['sf','th','mf29'], hdMin:20, flags:{homestead:'no',absz:'yes'}, sort:'held_d'})],
   ['Lots owned from far away', ()=>({...BLANK(), types:['vacant'], lotMin:4000, flags:{absz:'yes'}, sort:'ppl_a'})],
   ['💥 Strong teardowns', ()=>({...BLANK(), tier:'strong', sort:'um_d'})],
@@ -1629,6 +1660,9 @@ async function boot(){
     $('sortSel').innerHTML=SORTS.filter(s=>s[0]!=='bld_a'||HAS('monroe')).map(([k,l])=>`<option value="${k}">Sort: ${l}</option>`).join('');
     $('ownerGrid').innerHTML=OWNER_ROWS.map(([k,l])=>`<label for="ow_${k}">${l}</label><select id="ow_${k}"><option value="any">Either</option><option value="yes">Only</option><option value="no">Hide</option></select>`).join('');
     OWNER_ROWS.forEach(([k])=>$('ow_'+k).addEventListener('change',e=>{ S.flags[k]=e.target.value; clearIdea(); schedule(0); }));
+    $('ownerGrid').insertAdjacentHTML('beforeend',FX_ROWS.filter(([k])=>fxAvail(k)).map(([k,l])=>`<label for="fx_${k}">${l}</label><select id="fx_${k}" data-fx="${k}"><option value="any">Either</option><option value="yes">Only</option><option value="no">Hide</option></select>`).join(''));
+    FX_ROWS.forEach(([k])=>{ const el=$('fx_'+k); if(el) el.addEventListener('change',e=>{ S.fx[k]=e.target.value; clearIdea(); schedule(0); }); S.fx[k]=S.fx[k]||'any'; });
+    $('ownerGrid').insertAdjacentHTML('afterend',`<div class="note fxnote" id="fxNote">${HAS('monroe')?'Relative transfer = the latest sale is coded by the Florida DOR as between affiliated parties (family, corporate, business) within the last 3 years, owner is an individual. Life estate reads the owner names on the roll (LE, life estate, life tenant). No Clerk death records for Monroe yet, so there is no death filter here (use Estate or heirs above).':'Relative transfer = an unqualified sale in the last 3 years where the seller shares a surname with a different owner (roll grantor names), owner is an individual. Life estate reads the owner names on the roll (LE, life estate, life tenant). Death recorded = Clerk death certificate or probate decedent matched to the owner.'} Verify before acting.</div>`);
     await loadZoneRules();
     if(ZR) $('tdSrc').textContent=`Zone rules for ${fmt.format(ZR.counts.matched)} of ${fmt.format(ZR.counts.codes)} city / county codes (min lot, density, FAR, stories).`;
     if(EX&&EX.cn.meta) $('cnSrc').textContent=`${fmt.format(EX.cn.meta.folios||0)} folios have a recorded category (${EX.cn.meta.source||''}).`;

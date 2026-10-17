@@ -131,6 +131,7 @@
       <div class="grp-h"><h2>Teardown</h2><span class="hint">Target use (single family or 2–9 units), land is most of the value, old building. <b>Strong</b> = the lot meets the zone minimum and zoning allows 3× the units (or 3× the floor area by FAR, or 3× the stories). Every number below is yours to change. <span id="tdSrc"></span></span><button class="clr" type="button" id="clrTd">Clear</button></div>
       <div class="seg tier" role="group" aria-label="Teardown tier" id="tierSeg"><button type="button" data-tier="any" class="on">Any</button><button type="button" data-tier="basic">Teardown (basic) <span class="n" id="tcBasic">–</span></button><button type="button" data-tier="strong">Strong teardown <span class="n" id="tcStrong">–</span></button></div>
       <div class="tdrules" id="tdRules">
+        <label>Skip companies that bought <span class="u"><input type="text" inputmode="numeric" id="td_corp" aria-label="Skip companies that bought within this many years"> years or less ago (0 = off)</span></label>
         <label>Min land share <span class="u"><input type="text" inputmode="decimal" id="td_land" aria-label="Minimum land share percent"> % of total value</span></label>
         <label>Max year built <span class="u"><input type="text" inputmode="numeric" id="td_yb" aria-label="Maximum year built"> built in or before</span></label>
         <label>Min unit multiple <span class="u"><input type="text" inputmode="decimal" id="td_um" aria-label="Minimum unit multiple"> × existing units</span></label>

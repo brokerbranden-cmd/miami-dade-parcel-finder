@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Broward County phase-1 fetch #1: parcel centroids (lon/lat) from the FL statewide cadastral (CO_NO=16, FDOR roll geometry).
-The attributes (owners, mailing, values, sales, use codes) come from the FDOR NAL file (fetch_dor.py), which joins on PARCEL_ID (12 digits).
+"""Broward County phase-1 fetch #1: parcel centroids (lon/lat). Source: BCPA's hosted parcel polygons (Broward_County_Parcel_Boundary layer 1, 786,580 polys, fast);
+fallback: FL statewide cadastral CO_NO=16 (slow, set SRC=cad). The attributes (owners, mailing, values, sales, use codes) come from the FDOR NAL file (fetch_dor.py), which joins on PARCEL_ID (12 digits).
 Resume-friendly: chunks of OBJECTIDs are cached in $RAW/broward/cad_chunks/*.jsonl; final merge -> $RAW/broward/centroids.jsonl."""
 import json, os, sys, time, glob, requests
-RAW = os.path.join(os.environ.get('RAW', '/workspace/raw'), 'broward'); CH = os.path.join(RAW, 'cad_chunks'); os.makedirs(CH, exist_ok=True)
-CAD = 'https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0/query'
+RAW = os.path.join(os.environ.get('RAW', '/workspace/raw'), 'broward'); CH = os.path.join(RAW, 'cad_chunks_' + os.environ.get('SRC', 'bcpa')); os.makedirs(CH, exist_ok=True)
+SRC = os.environ.get('SRC', 'bcpa')
+CAD = 'https://services5.arcgis.com/wI5GZmCtnUU8ueya/ArcGIS/rest/services/Broward_County_Parcel_Boundary/FeatureServer/1/query' if SRC == 'bcpa' else 'https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0/query'
+PF = 'PARCELNO' if SRC == 'bcpa' else 'PARCEL_ID'; WH = '1=1' if SRC == 'bcpa' else 'CO_NO=16'
 H = {'User-Agent': 'parcel-finder/1.0 (public data research)'}
 def get(p, tries=6):
     for i in range(tries):
@@ -15,16 +17,16 @@ def get(p, tries=6):
         except Exception as e:
             if i == tries - 1: raise
             print('retry', str(e)[:140], flush=True); time.sleep(5 * (i + 1))
-ids = get({'where': 'CO_NO=16', 'returnIdsOnly': 'true', 'f': 'json'})['objectIds']; ids.sort(); print('ids', len(ids), flush=True)
+ids = get({'where': WH, 'returnIdsOnly': 'true', 'f': 'json'})['objectIds']; ids.sort(); print('ids', len(ids), flush=True)
 PAGE = 2000
 for k in range(0, len(ids), PAGE):
     c = ids[k:k + PAGE]; fn = os.path.join(CH, f'{c[0]}_{c[-1]}.jsonl')
     if os.path.exists(fn): continue
-    j = get({'where': f'OBJECTID>={c[0]} AND OBJECTID<={c[-1]} AND CO_NO=16', 'outFields': 'PARCEL_ID', 'returnGeometry': 'false', 'returnCentroid': 'true', 'outSR': 4326, 'f': 'json'})
+    j = get({'where': f'OBJECTID>={c[0]} AND OBJECTID<={c[-1]}' + ('' if SRC == 'bcpa' else ' AND CO_NO=16'), 'outFields': PF, 'returnGeometry': 'false', 'returnCentroid': 'true', 'outSR': 4326, 'f': 'json'})
     with open(fn + '.tmp', 'w') as fh:
         for f in j['features']:
             ce = f.get('centroid') or {}
-            fh.write(json.dumps([f['attributes']['PARCEL_ID'], round(ce.get('x') or 0, 6), round(ce.get('y') or 0, 6)]) + '\n')
+            fh.write(json.dumps([f['attributes'][PF], round(ce.get('x') or 0, 6), round(ce.get('y') or 0, 6)]) + '\n')
     os.replace(fn + '.tmp', fn); print(k + len(c), '/', len(ids), flush=True); time.sleep(0.3)
 n = 0
 with open(os.path.join(RAW, 'centroids.jsonl.tmp'), 'w') as out:

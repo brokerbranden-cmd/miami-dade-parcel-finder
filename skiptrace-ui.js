@@ -4,12 +4,12 @@
    Not legal advice: DNC / litigator flags come from the provider; flagged numbers get no tap links and stay out of the Text list. */
 (function () {
   'use strict';
-  const SK = window.PFSkip, ST = SK.store, PFC = window.PFCounty;
+  const SK = window.PFSkip, ST = SK.store, PFC = window.PFCounty, API = window.PFSkipApi;
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = new Intl.NumberFormat('en-US'), $ = id => document.getElementById(id);
   const TYPE = { m: 'mobile', l: 'landline', v: 'VoIP', '': '' };
   const DNC_TIP = 'Flagged Do Not Call by your skip trace provider, so there is no tap-to-call / text link and it stays out of the Text list. TCPA caution: this is a reminder, not legal advice.';
-  const LIT_TIP = 'Flagged as a TCPA litigator by your skip trace provider: no tap link, excluded from the Text list. Reminder only, not legal advice.';
+  const LIT_TIP = 'Flagged as a TCPA litigator / TCPA-restricted number by your skip trace provider: no tap link, excluded from the Text list. Reminder only, not legal advice.';
 
   /* ---------- rendering (cards / drawer / table) ---------- */
   function phoneHTML(q) {
@@ -20,11 +20,12 @@
     return `<span class="stph${flagged ? ' flagged' : ''}"><b class="stnum">${SK.fmtPhone(n)}</b>${badges}${call}${text}</span>`;
   }
   const mailto = e => `<a class="stl em" href="mailto:${esc(e)}" title="Email ${esc(e)}">${esc(e)}</a>`;
+  const goBtn = (folio, label) => `<button type="button" class="stgo" data-stgo="${esc(folio)}" title="Look up this owner's phones and emails with BatchData (one record is billed by BatchData only if there is a match)">${label}</button>`;
   function cardLine(folio) {
-    const r = ST.get(folio); if (!r) return '';
-    if (!r.p.length && !r.e.length) return `<div class="line skl"><span class="k">Skip trace</span><span class="v"><span class="stnone">Traced, no phone found</span></span></div>`;
+    const r = ST.get(folio); if (!r) return API ? `<div class="line skgo" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v">${goBtn(folio, 'Skip trace')}</span></div>` : '';
+    if (!r.p.length && !r.e.length) return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Skip trace</span><span class="v"><span class="stnone">Traced, no phone found</span></span></div>`;
     const ph = r.p.slice(0, 2).map(phoneHTML).join(''), more = r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2} more</span>` : '';
-    return `<div class="line skl"><span class="k">Phone</span><span class="v stv">${ph}${more}${r.e[0] ? mailto(r.e[0]) : ''}</span></div>`;
+    return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v stv">${ph}${more}${r.e[0] ? mailto(r.e[0]) : ''}</span></div>`;
   }
   function cellHTML(folio) {
     const r = ST.get(folio); if (!r) return '–'; if (!r.p.length && !r.e.length) return '<span class="stnone">traced · none</span>';
@@ -32,13 +33,13 @@
   }
   function drawerBody(folio) {
     const r = ST.get(folio);
-    if (!r) return `<div class="note">No skip trace results for this property yet. Use <b>Skip trace export</b> in the filters panel, run the file through your provider, then <b>Import results</b>.</div>`;
+    if (!r) return `${API ? `<div class="stdgo">${goBtn(folio, 'Skip trace this owner')}<span class="note" role="status" aria-live="polite" data-stmsg></span></div>` : ''}<div class="note">No skip trace results for this property yet. Press <b>Skip trace this owner</b>, or use <b>Skip trace these</b> / <b>Skip trace export</b> in the filters panel (export, run the file through your provider, then <b>Import results</b>).</div>`;
     const anyDnc = r.p.some(q => q[2] & 3), none = !r.p.length && !r.e.length;
     return `${none ? '<div class="note">Skip traced: the provider found no phone or email.</div>' : ''}
       ${r.p.length ? `<ul class="stlist">${r.p.map(q => `<li>${phoneHTML(q)}</li>`).join('')}</ul>` : ''}
       ${r.e.length ? `<div class="stemails">${r.e.map(mailto).join('')}</div>` : ''}
       ${anyDnc ? '<div class="stwarn" role="note"><b>DNC / litigator flag.</b> Flagged numbers have no tap-to-call or text link and are never put on the Text list. TCPA and state calling/texting rules are your responsibility; this is a reminder, not legal advice.</div>' : ''}
-      <div class="note">${r.n ? 'Provider name: ' + esc(r.n) + ' · ' : ''}Imported ${esc(r.a || '')}${r.s ? ' from ' + esc(r.s) : ''}. <button type="button" class="lnk" data-stdel="${esc(folio)}">Remove this property's skip trace data</button></div>`;
+      <div class="note">${r.n ? 'Provider name: ' + esc(r.n) + ' · ' : ''}${r.s === (API && API.SRC) ? 'Skip traced' : 'Imported'} ${esc(r.a || '')}${r.s ? ' · ' + esc(r.s) : ''}. <button type="button" class="lnk" data-stdel="${esc(folio)}">Remove this property's skip trace data</button></div>`;
   }
   const drawerHTML = folio => `<h3>Phones &amp; email</h3><div class="stdraw" data-stfolio="${esc(folio)}">${drawerBody(folio)}</div>`;
 
@@ -266,9 +267,154 @@
     B.rerender(); refreshPanel();
   }
 
+  /* ---------- one-click skip trace through BatchData (Worker) ---------- */
+  const NOADDR = 'BatchData needs a street number plus a city or zip for the property.';
+  function refreshFolio(folio) {
+    document.querySelectorAll('[data-skfolio]').forEach(el => { if (el.dataset.skfolio === folio) { const h = cardLine(folio); if (h) el.outerHTML = h; } });
+    document.querySelectorAll('.stdraw[data-stfolio]').forEach(el => { if (el.dataset.stfolio === folio) el.innerHTML = drawerBody(folio); });
+  }
+  const plural = (n, a, b) => n === 1 ? a : (b || a + 's');
+  function sumLine(sum) {
+    const ph = sum.phones.size, em = sum.emails.size;
+    if (sum.stopped) return API.messageFor({ code: sum.stopped });
+    if (sum.errors && !sum.matched && !sum.nomatch) return Object.keys(sum.errorCodes).includes('bad_address') ? NOADDR : 'BatchData could not process this one. You were not charged. Try again later.';
+    if (!sum.matched && sum.nomatch) return 'No match: BatchData has no contact data for this owner (no charge).';
+    if (!ph && !em) return 'Matched, but BatchData has no phone or email for this owner.';
+    return `Found ${ph} ${plural(ph, 'phone')}, ${em} ${plural(em, 'email')}${sum.dnc.size ? ` (${sum.dnc.size} flagged DNC / TCPA)` : ''}.`;
+  }
+  // asks for the access code once per device; resolves with the code or '' (cancelled)
+  function askCode(B, why) {
+    return new Promise(resolve => {
+      const body = openModal('Skip trace access code', `
+        <p class="note">${why ? esc(why) + ' ' : ''}Skip tracing runs through BatchData using a secure service, so it needs your <b>access code</b>. Enter it once; it is kept only in this browser on this device.</p>
+        <div class="stopts"><label class="stmax" for="skCode">Access code <input type="password" id="skCode" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Access code" style="min-width:220px"></label></div>
+        <div class="stwarn" id="skCodeMsg" role="alert" hidden></div>
+        <div class="stact"><button type="button" class="btn primary" id="skCodeGo">Save and continue</button><button type="button" class="btn" data-stclose>Cancel</button></div>`);
+      let settled = false; const done = v => { if (!settled) { settled = true; resolve(v); } };
+      const mo = new MutationObserver(() => { if (!document.getElementById('stModal')) { mo.disconnect(); done(''); } }); mo.observe(document.body, { childList: true });
+      const inp = body.querySelector('#skCode'), msg = body.querySelector('#skCodeMsg'), go = body.querySelector('#skCodeGo');
+      const submit = async () => {
+        const v = inp.value.trim(); if (!v) { msg.hidden = false; msg.textContent = 'Enter the access code.'; return; }
+        go.disabled = true; go.textContent = 'Checking…'; msg.hidden = true;
+        try { const st = await API.status(v); API.setCode(v); window.PF_SKAPI_STATUS = st; mo.disconnect(); done(v); closeModal(); }
+        catch (e) { go.disabled = false; go.textContent = 'Save and continue'; msg.hidden = false; msg.textContent = API.messageFor(e); }
+      };
+      go.onclick = submit; inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }); setTimeout(() => inp.focus(), 50);
+    });
+  }
+  const busyFolios = new Set();
+  async function traceOne(B, id, folio, btn) {
+    if (busyFolios.has(folio)) return;
+    let code = API.getCode(); if (!code) { code = await askCode(B, ''); if (!code) return; }
+    busyFolios.add(folio); document.querySelectorAll('[data-stgo]').forEach(b => { if (b.dataset.stgo === folio) { b.disabled = true; b.textContent = 'Skip tracing…'; } });
+    let sum;
+    try {
+      const item = API.buildItem(B.info(id), { order: B.order });
+      if (!API.hasAddress(item)) sum = Object.assign(API.newSummary(), { errors: 1, errorCodes: { bad_address: 1 } });
+      else sum = await API.run([{ id: item.id, folios: [folio], item }], { store: ST, code, chunk: 1 });
+    } catch (e) { console.error(e); sum = Object.assign(API.newSummary(), { stopped: 'network' }); }
+    busyFolios.delete(folio);
+    if (sum.stopped === 'bad_access_code') API.clearCode();
+    const line = sumLine(sum) + (sum.stopped === 'bad_access_code' ? ' Press Skip trace again to enter the code.' : '');
+    window.PF_LAST_SKAPI_ONE = { folio, stopped: sum.stopped, matched: sum.matched, nomatch: sum.nomatch, errors: sum.errors, phones: sum.phones.size, emails: sum.emails.size, dnc: sum.dnc.size };
+    refreshFolio(folio); B.toast(line);
+    if (sum.stopped || (sum.errors && !sum.matched && !sum.nomatch)) document.querySelectorAll('[data-stgo]').forEach(b => { if (b.dataset.stgo === folio) { const m = b.parentElement.querySelector('[data-stmsg]') || b.parentElement.appendChild(Object.assign(document.createElement('span'), { className: 'stgomsg note' })); m.textContent = line; } });
+    refreshPanel();
+  }
+
+  async function apiModal(B) {
+    const ids = B.results(); if (!ids.length) { B.toast('Nothing to skip trace yet.'); return; }
+    let code = API.getCode(); if (!code) { code = await askCode(B, ''); if (!code) return; }
+    const body = openModal('Skip trace these', `<div class="stcounts" id="skaStat" aria-live="polite">Checking your access code…</div>`);
+    let svc; try { svc = await API.status(code); } catch (e) { if (e && e.code === 'bad_access_code') { API.clearCode(); closeModal(); const c2 = await askCode(B, 'The saved access code was not accepted.'); if (c2) return apiModal(B); return; } body.innerHTML = `<div class="stwarn" role="alert">${esc(API.messageFor(e))}</div><div class="stact"><button type="button" class="btn" data-stclose>Close</button></div>`; return; }
+    window.PF_SKAPI_STATUS = svc; const maxPer = Math.min(50, svc.maxPerRequest || 50);
+    body.innerHTML = `
+      <p class="note">Looks up phones and emails for the <b>${fmt.format(ids.length)}</b> ${plural(ids.length, 'property')} that match your filters in ${esc(PFC.cfg.name)} County, through BatchData. Results are saved in this browser for this county (same as importing a CSV).</p>
+      <div class="stopts">
+        <label class="check"><input type="checkbox" id="skaDedupe" checked> One lookup per owner (same owner + mailing address counted once, applied to all of their properties here)</label>
+        <label class="check"><input type="checkbox" id="skaTraced" checked> Skip properties already skip traced</label>
+        <label class="check"><input type="checkbox" id="skaContacted" checked> Skip properties already contacted or marked as sent</label>
+        <label class="stmax">Max records <input type="number" id="skaMax" min="1" step="1" placeholder="all" aria-label="Maximum records"></label>
+      </div>
+      <div class="stcounts" id="skaCounts" aria-live="polite">Preparing…</div>
+      <div class="note" id="skaCost"></div>
+      <div class="stwarn" id="skaWarn" hidden role="alert"></div>
+      <div class="stact" id="skaAct"><button type="button" class="btn primary" id="skaGo" disabled>Skip trace</button><button type="button" class="btn" data-stclose>Cancel</button><button type="button" class="btn ghost" id="skaForget" title="Remove the access code from this browser">Forget access code</button></div>
+      <div id="skaRun" hidden><progress id="skaProg" max="100" value="0" style="width:100%"></progress><div class="stcounts" id="skaProgTxt" aria-live="polite"></div><div class="stact"><button type="button" class="btn" id="skaCancel">Cancel</button></div></div>
+      <div id="skaRep"></div>`;
+    const q = id => body.querySelector('#' + id); let plan = null, token = 0, armed = false, running = false; const cache = new Map();
+    const info = id => { let x = cache.get(id); if (!x) { x = B.info(id); x.gk = null; if (ids.length < 250000) cache.set(id, x); } return x; };
+    async function compute() {
+      if (running) return; const my = ++token; armed = false; q('skaGo').disabled = true; q('skaGo').textContent = 'Skip trace'; q('skaGo').classList.remove('warn'); q('skaWarn').hidden = true; q('skaCounts').textContent = 'Preparing…'; q('skaCost').textContent = '';
+      const dd = q('skaDedupe').checked, exT = q('skaTraced').checked, exC = q('skaContacted').checked, max = +q('skaMax').value || 0;
+      try { await B.ensureDetail(); } catch (e) { q('skaCounts').textContent = 'The property details did not load. Close and try again.'; return; }
+      let cont = 0, tr = 0, noAddr = 0; const groups = new Map(), order = [];
+      for (let j = 0; j < ids.length; j++) {
+        if (my !== token) return; if (j % 20000 === 19999) { q('skaCounts').textContent = `Preparing… ${Math.round(j / ids.length * 100)}%`; await tick(); }
+        const x = info(ids[j]);
+        if (exC && B.contacted(x.folio)) { cont++; continue; } if (exT && ST.has(x.folio)) { tr++; continue; }
+        const k = dd ? (x.gk || (x.gk = SK.ownerGroupKey(x.owner, x.mail, x.addr, { order: B.order, gov: x.gov }))) : x.folio;
+        let g = groups.get(k); if (!g) { const item = API.buildItem(x, { order: B.order }); if (!API.hasAddress(item)) { noAddr++; groups.set(k, { skip: true }); continue; } groups.set(k, g = { x, item, folios: [], id: item.id }); order.push(g); } else if (g.skip) { noAddr++; continue; }
+        g.folios.push(x.folio);
+      }
+      if (my !== token) return;
+      const remaining = svc.remainingToday; let rows = order, total = rows.length; if (max && rows.length > max) rows = rows.slice(0, max);
+      const capped = rows.length > remaining; if (capped) rows = rows.slice(0, Math.max(0, remaining));
+      plan = { rows, total, cont, tr, noAddr }; const props = rows.reduce((a, g) => a + g.folios.length, 0);
+      q('skaCounts').innerHTML = `<b>${fmt.format(rows.length)} ${plural(rows.length, 'lookup')}</b> covering ${fmt.format(props)} ${plural(props, 'property', 'properties')}${(max && total > max) || capped ? ` (first ${fmt.format(rows.length)} of ${fmt.format(total)})` : ''}.` +
+        ((cont || tr || noAddr) ? `<br><span class="note">Left out: ${fmt.format(cont)} already contacted / sent, ${fmt.format(tr)} already skip traced, ${fmt.format(noAddr)} without a usable street address.</span>` : '');
+      q('skaCost').innerHTML = `Estimated cost: <b>check your BatchData pricing</b>. BatchData bills only for matched records, so up to ${fmt.format(rows.length)} billable ${plural(rows.length, 'record')}; no match means no charge. Daily limit on this service: <b id="skaLeft">${fmt.format(remaining)}</b> of ${fmt.format(svc.dailyCap)} left today.`;
+      const w = q('skaWarn'); if (capped) { w.hidden = false; w.innerHTML = `Only ${fmt.format(remaining)} lookups are left today, so the list is cut to the first ${fmt.format(remaining)}. The limit resets at midnight Eastern.`; }
+      q('skaGo').disabled = !rows.length; if (!rows.length) q('skaCounts').innerHTML += '<br>Nothing left to skip trace with these options.';
+      else q('skaGo').textContent = `Skip trace ${fmt.format(rows.length)} ${plural(rows.length, 'owner')}`;
+    }
+    // recompute only when an option really changed (typing a max and then tapping Go fires input + change + click)
+    const sig = () => [q('skaDedupe').checked, q('skaTraced').checked, q('skaContacted').checked, +q('skaMax').value || 0].join('|'); let lastSig = '';
+    const maybe = () => { if (running) return; const g = sig(); if (g !== lastSig) { lastSig = g; compute(); } };
+    body.addEventListener('change', e => { if (e.target.closest('.stopts')) { clearTimeout(maybe.t); maybe(); } }); q('skaMax').addEventListener('input', () => { clearTimeout(maybe.t); maybe.t = setTimeout(maybe, 400); });
+    q('skaForget').onclick = () => { API.clearCode(); B.toast('Access code removed from this browser.'); closeModal(); };
+    let ac = null; q('skaCancel').onclick = () => { if (ac) { ac.abort(); q('skaCancel').disabled = true; q('skaProgTxt').textContent = 'Cancelling after the current batch…'; } };
+    q('skaGo').onclick = async () => {
+      clearTimeout(maybe.t); if (sig() !== lastSig) { maybe(); return; }
+      if (!plan || !plan.rows.length || running) return; const n = plan.rows.length;
+      if (n > 25 && !armed) { armed = true; q('skaGo').textContent = `Yes, skip trace ${fmt.format(n)} (uses BatchData credits)`; q('skaGo').classList.add('warn'); return; }
+      running = true; ac = new AbortController(); q('skaAct').hidden = true; body.querySelector('.stopts').hidden = true; q('skaRun').hidden = false;
+      const prog = (d, t, sm) => { q('skaProg').value = Math.round(d / t * 100); q('skaProgTxt').textContent = `${fmt.format(d)} of ${fmt.format(t)} done · ${fmt.format(sm.phones.size)} phones, ${fmt.format(sm.emails.size)} emails so far`; };
+      q('skaProgTxt').textContent = `0 of ${fmt.format(n)} done`;
+      const groups = plan.rows.map(g => ({ id: g.id, folios: g.folios, item: g.item }));
+      const sum = await API.run(groups, { store: ST, code, chunk: maxPer, signal: ac.signal, onProgress: prog });
+      running = false; if (sum.stopped === 'bad_access_code') API.clearCode();
+      q('skaRun').hidden = true; showReport(sum, n);
+    };
+    function showReport(sum, n) {
+      const ph = sum.phones.size, em = sum.emails.size, tried = sum.matched + sum.nomatch + sum.errors;
+      window.PF_LAST_SKAPI = { requested: n, sent: sum.sent, matched: sum.matched, withContact: sum.withContact, nomatch: sum.nomatch, errors: sum.errors, phones: ph, emails: em, dnc: sum.dnc.size, mobile: sum.mobile, props: sum.props, cancelled: sum.cancelled, stopped: sum.stopped, remaining: sum.remaining };
+      q('skaRep').innerHTML = `<div class="strep" id="skaReport"><h3>Skip trace results</h3>
+        <table class="strt"><tbody><tr><th>Lookups run</th><td id="skrRun">${fmt.format(tried)} of ${fmt.format(n)}</td></tr>
+        <tr><th>Owners with a phone or email</th><td id="skrFound">${fmt.format(sum.withContact)}</td></tr>
+        <tr><th>Phone numbers found</th><td id="skrPhones">${fmt.format(ph)} (${fmt.format(sum.mobile)} mobile)</td></tr>
+        <tr><th>Emails found</th><td id="skrEmails">${fmt.format(em)}</td></tr>
+        <tr><th>Flagged DNC / TCPA</th><td id="skrDnc">${fmt.format(sum.dnc.size)}</td></tr>
+        <tr><th>No match (not charged)</th><td id="skrNoMatch">${fmt.format(sum.nomatch)}</td></tr>
+        <tr><th>Matched, no contact data</th><td>${fmt.format(sum.matched - sum.withContact)}</td></tr>
+        <tr><th>Errors (not saved, can be retried)</th><td id="skrErr">${fmt.format(sum.errors)}</td></tr>
+        <tr><th>Properties updated</th><td id="skrProps">${fmt.format(sum.props)}</td></tr>
+        ${sum.remaining != null ? `<tr><th>Left in today's limit</th><td>${fmt.format(sum.remaining)}</td></tr>` : ''}</tbody></table>
+        ${sum.cancelled ? '<div class="note">Cancelled. Everything finished before cancelling is saved.</div>' : ''}
+        ${sum.stopped ? `<div class="stwarn" role="alert"><b>Stopped:</b> ${esc(API.messageFor({ code: sum.stopped }))} Results from earlier batches are saved.</div>` : ''}
+        ${sum.dnc.size ? `<div class="stwarn" role="note"><b>${fmt.format(sum.dnc.size)} number(s) are flagged DNC / TCPA.</b> They show a warning, get no tap-to-call / text link and stay out of the Text list. Reminder only, not legal advice.</div>` : ''}
+        <div class="stact"><button type="button" class="btn primary" id="skaShow">Show properties with phones</button><button type="button" class="btn" data-stclose>Close</button></div></div>`;
+      q('skaShow').onclick = () => { closeModal(); B.showPhones(); };
+      B.rerender(); refreshPanel();
+    }
+    lastSig = sig(); compute();
+  }
+
   /* ---------- wiring ---------- */
   function wire(B) {
     if (!$('stGrp')) return; let busy = false; const guard = fn => async () => { if (busy) return; busy = true; try { await fn(); } catch (e) { console.error(e); B.toast('Skip trace: ' + (e && e.message || e)); } busy = false; };
+    if ($('stApiBtn')) $('stApiBtn').onclick = guard(() => apiModal(B));
+    document.addEventListener('click', e => { const b = e.target.closest('[data-stgo]'); if (!b || !API) return; e.preventDefault(); e.stopPropagation(); const f = b.dataset.stgo; const holder = b.closest('[data-id]') || document.getElementById('savedBox'); const id = holder && holder.dataset.id != null ? +holder.dataset.id : -1; if (id < 0) { B.toast('Open the property and try again.'); return; } traceOne(B, id, f, b).catch(err => { console.error(err); B.toast('Skip trace: ' + (err && err.message || err)); }); });
     $('stExportBtn').onclick = guard(() => exportModal(B)); $('stTextBtn').onclick = guard(() => textModal(B));
     $('stImportLbl').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('stFile').click(); } });
     $('stFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (f) importFile(B, f); e.target.value = ''; });
@@ -276,7 +422,7 @@
     let armedClear = false; $('stClearData').onclick = () => { if (!armedClear) { armedClear = true; $('stClearData').textContent = `Yes, clear ${fmt.format(ST.count())} saved results`; setTimeout(() => { armedClear = false; $('stClearData').textContent = 'Clear skip trace data'; }, 6000); return; } armedClear = false; ST.clear(); $('stClearData').textContent = 'Clear skip trace data'; B.rerender(); B.toast(`Skip trace data cleared for ${PFC.cfg.name} County`); };
     document.addEventListener('click', e => { const b = e.target.closest('[data-stdel]'); if (!b) return; ST.remove(b.dataset.stdel); const box = b.closest('.stdraw'); if (box) box.innerHTML = drawerBody(b.dataset.stdel); B.rerender(); });
     ST.onChange(refreshPanel); refreshPanel();
-    window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text);
+    window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.openApi = () => apiModal(B); window.PFSkipUI.traceOne = (id, folio) => traceOne(B, id, folio); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text);
   }
   window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, closeModal };
   const start = () => wire(window.PF.skBridge);

@@ -164,3 +164,9 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .stmodal .stprev ul{margin:4px 0;padding-left:18px;font-size:13px}.strt{border-collapse:collapse;width:100%;font-size:14px}.strt th{text-align:left;font-weight:500;padding:4px 8px 4px 0}.strt th.sub{padding-left:14px;color:var(--muted);font-size:12.5px}.strt td{font-weight:700;text-align:right;padding:4px 0}
 .sthelp{padding-left:18px;font-size:13.5px;display:grid;gap:8px}.sthelpd{margin-top:10px;font-size:13.5px}.stun{font-size:13px;padding-left:18px}
 @media (max-width:640px){.stmodal{align-items:flex-end;padding:0}.stmodal .stbox{border-radius:14px 14px 0 0;max-height:94vh;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}}
+
+/* ---- one-click skip trace button ---- */
+.stgo{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:3px 14px;border:1px solid var(--accent,#0b6b75);border-radius:6px;background:var(--accent,#0b6b75);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
+.stgo:hover{filter:brightness(1.08)}.stgo:disabled{opacity:.65;cursor:progress}
+.line.skgo .v{white-space:normal;overflow:visible;display:flex;gap:6px 10px;flex-wrap:wrap;align-items:center}
+.stdgo{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 8px}.stgomsg{font-size:12.5px}

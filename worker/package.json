@@ -1,0 +1,8 @@
+{
+  "name": "parcel-skiptrace-worker",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker that keeps the BatchData key server-side for the Parcel Finder skip trace button",
+  "scripts": { "test": "node test/worker.test.mjs" }
+}

@@ -1,0 +1,19 @@
+# Reference config (the Worker was deployed through the Cloudflare API; this is equivalent for `wrangler deploy`).
+# Secrets are NOT stored here:  wrangler secret put BATCHDATA_API_KEY   and   wrangler secret put ACCESS_CODE
+name = "parcel-skiptrace"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGIN = "https://brokerbranden-cmd.github.io"
+MAX_PER_REQUEST = "50"
+DAILY_CAP = "500"
+
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Limiter"]

@@ -1,7 +1,7 @@
 /* Parcel Finder skip trace proxy (Cloudflare Worker, ES module, no dependencies).
    The public site (GitHub Pages) cannot hold a BatchData API key, so the browser sends owner/property rows here with an access code,
    and this Worker calls BatchData's Property Skip Trace (V3) with the key stored as a Worker secret.
-   Secrets (set in Cloudflare, never in this repo):  BATCHDATA_API_KEY, ACCESS_CODE
+   Secrets (set in Cloudflare, never in this repo):  ACCESS_CODE, and BATCHDATA_API_KEY (the BatchData key can instead live in the KV namespace bound as SK_KV, key 'batchdata_key'; KV wins when present)
    Plain variables:  ALLOWED_ORIGIN (default https://brokerbranden-cmd.github.io), MAX_PER_REQUEST (default 50), DAILY_CAP (default 500 records/day, New York day)
    Routes:  GET /health (public, no secrets)   GET /status (access code)   POST /skiptrace (access code)
    Nothing personal is logged or stored: the Durable Object only keeps counters (per day, per IP request times and failed-code times). */
@@ -19,6 +19,11 @@ const conf = env => ({
   maxPer: cfgInt(env.MAX_PER_REQUEST, 50, 1, 100),
   cap: cfgInt(env.DAILY_CAP, 500, 0, 1e6)
 });
+// BatchData key: prefer the value stored in Workers KV (binding SK_KV, key 'batchdata_key'), fall back to the BATCHDATA_API_KEY secret
+async function bdKey(env) {
+  try { if (env.SK_KV) { const v = await env.SK_KV.get('batchdata_key'); if (v && v.trim()) return v.trim(); } } catch (e) { /* fall back to the secret */ }
+  return env.BATCHDATA_API_KEY || '';
+}
 const nyDay = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
 /* ---------- helpers ---------- */
@@ -106,11 +111,12 @@ async function handle(req, env, ctx, fetchImpl) {
   const c = conf(env), cors = corsHeaders(req, c), url = new URL(req.url), path = url.pathname.replace(/\/+$/, '') || '/';
   const origin = req.headers.get('Origin');
   if (req.method === 'OPTIONS') return origin === c.origin ? new Response(null, { status: 204, headers: cors }) : new Response(null, { status: 403, headers: cors });
-  if (path === '/health' && req.method === 'GET') return json({ ok: true, service: 'parcel-skiptrace', configured: !!(env.BATCHDATA_API_KEY && env.ACCESS_CODE && env.LIMITER) }, 200, cors);
+  if (path === '/health' && req.method === 'GET') return json({ ok: true, service: 'parcel-skiptrace', configured: !!((await bdKey(env)) && env.ACCESS_CODE && env.LIMITER) }, 200, cors);
   if (path !== '/skiptrace' && path !== '/status') return json({ error: 'not_found' }, 404, cors);
   if ((path === '/skiptrace' && req.method !== 'POST') || (path === '/status' && req.method !== 'GET')) return json({ error: 'method_not_allowed' }, 405, cors, { Allow: path === '/status' ? 'GET' : 'POST' });
   if (origin && origin !== c.origin) return json({ error: 'forbidden_origin' }, 403, cors);   // browsers from other sites; curl has no Origin
-  if (!env.ACCESS_CODE || !env.BATCHDATA_API_KEY || !env.LIMITER) return json({ error: 'not_configured' }, 503, cors);
+  const apiKey = await bdKey(env);
+  if (!env.ACCESS_CODE || !apiKey || !env.LIMITER) return json({ error: 'not_configured' }, 503, cors);
 
   const ip = req.headers.get('CF-Connecting-IP') || 'unknown', now = Date.now(), day = nyDay();
   const pre = await limiter(env, { op: 'precheck', ip, now });
@@ -142,11 +148,11 @@ async function handle(req, env, ctx, fetchImpl) {
     let up = null, failure = '', upStatus = 0, upMsg = '';
     const ac = new AbortController(), timer = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT);
     try {
-      const r = await fetchImpl(BD_URL, { method: 'POST', signal: ac.signal, headers: { 'Authorization': 'Bearer ' + env.BATCHDATA_API_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      const r = await fetchImpl(BD_URL, { method: 'POST', signal: ac.signal, headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ requests: sendIdx.map((i, k) => toRequest(items[i], k)), options: { includeTCPABlacklistedPhones: true, prioritizeMobilePhones: true } }) });
       upStatus = r.status;
       if (!r.ok) { try { const eb = await r.json(); upMsg = S(eb && eb.status && eb.status.message, 120); } catch (e) { /* not JSON */ } }
-      if (upMsg && env.BATCHDATA_API_KEY && upMsg.includes(env.BATCHDATA_API_KEY)) upMsg = '';
+      if (upMsg && apiKey && upMsg.includes(apiKey)) upMsg = '';
       if (r.status === 401 || r.status === 403) failure = 'provider_auth'; else if (r.status === 429) failure = 'provider_rate_limited'; else if (r.status === 402) failure = 'provider_payment'; else if (!r.ok) failure = 'provider_error';
       else { try { up = await r.json(); } catch (e) { failure = 'provider_bad_response'; } }
     } catch (e) { failure = e && e.name === 'AbortError' ? 'provider_timeout' : 'provider_unreachable'; }

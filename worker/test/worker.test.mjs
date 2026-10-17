@@ -117,4 +117,14 @@ await t('cleanItem / toRequest', async () => {
 });
 await t('exceptions never leak: internal error shape', async () => { const { env } = mkEnv(); env.LIMITER = { idFromName: () => 1, get: () => ({ fetch: async () => { throw new Error(FAKEKEY); } }) }; const mod = (await import('../src/index.js')).default; const res = await mod.fetch(req('GET', '/status'), env, {}); assert.equal(res.status, 500); const tx = await res.text(); assert.ok(!tx.includes(FAKEKEY)); });
 await t('source has no embedded secrets', async () => { const fs = await import('node:fs'); const src = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8'); assert.ok(!/Bearer [A-Za-z0-9]{12,}/.test(src)); assert.ok(!src.includes('console.log')); });
+await t('KV key wins over the secret; secret is the fallback; /setup-key is gone', async () => {
+  const kv = { v: 'kv-key-not-real', get: async function (k) { return k === 'batchdata_key' ? this.v : null; } };
+  const { env } = mkEnv({ BATCHDATA_API_KEY: '[REDACTED]', SK_KV: kv }); calls = [];
+  const r = await run(req('POST', '/skiptrace', { body: { items: [item('1')] } }), env, mkFetch(ok1)); assert.equal(r.res.status, 200);
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer kv-key-not-real');
+  kv.v = ''; calls = []; await run(req('POST', '/skiptrace', { body: { items: [item('2')] } }), env, mkFetch(ok1)); assert.equal(calls[0].init.headers.Authorization, 'Bearer [REDACTED]');
+  const e2 = mkEnv({ BATCHDATA_API_KEY: '', SK_KV: { get: async () => 'only-in-kv' } }).env; assert.equal((await run(req('GET', '/status'), e2)).res.status, 200);
+  const e3 = mkEnv({ SK_KV: { get: async () => { throw new Error('kv down'); } } }).env; assert.equal((await run(req('GET', '/status'), e3)).res.status, 200);
+  for (const m of ['PUT', 'GET', 'POST']) assert.equal((await run(req(m, '/setup-key', m === 'GET' ? {} : { body: 'x' }), env)).res.status, 404);
+});
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

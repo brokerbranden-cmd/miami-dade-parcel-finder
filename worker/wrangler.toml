@@ -10,6 +10,11 @@ ALLOWED_ORIGIN = "https://brokerbranden-cmd.github.io"
 MAX_PER_REQUEST = "50"
 DAILY_CAP = "500"
 
+# BatchData key lives in KV (key 'batchdata_key'); falls back to the BATCHDATA_API_KEY secret
+[[kv_namespaces]]
+binding = "SK_KV"
+id = "71a8b95c182c4b1782c850f34c7e4fcc"
+
 [[durable_objects.bindings]]
 name = "LIMITER"
 class_name = "Limiter"

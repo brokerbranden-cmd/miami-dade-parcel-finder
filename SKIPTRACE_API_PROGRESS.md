@@ -25,3 +25,6 @@ Never print/commit BATCHDATA_API_KEY or ACCESS_CODE. Don't commit data/*.gz, met
 - Follow-on (filters 3-6) built + e2e_fx green on desktop in /workspace/pf-fx; porting next.
 - 22:00 follow-on ported + committed locally (not pushed); full_fx.sh regression running (test_runs/summary_fx_*)
 - 23:10 regression green (fx suites + simplified fix). Pushing follow-on.
+
+## 2026-10-17 ET
+- Worker now reads the BatchData key from KV (binding SK_KV = parcel-skiptrace-kv, key batchdata_key), falling back to the BATCHDATA_API_KEY secret. Key stored once via a TEMPORARY PUT /setup-key route (access-code protected), sent from the box via curl stdin; route removed + redeployed (404 verified for PUT/GET/POST). Worker unit tests 21/21. Live 1-record test OK (matched 1, 8 phones, 4 emails). Redeploy via API must keep bindings: keep_bindings ['secret_text'] + kv_namespace SK_KV (deploy scripts built in /workspace/tmp/setupw/mk.py, not in repo).

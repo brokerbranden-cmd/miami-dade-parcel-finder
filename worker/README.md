@@ -8,16 +8,21 @@ Live URL: `https://parcel-skiptrace.brokerbranden.workers.dev` (Cloudflare accou
 ## Secrets and settings (never in this repo)
 | Name | Kind | Meaning |
 |---|---|---|
-| `BATCHDATA_API_KEY` | secret | BatchData API token |
+| `SK_KV` | KV namespace binding (`parcel-skiptrace-kv`, id `71a8b95c182c4b1782c850f34c7e4fcc`) | Holds the BatchData API token under key `batchdata_key`. **This is the active key store**; the Worker uses it when present |
+| `BATCHDATA_API_KEY` | secret | Fallback BatchData API token, used only when the KV value is absent. Currently holds a placeholder (the Cloudflare MCP redacts secret values), so the real key lives in KV |
 | `ACCESS_CODE` | secret | Code the dashboard sends in the `X-Access-Code` header (entered once per device) |
 | `ALLOWED_ORIGIN` | variable | Default `https://brokerbranden-cmd.github.io` (the only browser origin allowed) |
 | `MAX_PER_REQUEST` | variable | Default `50` records per request (max 100) |
 | `DAILY_CAP` | variable | Default `500` records per New York day, counted across all callers. Raise it in Cloudflare (Workers > parcel-skiptrace > Settings > Variables) when you need more |
 | `LIMITER` | Durable Object binding | Counters only (daily usage, per IP request times, failed-code times). No personal data is stored or logged |
 
-Troubleshooting: an upstream failure returns `upstreamStatus` (and BatchData's short message, e.g. `Invalid token.`) next to the error code, so a wrong or expired `BATCHDATA_API_KEY` secret shows up as `provider_auth` / 401. Fix it with `npx wrangler secret put BATCHDATA_API_KEY` (or the dashboard). The key is never returned or logged.
+Troubleshooting: an upstream failure returns `upstreamStatus` (and BatchData's short message, e.g. `Invalid token.`) next to the error code, so a wrong or expired `BATCHDATA_API_KEY` secret shows up as `provider_auth` / 401. Fix it by replacing the KV value (below) or `npx wrangler secret put BATCHDATA_API_KEY` (only used if KV is empty). The key is never returned or logged.
 
 Change the access code: Cloudflare dashboard > Workers & Pages > parcel-skiptrace > Settings > Variables and Secrets > `ACCESS_CODE` > Edit. Devices then get "access code not accepted" and ask again.
+
+## BatchData key storage (KV)
+The key is read per request from Workers KV (`env.SK_KV.get('batchdata_key')`), falling back to the `BATCHDATA_API_KEY` secret. It was stored once with a **temporary** `PUT /setup-key` route (protected by the access code, constant-time check) because the Cloudflare MCP used for deployment redacts secret values. **That route has been removed and redeployed** (`/setup-key` now returns 404 for every method); nothing in the repo contains the key.
+To rotate the key: Cloudflare dashboard > Storage & Databases > KV > `parcel-skiptrace-kv` > add/edit entry `batchdata_key`, or `npx wrangler kv key put --namespace-id 71a8b95c182c4b1782c850f34c7e4fcc batchdata_key "<key>" --remote`. Delete the entry to fall back to the secret. When redeploying through the API keep the bindings (`keep_bindings: ['secret_text']` plus the `SK_KV` kv_namespace binding).
 
 ## API
 * `GET /health` public. `{ok, service, configured}`; no secrets.

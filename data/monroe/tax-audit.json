@@ -1,0 +1,86 @@
+{
+ "dedupe": {
+  "pulls": [
+   {
+    "file": "monroe_unpaid_taxes.csv",
+    "rows": 4025,
+    "keys": 4025,
+    "accounts": 3297
+   },
+   {
+    "file": "monroe_unpaid_taxes_v2.csv",
+    "rows": 2304,
+    "keys": 2304,
+    "accounts": 1628
+   }
+  ],
+  "authoritative": "monroe_unpaid_taxes_v2.csv",
+  "keys_in_newest": 2304,
+  "keys_only_in_older": 1721,
+  "older_only_by_year": {
+   "2021": 1,
+   "2022": 1,
+   "2023": 8,
+   "2024": 33,
+   "2025": 97,
+   "2026": 1581
+  },
+  "older_only_balance": 3682376.81,
+  "rule": "newest pull wins per (account, tax year); keys only in an older pull treated as resolved (dropped)",
+  "balance_changed_rows": 792,
+  "balance_up": 791,
+  "balance_down": 1,
+  "newest_only_keys": 0
+ },
+ "stats": {
+  "asof": "2026-10-16",
+  "delinquent_cutoff_year": 2025,
+  "current_year": 2026,
+  "accounts_in_report": 1628,
+  "accounts_matched": 1627,
+  "accounts_unmatched": [
+   "9104873"
+  ],
+  "account_match_rate": 0.9994,
+  "parcels_matched": 1627,
+  "parcels_in_app": 1627,
+  "rows_used": 2304,
+  "rows_unmatched": 1,
+  "verify": {
+   "matched_rows": 1627,
+   "addr_agree": 1427,
+   "addr_checked": 1445,
+   "owner_agree": 1563,
+   "owner_checked": 1627
+  },
+  "delinquent_parcels": 1475,
+  "delinquent_1plus": 1475,
+  "delinquent_2plus": 515,
+  "delinquent_3plus": 68,
+  "delinquent_5plus": 22,
+  "current_year_only_parcels": 152,
+  "with_certificate": 1441,
+  "county_held": 4,
+  "owner_differs_from_roll": 51,
+  "total_balance_delinquent": 13317520.12,
+  "total_balance_current_year_unpaid": 259237.51,
+  "total_balance_2plus": 6166205.85,
+  "balance_ge_5k": 766,
+  "balance_ge_25k": 113,
+  "oldest_year_min": 2003,
+  "if_current_year_counted": {
+   "parcels_2plus": 521
+  },
+  "total_balance_all_unpaid_incl_current": 13576757.63
+ },
+ "unmatched_rows": [
+  [
+   "9104873",
+   2024,
+   172.21,
+   "G98 DEVELOPMENT LLC",
+   "VACANT 11TH St MARATHON"
+  ]
+ ],
+ "method": "Monroe tax-delinquent layer: Tax Collector unpaid-tax report (county-taxes.net/fl-monroe) -> parcel packs, no full rebuild."
+}

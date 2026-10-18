@@ -90,7 +90,7 @@ with sync_playwright() as pw:
         pr.click(); pg.wait_for_timeout(1500); check(pg.eval_on_selector_all('#mtChips .chip.on', 'n=>n.map(x=>x.dataset.mr)') == ['tax:y2'], 'preset selects 2+ years'); check(cnt(pg) == t2, f'preset count {cnt(pg)} == filter count {t2}')
         check('tx_d' == pg.eval_on_selector('#sortSel', 'e=>e.value'), 'preset sorts by most unpaid tax years')
         pg.click('#cards .card h3'); pg.wait_for_selector('.drawer', timeout=30000); pg.wait_for_timeout(1500)
-        d = pg.locator('.drawer section.dsec', has_text='Unpaid property taxes').first; txt = d.inner_text()
+        d = pg.locator('.drawer section.dsec').filter(has=pg.locator('.dtog', has_text='Unpaid property taxes')).first; txt = d.inner_text()
         check('Years delinquent' in txt and 'Total balance' in txt and 'Tax certificate' in txt, 'drawer tax section has years, balance, certificate')
         check('197.432(13)' in txt and 'certificate holder' in txt.lower(), 'drawer states the FS 197.432(13) certificate-holder contact rule')
         check('May 2027' in txt, "drawer states Monroe's next certificate sale (May 2027)")

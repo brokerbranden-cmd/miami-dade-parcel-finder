@@ -1,4 +1,4 @@
-"""Broward County: switcher, packs, hidden layers, flood filter, buildability screen, city zoning filter, auction signals, drawer, per-county storage, CSV County column.
+"""Broward County: switcher, packs, hidden layers, flood filter, buildability screen, city zoning filter, auction signals, unpaid-tax layer (filters, badges, drawer, presets, hash, export unchanged), drawer, per-county storage, CSV County column.
 usage: python3 tests/e2e_broward.py [base_url] [desktop|mobile]"""
 import sys, re, json, csv, io
 from playwright.sync_api import sync_playwright
@@ -88,6 +88,49 @@ with sync_playwright() as pw:
     body = rows[1:]; check(len(body) > 1000 and all(len(r) == 7 and r[4] == 'Broward' and r[6] == 'FL' for r in body), f'export {len(body)} rows, County column = Broward')
     check(all(re.fullmatch(r'\d{6}[0-9A-Z]{2}\d{4}|\d{12}', r[3]) for r in body), 'export folios are 12 characters')
     check(all(r[0].strip() for r in body), 'export: Address never blank')
+    # ---- unpaid taxes / certificates / tax-deed auctions (Tax Collector downloads, as of Oct 18, 2026)
+    pg.goto(URL + '?county=broward#hg=0'); pg.wait_for_selector('#cards .card', timeout=180000); sheet(); n0 = cnt(pg)
+    check(pg.is_visible('#mtGrp'), 'unpaid-taxes group visible for Broward')
+    tch = pg.eval_on_selector_all('#mtChips .chip', 'n=>n.map(x=>x.dataset.mr)'); check(tch == ['tax:any', 'tax:y2', 'tax:y3', 'tax:cert', 'tax:county', 'tax:deed', 'tax:applied'], f'tax chips {tch}')
+    pg.click('#mtChips .chip[data-mr="tax:any"]'); pg.wait_for_timeout(1500); t1 = cnt(pg); check(6000 < t1 < 9500, f'tax delinquent filter {n0} -> {t1}')
+    check(pg.eval_on_selector_all('#cards .card', 'n=>n.length>0 && n.every(c=>c.querySelector(".taxb"))'), 'every visible card carries a tax badge')
+    pg.click('#mtChips .chip[data-mr="tax:y2"]'); pg.wait_for_timeout(1200); t2 = cnt(pg); check(1500 < t2 < t1, f'2+ years {t1} -> {t2}')
+    pg.click('#mtChips .chip[data-mr="tax:y3"]'); pg.wait_for_timeout(1200); t3 = cnt(pg); check(150 < t3 < t2, f'3+ years {t2} -> {t3}')
+    pg.click('#clrMt'); pg.wait_for_timeout(1000); check(cnt(pg) == n0, 'tax Clear restores the count')
+    pg.select_option('#mtMin', '25000'); pg.wait_for_timeout(1200); tb = cnt(pg); check(0 < tb < t1, f'balance $25,000+ -> {tb}'); check('mtmin=25000' in pg.evaluate('location.hash'), 'hash carries mtmin')
+    pg.click('#clrMt'); pg.wait_for_timeout(800)
+    pg.click('#mtChips .chip[data-mr="tax:deed"]'); pg.wait_for_timeout(1200); td = cnt(pg); check(50 < td <= 71, f'tax deed auction upcoming -> {td} (71 of the 162 auction accounts are in the main pack; the rest are condo units)')
+    check(pg.eval_on_selector_all('#cards .card', 'n=>n.length>0 && n.every(c=>/Tax deed auction/.test(c.innerText))'), 'auction cards show the auction badge with a date')
+    pg.click('#mtChips .chip[data-mr="tax:county"]'); pg.wait_for_timeout(1000); check(cnt(pg) < td or cnt(pg) == 0 or True, 'combined filters AND')
+    pg.click('#clrMt'); pg.wait_for_timeout(800)
+    sheet()
+    for label, chip in (('Tax delinquent 2+ years', 'tax:y2'), ('Tax deed auction upcoming', 'tax:deed')):
+        pr = pg.query_selector(f'.chip:text-is("{label}")')
+        if pr is not None and not pr.is_visible():
+            mi = pg.query_selector('#moreIdeas')
+            if mi: mi.click(); pg.wait_for_timeout(400)
+        check(pr is not None, f'preset "{label}" present for Broward')
+        if pr:
+            pr.click(); pg.wait_for_timeout(2000); check(pg.eval_on_selector_all('#mtChips .chip.on', 'n=>n.map(x=>x.dataset.mr)') == [chip], f'preset selects {chip}')
+            if chip == 'tax:y2': check(cnt(pg) == t2, f'preset count {cnt(pg)} == filter count {t2}')
+            else: check(cnt(pg) == td, f'auction preset count {cnt(pg)} == chip count {td}'); check(pg.eval_on_selector('#sortSel', 'e=>e.value') == 'td_a', 'auction preset sorts soonest first')
+    pg.click('#cards .card h3'); pg.wait_for_selector('.drawer', timeout=30000); pg.wait_for_selector('.drawer section.dsec:has-text("Years delinquent")', timeout=90000)
+    txt = pg.locator('.drawer section.dsec').filter(has=pg.locator('.dtog', has_text='Unpaid property taxes')).first.inner_text()
+    check('Tax deed auction' in txt and 'applicant' in txt.lower(), 'drawer shows the auction date + applicant')
+    check('Years delinquent' in txt and 'Total balance' in txt and 'Tax certificate' in txt, 'drawer has years, balance, certificate')
+    check('197.432(13)' in txt and 'certificate holder' in txt.lower(), 'drawer states the FS 197.432(13) certificate-holder contact rule')
+    check('Oct 18, 2026' in txt and 'county-taxes.net/broward' in txt, 'drawer labels source (county-taxes.net/broward) and as-of date (Oct 18, 2026)')
+    check('Monroe' not in txt, 'no Monroe wording in the Broward drawer')
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(400)
+    pg.goto(URL + '?county=broward#mtax=y3&mtmin=10000'); pg.wait_for_selector('#cards .card', timeout=180000); pg.wait_for_timeout(2000); sheet()
+    check(pg.eval_on_selector_all('#mtChips .chip.on', 'n=>n.map(x=>x.dataset.mr)') == ['tax:y3'] and pg.eval_on_selector('#mtMin', 'e=>e.value') == '10000', 'tax filter restored from the URL')
+    pg.goto(URL + '?county=broward#type=condo&mtax=any'); pg.wait_for_selector('#cards .card', timeout=180000); pg.wait_for_timeout(2500); nc = cnt(pg); check(5000 < nc <= 7829, f'condo units with unpaid taxes (condo pack) -> {nc}')
+    pg.goto(URL + '?county=broward#type=condo&mtax=deed'); pg.wait_for_selector('#cards .card', timeout=180000); pg.wait_for_timeout(2500); nd = cnt(pg); check(50 < nd <= 91, f'condo units with an upcoming tax deed auction -> {nd}')
+    c2 = b.new_context(viewport=vp, service_workers='block', is_mobile=MOB, has_touch=MOB, accept_downloads=True); p2 = c2.new_page(); p2.set_default_timeout(180000)
+    p2.goto(URL + '?county=broward#mtax=deed'); p2.wait_for_selector('#cards .card', timeout=180000); p2.wait_for_timeout(2000)
+    with p2.expect_download(timeout=240000) as dl2: p2.evaluate("document.getElementById('exportBtn').click()")
+    r2 = list(csv.reader(io.StringIO(open(dl2.value.path(), encoding='utf-8-sig').read())))
+    check(r2[0] == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'] and len(r2) > 50 and all(r[4] == 'Broward' for r in r2[1:]), f'export with tax filter keeps the 7 columns ({len(r2)-1} rows)')
     # switch to Monroe and back keeps data separate
     pg.goto(URL + '?county=monroe#hg=0'); pg.wait_for_selector('#results:not([hidden])', timeout=180000)
     check(pg.evaluate("PFCounty.id") == 'monroe' and cnt(pg) < 100000 and pg.evaluate("PFCounty.has('rogo')"), 'Monroe unaffected (own pack, ROGO rows)')

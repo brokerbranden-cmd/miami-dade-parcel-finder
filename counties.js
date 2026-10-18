@@ -29,7 +29,7 @@
     ,'broward': { id:'broward', name:'Broward', state:'FL', dataDir:'data/broward/', storeSuffix:'.broward',
       nameOrder:'last-first',   // Broward roll names read LAST,FIRST & SECOND (comma after the surname; the pack stores them with a space)
       center:[26.15,-80.32], bounds:[[25.95,-80.92],[26.40,-79.98]],
-      layers: ['owners','teardown','comps','flood','mzoning','mscreen','broward'],
+      layers: ['owners','teardown','comps','flood','mzoning','mscreen','broward','mtax','mtdeed'],
       area:'Broward',
       planning:{ who:'the city planning / zoning department (Broward County Planning for unincorporated areas)', rateY:'Flood, small lot or unmapped zoning to clear', rateR:'Public / conservation land, VE flood or non-residential zoning' },
       source:'FDOR roll (Broward County Property Appraiser), BCPA parcels, county Land Use Plan, city zoning layers, FEMA flood', roll:'Broward County Property Appraiser roll (via Florida DOR NAL)',

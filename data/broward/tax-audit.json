@@ -1,0 +1,86 @@
+{
+ "files": {
+  "unpaid_real_estate_2023_2025": {
+   "rows": 23308,
+   "subtotal_rows_dropped": 17,
+   "rows_used": 23291,
+   "accounts": 16603
+  },
+  "unpaid_tax_certificates": {
+   "rows": 24829,
+   "accounts": 16697,
+   "years_added_cert_only": 975,
+   "rows_ignored_paid_or_void_by_status": {
+    "Canceled": 5,
+    "Redeemed": 2,
+    "Issued": 1,
+    "Transferred": 1
+   }
+  },
+  "prior_3yr_unpaid": {
+   "accounts": 9
+  },
+  "tax_deed_auctions": {
+   "rows": 162,
+   "upcoming_accounts": 162,
+   "dates": [
+    "2026-10-26",
+    "2026-11-23",
+    "2026-12-28",
+    "2027-01-25"
+   ]
+  }
+ },
+ "stats": {
+  "asof": "2026-10-18",
+  "delinquent_cutoff_year": 2025,
+  "match": {
+   "certificate_accounts": [
+    16657,
+    16697,
+    0.9976
+   ],
+   "real_estate_accounts": [
+    16566,
+    16603,
+    0.9978
+   ],
+   "auction_accounts": [
+    162,
+    162
+   ],
+   "prior_accounts": [
+    9,
+    9
+   ],
+   "unmatched_sample": [
+    "484103010011",
+    "484115151050",
+    "484115BH0250",
+    "484120AB0300",
+    "484217010270",
+    "484218210011",
+    "484329070050",
+    "494036010220",
+    "494107109034",
+    "494134BH0180",
+    "494211065500",
+    "494212330019"
+   ]
+  },
+  "delinquent_parcels": 16683,
+  "delinquent_2plus": 5711,
+  "delinquent_3plus": 1146,
+  "delinquent_5plus": 106,
+  "with_certificate": 15613,
+  "county_held": 355,
+  "deed_applied": 1351,
+  "deed_auction_upcoming": 162,
+  "parcels_with_unknown_year_balance": 175,
+  "total_balance": 173115980.3,
+  "total_balance_2plus": 87848456.45,
+  "balance_ge_10k": 5046,
+  "oldest_year_min": 1998,
+  "auction_parcels_without_delinquent_year_rows": 0
+ }
+}

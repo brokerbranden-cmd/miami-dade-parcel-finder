@@ -34,3 +34,10 @@ Started 2026-10-17. Raw inputs: /workspace/raw/broward/. Scripts: scripts/counti
 - Regression runner all PASS: e2e_broward, monroe, export, sendmark, deterrents, skiptrace, scenarios, saved (desktop+mobile), county, unit_skiptrace.
 - Live: e2e_broward desktop PASS, e2e_county PASS on the Pages site.
 - MCeSearch (Monroe): reachable again but connection-resets after ~25 monthly windows (resumed to 2000-01); a backoff loop (/workspace/tmp/mce_loop.sh) retries every 5 min; Monroe pack NOT rebuilt with the partial pull. Draft 03 stays the route for full permits/code history.
+
+## P-tax Broward tax layer (2026-10-18)  - resume notes
+- Inputs: /workspace/raw/broward/tax/ (copies of /workspace/downloads/tax/broward/*.csv). Script scripts/counties/broward/add_tax.py (patches packs, idempotent), notes scripts/counties/broward/TAX_REFRESH.md, audit data/broward/tax-audit.json, meta.json -> tax.
+- MATCH: Account Number minus dashes = 12-char folio. Certificates 16,657/16,697 accounts (99.76%), 2023-25 unpaid report 16,566/16,603 (99.78%), auctions 162/162, prior-3yr sample 9/9. Report subtotal rows (blank account + 'Grand Total') dropped (17). broward_unpaid_real_estate.csv (2014-17) ignored.
+- Delinquent year = in 2023-25 unpaid report OR live certificate row (Issued/Purchased/Transferred/Surrendered, or Redeemed with deed Applied/Certified); <= 2025. Redeemed/Canceled/Deleted ignored. Balance = report balance else cert Redemption Amt/Unpaid Tax else unknown.
+- Pack cols txy/txo/txb/txf/txd + detail taxs; dscore/dsig(TD bit2, TC 3, TX 4)/vscore/vsig include tax (+30 deed application/auction).
+- App: tax module generalized (layer mtax; mtdeed Broward only): chips any/2+/3+/cert/county/deed/applied + min balance, presets 'Tax delinquent 2+ years' + 'Tax deed auction upcoming', sort td_a, drawer. sw v19. Tests: e2e_broward extended.

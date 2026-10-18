@@ -143,20 +143,37 @@ def patch(path, folios, newcols):
         if pad: parts.append(b'\0' * pad); off += pad
     hdr = json.dumps({'n': h['n'], 'cols': cols}, separators=(',', ':')).encode(); hdr += b' ' * ((-(4 + len(hdr))) % 4)
     out = gzip.compress(len(hdr).to_bytes(4, 'little') + hdr + b''.join(parts), 9, mtime=0); open(path, 'wb').write(out); return len(out)
+DT = {'uint8': np.uint8, 'uint16': np.uint16, 'uint32': np.uint32}
+def getcol(path, name):
+    h, body = read_pack(path); c = next((c for c in h['cols'] if c['name'] == name), None)
+    return None if c is None else np.frombuffer(body[c['offset']:c['offset'] + c['bytes']], dtype=DT[c['type']]).copy()
+def tax_pts(n, fl):
+    """distress points, same scale as the Miami-Dade distress build (scripts/build_distress.py): certificate(s) 10 + 4 per extra tax year (max 18); delinquent without certificate 6"""
+    n = np.asarray(n); fl = np.asarray(fl)
+    return np.where(n == 0, 0, np.where(fl & 1, np.minimum(18, 10 + 4 * (n.astype(int) - 1)), 6))
+prev_scored = bool((meta.get('tax') or {}).get('scored'))   # the previous run already folded tax points into dscore / dsig / vscore / vsig
 for p in meta['packs']:
-    fol = pack_folios[p['name']]; z = lambda t: np.zeros(len(fol), t)
+    fol = pack_folios[p['name']]; z = lambda t: np.zeros(len(fol), t); mp_ = os.path.join(A.out, p['files'][0])
     txy, txo, txb, txf = z(np.uint8), z(np.uint16), z(np.uint32), z(np.uint8)
     for k, fo in enumerate(fol):
         v = agg.get(fo)
         if not v: continue
         txy[k] = min(v['n'], 255); txo[k] = v['old']; txb[k] = int(min(round(v['bal']), 4294967295)); txf[k] = v['fl']
-    p['bytes'] = patch(os.path.join(A.out, p['files'][0]), fol, [('txy', 'uint8', txy.tobytes()), ('txo', 'uint16', txo.tobytes()), ('txb', 'uint32', txb.tobytes()), ('txf', 'uint8', txf.tobytes())])
+    # fold tax delinquency into the Monroe distress score / signals + vacancy hint (idempotent: the previous tax contribution is removed first)
+    ds, dg, vs, vg, fl0 = (getcol(mp_, c) for c in ('dscore', 'dsig', 'vscore', 'vsig', 'flags')); oy, of_ = getcol(mp_, 'txy'), getcol(mp_, 'txf')
+    if oy is not None and prev_scored: ds = ds.astype(int) - tax_pts(oy, of_); vs = vs.astype(int) - np.where(oy > 0, 10, 0)
+    ds = ds.astype(int); vs = vs.astype(int); dg = (dg & ~np.uint16(8 | 16)).astype(np.uint16); vg = (vg & ~np.uint16(256)).astype(np.uint16)
+    notgov = (fl0 & 32) == 0; dl = (txy > 0) & notgov
+    ds = np.where(dl, np.minimum(100, ds + tax_pts(txy, txf)), ds); vs = np.where(dl, np.minimum(100, vs + 10), vs)
+    dg = dg | np.where(dl & ((txf & 1) > 0), 8, 0).astype(np.uint16) | np.where(dl & ((txf & 1) == 0), 16, 0).astype(np.uint16); vg = vg | np.where(dl, 256, 0).astype(np.uint16)
+    p['bytes'] = patch(mp_, fol, [('txy', 'uint8', txy.tobytes()), ('txo', 'uint16', txo.tobytes()), ('txb', 'uint32', txb.tobytes()), ('txf', 'uint8', txf.tobytes()),
+                                   ('dscore', 'uint8', np.clip(ds, 0, 255).astype(np.uint8).tobytes()), ('dsig', 'uint16', dg.tobytes()), ('vscore', 'uint8', np.clip(vs, 0, 255).astype(np.uint8).tobytes()), ('vsig', 'uint16', vg.tobytes())])
     p['detailBytes'] = patch(os.path.join(A.out, p['detail'][0]), fol, [('taxs', 'str', '\n'.join(tax_str(fo) if fo in agg else '' for fo in fol).encode('utf-8'))])
-    print(p['name'], len(fol), 'tax rows', int((txy > 0).sum()))
+    print(p['name'], len(fol), 'tax rows', int((txy > 0).sum()), 'scored', int(dl.sum()))
 meta['tax'] = {'asof': A.asof, 'asofLabel': ASOF.strftime('%b %-d, %Y'), 'source': 'Monroe County Tax Collector, delinquent / unpaid tax report (county-taxes.net/fl-monroe), downloaded ' + ASOF.strftime('%b %-d, %Y'),
                'sourceUrl': 'https://county-taxes.net/fl-monroe', 'cutoffYear': LASTDEL, 'currentYear': CUR, 'delinquent': st['delinquent_parcels'], 'delinquent2plus': st['delinquent_2plus'], 'delinquent3plus': st['delinquent_3plus'],
                'withCertificate': st['with_certificate'], 'countyHeld': st['county_held'], 'totalBalance': st['total_balance_delinquent'], 'matchRate': st['account_match_rate'],
-               'nextCertSale': 'May 2027', 'cols': ['txy', 'txo', 'txb', 'txf'], 'detail': 'taxs', 'pulls': dedupe['authoritative'], 'rule': dedupe['rule']}
+               'nextCertSale': 'May 2027', 'scored': True, 'cols': ['txy', 'txo', 'txb', 'txf'], 'detail': 'taxs', 'pulls': dedupe['authoritative'], 'rule': dedupe['rule']}
 meta['ver'] = dt.datetime.now().strftime('%Y%m%d%H%M'); json.dump(meta, open(meta_p, 'w'), separators=(',', ':'))
 json.dump(audit, open(os.path.join(A.out, 'tax-audit.json'), 'w'), indent=1, default=str)
 print('ver', meta['ver'])

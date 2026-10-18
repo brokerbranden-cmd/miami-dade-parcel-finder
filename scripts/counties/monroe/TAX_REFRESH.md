@@ -31,4 +31,4 @@ Suggested cadence: after each tax-certificate sale (May) and every 1-2 months wh
 * **Certificate** = a Cert # / Bidder # on a delinquent year; **county-held** = bidder 99999 or the held-certificates list.
 
 ## Contact rule (shown in the drawer)
-Florida Statute 197.432(13): a tax-certificate **holder** may not contact the property owner to demand payment (and the owner is not obliged to deal) during the first 2 years after the certificate was issued; the restriction is on certificate holders. It is not a rule against an investor / home-buyer contacting an owner about buying the property. Monroe's next tax-certificate sale: **May 2027**.
+FS 197.432(13): the holder of a tax certificate may not, directly or through an agent, initiate contact with the owner to encourage or demand payment until 2 years after April 1 of the year the certificate was issued (14: violating it can bar the holder from future certificate sales and can be an unfair / deceptive trade practice). It is a rule for certificate holders; it is not a general ban on anyone contacting owners. Not legal advice. Monroe's next tax-certificate sale: **May 2027**.

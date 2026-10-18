@@ -105,6 +105,7 @@ with sync_playwright() as pw:
     pg.click('#clrMt'); pg.wait_for_timeout(800)
     sheet()
     for label, chip in (('Tax delinquent 2+ years', 'tax:y2'), ('Tax deed auction upcoming', 'tax:deed')):
+        sheet()
         pr = pg.query_selector(f'.chip:text-is("{label}")')
         if pr is not None and not pr.is_visible():
             mi = pg.query_selector('#moreIdeas')

@@ -25,3 +25,5 @@ Started 2026-10-16. Raw inputs: /workspace/raw/monroe/. Scripts: scripts/countie
 - Pack cols (main+condo): txy years, txo oldest yr, txb balance $, txf flags (1 cert, 2 county-held, 4 current-year unpaid, 8 owner differs, 16 3+ certs); detail str taxs; dscore/dsig(TC bit3/TX bit4)/vscore/vsig(TX bit8) include tax (same points as Miami-Dade: cert 10+4/extra yr max 18, no cert 6; vacancy +10).
 - App: counties.js layer 'mtax' (Monroe only); index.html #mtGrp; app.js mt* (filters tax:any/y2/y3/cert/county + balance min, hash mtax/mtmin, card tag + Taxes line, drawer section, sort tx_d, preset 'Tax delinquent 2+ years'); export columns unchanged; sw cache v18.
 - Tests: e2e_monroe.py extended (58 checks desktop+mobile incl. export header). Regression runner: /workspace/tmp/full9.sh
+- 01:15 Monroe tax regression ALL GREEN (16/16, summary9). Pushed.
+- 01:20 Monroe tax layer LIVE VERIFIED (e2e_monroe desktop+mobile PASS on Pages, sw v18).

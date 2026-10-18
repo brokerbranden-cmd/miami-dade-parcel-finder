@@ -101,8 +101,9 @@ with sync_playwright() as pw:
     pg.goto(URL + '?county=monroe#mtax=y3&mtmin=5000'); pg.wait_for_selector('#cards .card', timeout=120000); pg.wait_for_timeout(1500); sheet()
     check(pg.eval_on_selector_all('#mtChips .chip.on', 'n=>n.map(x=>x.dataset.mr)') == ['tax:y3'] and pg.eval_on_selector('#mtMin', 'e=>e.value') == '5000', 'tax filter restored from the URL')
     # other counties never show the tax layer or preset
-    pg.goto(URL + '?county=broward#hg=0'); pg.wait_for_selector('#cards .card', timeout=120000)
-    check(not pg.is_visible('#mtGrp') and pg.query_selector('.chip:text-is("Tax delinquent 2+ years")') is None, 'Broward has no tax group / preset')
+    check(pg.query_selector('.chip:text-is("Tax deed auction upcoming")') is None and 'td_a' not in pg.eval_on_selector_all('#sortSel option', 'n=>n.map(x=>x.value)'), 'Monroe has no Broward-only tax-deed auction chip / preset / sort')
+    pg.goto(URL + '?county=broward#hg=0'); pg.wait_for_selector('#cards .card', timeout=180000)
+    check(pg.evaluate("PFCounty.has('mtax') && PFCounty.has('mtdeed')") and pg.query_selector('.chip:text-is("Tax deed auction upcoming")') is not None, 'Broward has its own tax layer (separate county data)')
     pg.goto(URL + '?county=miami-dade#hg=0'); pg.wait_for_selector('#cards .card', timeout=120000)
     check(not pg.is_visible('#mtGrp') and pg.query_selector('.chip:text-is("Tax delinquent 2+ years")') is None and 'tx_d' not in pg.eval_on_selector_all('#sortSel option', 'n=>n.map(x=>x.value)'), 'Miami-Dade has no tax group / preset / sort')
     # export columns unchanged (Monroe, tax filter on)

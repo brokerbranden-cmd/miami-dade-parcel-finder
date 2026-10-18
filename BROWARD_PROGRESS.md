@@ -42,3 +42,4 @@ Started 2026-10-17. Raw inputs: /workspace/raw/broward/. Scripts: scripts/counti
 - Pack cols txy/txo/txb/txf/txd + detail taxs; dscore/dsig(TD bit2, TC 3, TX 4)/vscore/vsig include tax (+30 deed application/auction).
 - App: tax module generalized (layer mtax; mtdeed Broward only): chips any/2+/3+/cert/county/deed/applied + min balance, presets 'Tax delinquent 2+ years' + 'Tax deed auction upcoming', sort td_a, drawer. sw v19. Tests: e2e_broward extended.
 - 02:58 Broward tax regression GREEN: unit, broward/monroe/export/sendmark/deterrents/skiptrace/scenarios (desktop+mobile), county, simplified, outreach (summary9/10/11; two flaky/stale items fixed and re-run: monroe cross-county check, broward mobile preset sheet; scenarios_desktop s34 passed on re-run). Pushing; live check next (sw v19).
+- 03:20 LIVE VERIFIED on GitHub Pages (sw v19): e2e_broward + e2e_monroe desktop and mobile all PASS. Pushed b031dae.

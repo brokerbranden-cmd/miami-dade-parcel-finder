@@ -19,7 +19,7 @@
     'monroe': { id:'monroe', name:'Monroe', state:'FL', dataDir:'data/monroe/', storeSuffix:'.monroe',
       nameOrder:'last-first',   // Monroe roll names read LAST FIRST MIDDLE
       center:[24.75,-81.20], bounds:[[24.45,-82.20],[25.40,-80.25]],
-      layers: ['owners','teardown','comps','flood','mzoning','monroe','mscreen','rogo'],
+      layers: ['owners','teardown','comps','flood','mzoning','monroe','mscreen','rogo','mtax'],
       area:'the Keys',   // wording for the absentee rule: owner mails from outside this area
       planning:{ who:'Monroe County Planning & Environmental Resources (305-453-8739) or the city planning department', rateY:'Allocation, habitat or flood issues to clear', rateR:'Conservation, wetland, Tier I or public land' },
       source:'Florida statewide cadastral (FDOR roll, Monroe County), county / city zoning + ROGO / Tier, FNAI / NWI / FEMA layers', roll:'Monroe County Property Appraiser roll (via Florida DOR)',

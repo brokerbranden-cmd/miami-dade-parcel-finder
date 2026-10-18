@@ -170,3 +170,8 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .stgo:hover{filter:brightness(1.08)}.stgo:disabled{opacity:.65;cursor:progress}
 .line.skgo .v{white-space:normal;overflow:visible;display:flex;gap:6px 10px;flex-wrap:wrap;align-items:center}
 .stdgo{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 8px}.stgomsg{font-size:12.5px}
+
+/* Monroe unpaid taxes */
+.tt.taxb{border:1px solid var(--amber,#b54708);color:var(--amber,#b54708);background:var(--amber-soft,#fff4e5)}.tt.taxb.t2,.tt.taxb.t3{border-color:var(--danger,#b42318);color:var(--danger,#b42318);background:var(--danger-soft,#fdeceb)}
+.mtline .v{overflow-wrap:anywhere}
+#mtMin{max-width:220px}

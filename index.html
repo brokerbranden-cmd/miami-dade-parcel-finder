@@ -99,6 +99,13 @@
       <div class="mrrow"><span class="mrlab">Leave out</span><div class="chips" id="mrAvoid"></div></div>
     </div>
 
+    <div class="grp monroe" id="mtGrp" data-need="mtax">
+      <div class="grp-h"><h2>Unpaid property taxes</h2><span class="hint" id="mtHint">Parcels with unpaid taxes in the Monroe Tax Collector's public report. The current-year bill is not counted until it is delinquent.</span><button class="clr" type="button" id="clrMt">Clear</button></div>
+      <div class="mrrow"><span class="mrlab">Tax status</span><div class="chips" id="mtChips"></div></div>
+      <div class="mrrow"><span class="mrlab">Balance owed</span><select id="mtMin" aria-label="Minimum unpaid tax balance"></select></div>
+      <div class="mrnote" id="mtNote"><b>Source:</b> Monroe County Tax Collector (county-taxes.net/fl-monroe), downloaded <span id="mtAsof">Oct 16, 2026</span>. Certificate holders cannot contact owners for 2 years (FS 197.432(13)); that rule is for certificate holders. Next certificate sale: May 2027.</div>
+    </div>
+
     <div class="grp">
       <div class="grp-h"><h2>What's on the property</h2><span class="hint">Pick one or more. Condo units are only searched when you pick Condo units.</span><button class="clr" type="button" id="clrType">Clear</button></div>
       <div class="chips" id="types"></div>

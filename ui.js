@@ -10,7 +10,7 @@
   const saveP=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(P)); }catch(e){} };
   const B=document.body; B.classList.add('simple'); if(P.legacy) B.classList.add('legacy'); if(P.detail) B.classList.add('detail');
   const phone=()=>matchMedia('(max-width:899px)').matches;
-  const DEFAULT_OPEN=new Set(['search','start with an idea','distress signals','buildability screen',"what's on the property",'market value','lot size']);
+  const DEFAULT_OPEN=new Set(['search','start with an idea','distress signals','buildability screen','unpaid property taxes',"what's on the property",'market value','lot size']);
 
   /* ---- filter groups ---- */
   const gkey=g=>{ const h=g.querySelector(':scope>.grp-h h2'); return h?h.textContent.trim().toLowerCase():''; };
@@ -84,7 +84,7 @@
     if(!e.target.closest('.sendline')) document.querySelectorAll('.card.menu-open').forEach(x=>x.classList.remove('menu-open')); },true);
 
   /* ---- drawer: overview first, other sections collapsible ---- */
-  const DOPEN=new Set(['buildability screen','the property','owner','value estimate (comps)','outreach','commercial distress','phones & email']);
+  const DOPEN=new Set(['buildability screen','unpaid property taxes','the property','owner','value estimate (comps)','outreach','commercial distress','phones & email']);
   function sectionDrawer(d){
     if(d.dataset.sx) return; d.dataset.sx='1';
     const kids=[...d.children]; let sec=null, secs=[];

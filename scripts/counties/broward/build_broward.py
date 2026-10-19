@@ -328,3 +328,8 @@ meta = {'ver': ver, 'county': 'broward', 'total': int(n), 'built': dt.datetime.n
 json.dump(meta, open(os.path.join(OUT, 'meta.json'), 'w'), separators=(',', ':'))
 json.dump({'built': dt.date.today().isoformat(), 'source': 'Broward city / BMSD zoning layers + county Land Use Plan (scripts/counties/broward/broward_zoning.py keyword screen)', 'fields': ['upa', 'stories', 'min_lot_sf', 'lot_cov', 'far', 'height_ft', 'zone_type', 'planned_dev', 'source'], 'counts': {'codes': len(rules)}, 'rules': rules}, open(os.path.join(OUT, 'zoning-rules.json'), 'w'), separators=(',', ':'))
 print('DONE', n, owner_stats, meta['enrich'])
+
+# a full rebuild drops the tax layer patched in by add_tax.py: re-apply it from the last pulls in $RAW/broward/tax/ (idempotent, non-fatal)
+import subprocess as _sp, sys as _sys
+_tax = _sp.run([_sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add_tax.py'), OUT])
+if _tax.returncode: print('WARN: Broward add_tax.py failed (exit %d) - tax layer missing from this build' % _tax.returncode)

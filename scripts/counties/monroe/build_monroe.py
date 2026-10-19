@@ -242,3 +242,7 @@ print('meta', n, 'est', int(est.sum()), 'oos', int(oos.sum()), 'absentee', int(a
 # sale-qualification bits (relative transfer / life estate) are added as a small column to the packs just built
 import subprocess, sys as _sys
 subprocess.run([_sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add_salex.py'), OUT], check=True)
+# a full rebuild drops the tax-delinquent layer (meta.tax + tax pack columns): re-apply it from the last tax pulls in $RAW/monroe/tax/
+# (add_tax.py is idempotent; non-fatal so a missing pull only leaves the layer out and is reported)
+_tax = subprocess.run([_sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add_tax.py'), OUT])
+if _tax.returncode: print('WARN: Monroe add_tax.py failed (exit %d) - tax layer missing from this build' % _tax.returncode)

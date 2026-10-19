@@ -17,7 +17,10 @@ extras.json.gz: {cn: {meta, groups}, ap: {meta, folios}} (construction category 
 import gzip, json, os, re, sys, urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.environ.get('RAW', os.path.join(ROOT, 'raw'))
-SRC = os.path.join(RAW, 'seeker')
+# The seeker sources live in the repo's raw/seeker (build_all.sh exports RAW=/workspace/raw, which has no seeker/ copy,
+# and the here.now download now returns 403). SEEKER=<dir> overrides; $RAW/seeker is only used if it already holds the files.
+SRC = os.environ.get('SEEKER') or next((d for d in (os.path.join(ROOT, 'raw', 'seeker'), os.path.join(RAW, 'seeker'))
+                                        if os.path.exists(os.path.join(d, 'zoning_by_folio.js'))), os.path.join(ROOT, 'raw', 'seeker'))
 BASE = 'https://oaken-pocket-t64p.here.now/'
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'data')
 

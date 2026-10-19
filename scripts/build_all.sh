@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild every data pack from the public Miami-Dade sources (about 30-40 minutes, ~1.5 GB of raw downloads).
+# Rebuild every data pack from the public Miami-Dade sources + Monroe (about 1.5-2 hours, ~1.5 GB of raw downloads; EnerGov ~45 min, permits ~20 min).
 # Needs: python3, pandas, pyarrow, geopandas, shapely, requests.
 #
 # Robust + resumable:
@@ -61,17 +61,19 @@ done
 fetch auctions "auctions.json" python3 scripts/fetch_auctions.py "$RAW"
 fetch tax      "tax"           python3 scripts/fetch_tax.py "$RAW"
 fetch viol     "viol"          python3 scripts/fetch_violations.py "$RAW"
-fetch permits  "permits.json"  python3 scripts/fetch_permits.py "$RAW"
+RETRIES=1 fetch permits  "permits.json"  python3 scripts/fetch_permits.py "$RAW"
 # --- permit history + municipal code cases ---
 fetch county_permits "permits" python3 scripts/fetch_county_permits.py "$RAW"
-fetch energov        "permits" python3 scripts/fetch_energov.py "$RAW"   # ~20-40 min, ~1 req/s
+RETRIES=1 fetch energov        "permits" python3 scripts/fetch_energov.py "$RAW"   # ~20-40 min, ~1 req/s
 build merge_permits python3 scripts/merge_permits.py "$RAW"
 build distress python3 scripts/build_distress.py data                     # -> raw/distress.parquet + data/distress.json.gz
 # Pre-foreclosure "open" check: Clerk CLP / dismissal / certificate-of-title exports in raw/lp_downloads/{clp,dis,cot}_*.csv,
 # else the unattended CLP search (Turnstile usually blocks it; one try, non-fatal). The Clerk's daily file is a paid subscription.
-if ! ls raw/lp_downloads/clp_*.csv raw/lp_downloads/cot_*.csv >/dev/null 2>&1; then
-  RETRIES=1 fetch clerk_clp "clerk" timeout 900 python3 scripts/fetch_clerk.py "$RAW" --days 120 --types CLP
-else done_ clerk_clp || mark clerk_clp ok; fi
+# The unattended CLP search is Turnstile-blocked every week (15-min timeout, never succeeds), so it is skipped and marked
+# stale at once unless CLP_SCRAPE=1. Dropping Clerk CLP / dismissal / certificate-of-title exports in raw/lp_downloads/ makes it fresh.
+if ls raw/lp_downloads/clp_*.csv raw/lp_downloads/cot_*.csv >/dev/null 2>&1; then done_ clerk_clp || mark clerk_clp ok
+elif [ "${CLP_SCRAPE:-0}" = 1 ]; then RETRIES=1 fetch clerk_clp "clerk" timeout 900 python3 scripts/fetch_clerk.py "$RAW" --days 120 --types CLP
+else done_ clerk_clp || [ -f "$ST/clerk_clp.stale" ] || { mark clerk_clp stale; note "Clerk CLP scrape skipped (Turnstile-blocked; CLP_SCRAPE=1 to try) - marked stale"; }; fi
 build signals python3 scripts/build_signals.py data        # -> data/signals.json.gz
 build comps   python3 scripts/build_comps.py data          # -> data/comps.json.gz
 build commercial bash scripts/commercial/run_commercial.sh   # -> data/commercial.json.gz (Miami-Dade commercial distress score, live tax payoff, owner entity, closed gas; non-fatal)

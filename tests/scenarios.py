@@ -184,7 +184,7 @@ def s10_send_to():
     ok(pg.query_selector('.drawer') is None, 'tagging does not open the drawer')
     click('#sendChips .chip[data-send="cc"]'); settle(); ok(cnt() == 2, 'Send to: call center filter shows the 2 tagged')
     fill('#listName-cc', 'Scenario list'); rs = csv_of('#sendExp-cc')
-    ok({r['Folio'].replace('-', '') for r in rs} == {f1, f2} and rs and list(rs[0].keys()) == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], 'Send to export: the 2 folios, 7 contact columns only')
+    ok({r['Folio'].replace('-', '') for r in rs} == {f1, f2} and rs and list(rs[0].keys()) == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], 'Send to export: the 2 folios, 11 contact columns only')
     click('#sendBar [data-sendmark="1"]'); pg.wait_for_timeout(500)
     ok(pg.is_disabled('#sendExp-cc'), 'after Mark as sent nothing new to export')
     click(f'#cards .card[data-folio="{f1}"] .resend[data-resend="cc"]'); pg.wait_for_timeout(400)
@@ -246,13 +246,14 @@ def s16_csv_columns():
     reset(); go('city=Miami%20Gardens&sig=TD&type=sf'); n = cnt(); ok(0 < n < 5000, f'{n} rows to export')
     rs = csv_of('#exportBtn'); hdr = list(rs[0].keys()) if rs else []
     ok(len(rs) == n, f'CSV rows {len(rs)} = results {n}')
-    ok(hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], f'columns exactly Address, Owner Name, Mailing Address, Folio, County, City ({hdr})')
+    ok(hdr == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], f'columns exactly the 11 contact columns ({hdr})')
     ok(all(re.fullmatch(r'\d\d-\d{4}-\d{3}-\d{4}', r['Folio']) for r in rs), 'folios are dashed 13-digit (Excel keeps them as text)')
-    ok(all(r['Address'].strip() for r in rs), 'no blank Address')
+    ok(all(r['Property Address'].strip() for r in rs), 'no blank Address')
     ok(len({r['Folio'] for r in rs}) == len(rs), 'no duplicate rows')
-    ok(all(r['City'] == 'Miami Gardens' for r in rs), 'city column matches filter')
-    ok(all(r['County'] == 'Miami-Dade' and r['Owner Name'] for r in rs), 'county + owner filled')
+    ok(all(r['Property City'] == 'Miami Gardens' and r['Property State'] == 'FL' and re.fullmatch(r'\d{5}', r['Property Zip']) for r in rs), 'property city matches filter; property zip 5-digit')
+    ok(all(r['Property County'] == 'Miami-Dade' and r['Owner Name'] for r in rs), 'county + owner filled')
     ok(sum(1 for r in rs if r['Mailing Address']) >= 0.9 * len(rs), 'mailing address present on most rows')
+    ok(sum(1 for r in rs if r['Mailing City'] and re.fullmatch(r'[A-Z]{2}', r['Mailing State']) and re.fullmatch(r'\d{5}(-\d{4})?', r['Mailing Zip'])) >= 0.9 * len(rs), 'mailing city/state/zip split on most rows')
 @scenario
 def s17_sort_orders():
     reset(); go('type=sf&city=Doral')

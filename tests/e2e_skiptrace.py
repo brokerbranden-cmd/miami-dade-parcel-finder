@@ -1,7 +1,7 @@
 """Skip trace: export file (columns, name split, company flag, dedupe, exclusions, large-list warning), import with two provider layouts
 (auto column mapping, match report: folio / address / owner+mailing, duplicates, unmatched, DNC), per-county separation (Miami-Dade vs Monroe),
 Has phone / Skip traced filters, phones in cards + drawer + table with tel:/sms: links, Text list export + Mark as sent integration + Hide already sent,
-help, clearing, deterrents-friendly inputs. The normal CSV export stays the 7 contact columns. argv: URL [desktop|mobile]"""
+help, clearing, deterrents-friendly inputs. The normal CSV export stays the 11 contact columns. argv: URL [desktop|mobile]"""
 import sys, json, csv, io, os, re, tempfile
 from playwright.sync_api import sync_playwright
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
@@ -62,7 +62,7 @@ with sync_playwright() as pw:
     n_props = n_of(); ok(n_props > 20, f'Homestead "SW 2" search: {n_props} properties')
 
     # ---------- normal export unchanged ----------
-    nrows = dl_rows(lambda: jsclick('#exportBtn')); ok(nrows[0] == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], 'normal CSV export still the 7 contact columns'); ok(len(nrows) - 1 == n_props, 'normal export row count unchanged')
+    nrows = dl_rows(lambda: jsclick('#exportBtn')); ok(nrows[0] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], 'normal CSV export still the 11 contact columns'); ok(len(nrows) - 1 == n_props, 'normal export row count unchanged')
     pg.wait_for_timeout(500); jsclick('#expSkip'); pg.wait_for_timeout(300)
 
     # ---------- skip trace export ----------

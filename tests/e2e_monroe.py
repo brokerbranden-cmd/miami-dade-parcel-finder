@@ -111,8 +111,8 @@ with sync_playwright() as pw:
     p2.goto(URL + '?county=monroe#mtax=y3'); p2.wait_for_selector('#cards .card', timeout=120000); p2.wait_for_timeout(1500)
     with p2.expect_download(timeout=240000) as dl: p2.evaluate("document.getElementById('exportBtn').click()")
     import csv as _csv
-    rows = list(_csv.reader(open(dl.value.path(), encoding='utf-8-sig'))); check(rows and rows[0] == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], f'export header unchanged: {rows[0] if rows else None}')
-    check(len(rows) > 20 and not any('tax' in h.lower() for h in rows[0]) and all(r[4] == 'Monroe' for r in rows[1:]), f'export has {len(rows)-1} Monroe rows, no tax columns')
+    rows = list(_csv.reader(open(dl.value.path(), encoding='utf-8-sig'))); check(rows and rows[0] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], f'export header unchanged: {rows[0] if rows else None}')
+    check(len(rows) > 20 and not any('tax' in h.lower() for h in rows[0]) and all(r[5] == 'Monroe' for r in rows[1:]) and sum(1 for r in rows[1:] if re.fullmatch(r'\d{5}', r[4])) >= 0.95 * (len(rows) - 1) and all(not r[9] or re.fullmatch(r'\d{5}(-\d{4})?', r[9]) for r in rows[1:]), f'export has {len(rows)-1} Monroe rows, no tax columns, Property Zip + Mailing Zip 5-digit text')
     b.close()
 check(not errs, 'no page errors ' + '; '.join(errs[:3]))
 print('RESULT', 'PASS' if not fails else f'FAIL ({len(fails)})'); sys.exit(1 if fails else 0)

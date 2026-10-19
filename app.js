@@ -1070,10 +1070,23 @@ function exportAddr(p,i){ const a=getStr(p,'addr',i).trim(); if(a){ EXPSTAT.real
   const use=TYPE_LABEL[LU_T[p.c.landuse[i]]]||'Parcel', st=nearStreet(p,i); if(st){ EXPSTAT.near++; return `No site address – ${use}, near ${st}`; }
   const lg=(p.det?getStr(p,'legal',i):'').replace(/\s+/g,' ').trim(); if(lg){ EXPSTAT.legal++; return `No site address – ${use}, ${lg.length>48?lg.slice(0,48)+'…':lg}`; }
   EXPSTAT.use++; return `No site address – ${use}`; }
-function exportRow(p,i){ const c=p.c; return [csvq(exportAddr(p,i)),csvq(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; ')),csvq(getStr(p,'mail',i)),folio13(getStr(p,'folio',i)),csvq(PFC.cfg.name),csvq(D.city[c.city[i]]||''),'FL'].join(','); }
-const EXP_HEAD='Address,Owner Name,Mailing Address,Folio,County,City,State\n';
+/* mailing string -> [street, city, state, zip]. Packs hold one mail string ("1420 NW NORTH RIVER DR STE 430, MIAMI, FL 33125[-3027]").
+   Only a US "…, CITY, ST 12345[-6789]" tail is split; foreign / unparseable strings stay whole in the street column with blank parts.
+   Zips stay strings; 3-4 digit zips of the 0-prefixed states (some Monroe rows lost the leading zero) are left-padded back to 5. */
+const US_ST=new Set('AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR VI GU AS MP AA AE AP'.split(' ')), ZERO_ST=new Set(['CT','MA','ME','NH','NJ','RI','VT','PR','VI','AE']);
+function splitMail(s){ s=String(s||'').replace(/\s+/g,' ').trim(); if(!s) return ['','','',''];
+  const pt=s.split(/\s*,\s*/); if(pt.length<3) return [s,'','',''];
+  const m=pt[pt.length-1].match(/^([A-Za-z]{2})\.? (\d{3,5})(?:-?(\d{4}))?$/), city=pt[pt.length-2], st=m&&m[1].toUpperCase();
+  if(!m||!US_ST.has(st)||!city||/\d/.test(city)||!pt.slice(0,-2).join('').trim()) return [s,'','',''];
+  let z=m[2]; if(z.length<5){ if(!ZERO_ST.has(st)) return [s,'','','']; z=z.padStart(5,'0'); }
+  return [pt.slice(0,-2).join(', '),city,st,z+(m[3]?'-'+m[3]:'')]; }
+const propZip=z=>{ z=String(z||'').trim(); return /^\d{5}(-\d{4})?$/.test(z)?z:''; };
+// columns: Owner Name, Property Address, Property City, Property State, Property Zip, Property County, Mailing Address, Mailing City, Mailing State, Mailing Zip, Folio
+function contactRow(owner,addr,city,zip,mail,folio){ return [csvq(owner),csvq(addr),csvq(city),'FL',propZip(zip),csvq(PFC.cfg.name),...splitMail(mail).map(csvq),folio].join(','); }
+function exportRow(p,i){ const c=p.c; return contactRow(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; '),exportAddr(p,i),D.city[c.city[i]]||'',D.zip[c.zip[i]]||'',getStr(p,'mail',i),folio13(getStr(p,'folio',i))); }
+const EXP_HEAD='Owner Name,Property Address,Property City,Property State,Property Zip,Property County,Mailing Address,Mailing City,Mailing State,Mailing Zip,Folio\n';
 function buildCSV(ids=results){
-  // export = contact list only (main export and Send to lists): Address, Owner Name, Mailing Address, Folio, County, City, State
+  // export = contact list only (main export and Send to lists): see EXP_HEAD
   const parts=[EXP_HEAD]; let buf=''; for(const k in EXPSTAT) EXPSTAT[k]=0;
   for(let j=0;j<ids.length;j++){
     const id=ids[j], p=P(id), i=I(id);
@@ -1495,10 +1508,10 @@ function refreshFolio(folio){
 function download(name,blob){ const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
 const stamp=()=>{ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); };
 function savedListCSV(){
-  // same contact-only columns as every property export: Address, Owner Name, Mailing Address, Folio, County, City, State
+  // same contact-only columns as every property export (EXP_HEAD)
   const ids=savedIdx(); for(const k in EXPSTAT) EXPSTAT[k]=0; const rows=SV.list().map(x=>{ const id=ids.get(x.folio);
     if(id!=null) return exportRow(P(id),I(id)); EXPSTAT.real++;
-    return [csvq(x.addr||'No site address'),csvq(x.owner||''),csvq(x.mail||''),folio13(x.folio),csvq(PFC.cfg.name),csvq(x.city||''),'FL'].join(','); });
+    return contactRow(x.owner||'',x.addr||'No site address',x.city||'',x.zip||'',x.mail||'',folio13(x.folio)); });
   return new Blob([EXP_HEAD+rows.join('\n')+(rows.length?'\n':'')],{type:'text/csv'});
 }
 function wireSaved(){

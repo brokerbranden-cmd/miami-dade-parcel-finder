@@ -1,11 +1,13 @@
 """Headless e2e for saved properties: star on cards/table/map popup/drawer (mouse + keyboard), status + notes, Saved view
 (status filter, sort, table, map, CSV export, copy folios), condo units, persistence across reload, JSON/CSV export + JSON import
 (merge, and into a fresh browser). Screenshots -> shots/saved_*.png"""
-import sys, time, csv, io, json
+import sys, time, csv, io, json, os
 from playwright.sync_api import sync_playwright
 import legacy_ui  # noqa: F401  (simplified UI in legacy mode, see legacy_ui.py)
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
-SHOTS = '/workspace/parcel-finder/shots/'
+MOB = len(sys.argv) > 2 and sys.argv[2] == 'mobile'
+SHOTS = os.environ.get('SHOTS') or os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shots') + '/'
+VP = dict(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True) if MOB else dict(viewport={'width': 1360, 'height': 900})
 errs = []
 def ok(cond, msg):
     print(('PASS ' if cond else 'FAIL ') + msg)
@@ -17,7 +19,7 @@ def watch(pg, tag):
     pg.on('pageerror', lambda e: errs.append(f'{tag} pageerror: ' + str(e)))
 with sync_playwright() as pw:
     b = pw.chromium.launch()
-    ctx = b.new_context(viewport={'width': 1360, 'height': 900}, accept_downloads=True)
+    ctx = b.new_context(**VP, accept_downloads=True)
     ctx.grant_permissions(['clipboard-read', 'clipboard-write'], origin=URL.rstrip('/').rsplit('/', 1)[0] if URL.count('/') > 3 else URL)
     pg = ctx.new_page(); watch(pg, 'main')
     pg.goto(URL + '#ds=50&sort=ds_d'); pg.wait_for_selector('#results:not([hidden])', timeout=180000); pg.wait_for_timeout(1200)
@@ -77,7 +79,7 @@ with sync_playwright() as pw:
     pg.screenshot(path=SHOTS + 'saved_04_table.png')
     with pg.expect_download(timeout=180000) as dl: pg.click('#exportBtn')
     rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read()))); hdr = rows[0]
-    ok(len(rows) - 1 == 5 and hdr == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'], f'Export CSV in Saved view: {len(rows)-1} rows, 7 contact columns')
+    ok(len(rows) - 1 == 5 and hdr == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], f'Export CSV in Saved view: {len(rows)-1} rows, 11 contact columns')
     st = {dict(zip(hdr, r))['Folio'].replace('-', '') for r in rows[1:]}; ok(f1 in st, 'CSV includes saved card 1')
     # map: filter to one property, click it -> popup with star
     pg.click('#svStatus .chip[data-st="Called"]'); pg.click('#vMap'); pg.wait_for_function("document.getElementById('mapHint').textContent.includes('on the map')", timeout=180000); pg.wait_for_timeout(1500)
@@ -93,7 +95,7 @@ with sync_playwright() as pw:
     data = json.load(open(dl.value.path())); ok(data.get('count') == 5 and any(x['note'].startswith('Left voicemail') for x in data['items']), 'Export JSON has 5 items with note')
     jpath = dl.value.path()
     with pg.expect_download() as dl: pg.click('#svExportCsv')
-    srows = list(csv.reader(open(dl.value.path(), encoding='utf-8'))); ok(len(srows) - 1 == 5 and srows[0] == ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State'] and all(r[0] and r[1] and r[3] and r[4] == 'Miami-Dade' for r in srows[1:]), 'Export saved CSV: 5 rows, only the 7 contact columns, address/owner/folio filled')
+    srows = list(csv.reader(open(dl.value.path(), encoding='utf-8'))); ok(len(srows) - 1 == 5 and srows[0] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and all(r[0] and r[1] and r[10] and r[5] == 'Miami-Dade' for r in srows[1:]), 'Export saved CSV: 5 rows, only the 11 contact columns, address/owner/folio filled')
     pg.click(f'#cards .card[data-folio="{f2}"] .star'); pg.wait_for_timeout(600); ok(badge(pg) == 4 and cnt(pg) == 4, 'unsave in Saved view removes it (4)')
     pg.set_input_files('#svImport', jpath); pg.wait_for_timeout(1500); ok(badge(pg) == 5 and cnt(pg) == 5, 'Import JSON merges it back (5)')
     pg.reload(); pg.wait_for_selector('#results:not([hidden])', timeout=180000); pg.wait_for_function("document.getElementById('sCount').textContent==='5'", timeout=120000)
@@ -104,8 +106,8 @@ with sync_playwright() as pw:
     # filter interaction leaves Saved view
     pg.click('#ideas .chip[data-i="1"]'); pg.wait_for_timeout(800); ok(pg.get_attribute('#savedBtn', 'aria-pressed') == 'false' and pg.query_selector('#savedBar').is_hidden(), 'picking an idea returns to search')
     # fresh browser: import the file
-    ctx2 = b.new_context(viewport={'width': 1360, 'height': 900}); p2 = ctx2.new_page(); watch(p2, 'fresh')
-    p2.goto(URL); p2.wait_for_selector('#results:not([hidden])', timeout=180000); ok(badge(p2) == 0, 'fresh browser has 0 saved')
+    ctx2 = b.new_context(**VP); p2 = ctx2.new_page(); watch(p2, 'fresh')
+    p2.goto(URL + ('?drive=0' if MOB else '')); p2.wait_for_selector('#results:not([hidden])', timeout=180000); ok(badge(p2) == 0, 'fresh browser has 0 saved')
     p2.click('#savedBtn'); p2.wait_for_timeout(500); p2.set_input_files('#svImport', jpath)
     p2.wait_for_function("document.getElementById('sCount').textContent==='5'", timeout=180000)
     ok(badge(p2) == 5 and p2.query_selector(f'#cards .card[data-folio="{fc}"]') is not None, 'fresh browser import: 5 saved incl. condo (condo pack lazy-loaded)')

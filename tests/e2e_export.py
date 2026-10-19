@@ -1,11 +1,11 @@
-"""Every property CSV export: exactly Address,Owner Name,Mailing Address,Folio,County,City,State; Folio dashed 13-digit; Address never blank
+"""Every property CSV export: exactly Owner Name,Property Address,Property City,Property State,Property Zip,Property County,Mailing Address,Mailing City,Mailing State,Mailing Zip,Folio; Folio dashed 13-digit; Address never blank
 (fallback 'No site address – <use>, near <street>' / legal). Main export, saved-list export, dashed + plain folio search. argv: URL [desktop|mobile]"""
 import sys, csv, io, re, json
 from playwright.sync_api import sync_playwright
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
 MOB = len(sys.argv) > 2 and sys.argv[2] == 'mobile'; TAG = 'mobile' if MOB else 'desktop'
 BASE = URL.split('#')[0].split('?')[0]; Q = '?drive=0' if MOB else ''
-HDR = ['Address', 'Owner Name', 'Mailing Address', 'Folio', 'County', 'City', 'State']; FD = re.compile(r'\d\d-\d{4}-\d{3}-\d{4}')
+HDR = ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio']; FD = re.compile(r'\d\d-\d{4}-\d{3}-\d{4}'); ZIP = re.compile(r'\d{5}(-\d{4})?')
 BLANKS = ['3021250180770', '3040110180060', '0421320130350']
 errs = []
 def ok(c, m):
@@ -26,9 +26,12 @@ with sync_playwright() as pw:
         with pg.expect_download(timeout=240000) as dl: pg.evaluate(f"document.querySelector('{sel}').click()")
         t = open(dl.value.path(), encoding='utf-8').read(); return list(csv.reader(io.StringIO(t)))
     def check(rows, what):
-        ok(rows and rows[0] == HDR, f'{what}: header is exactly the 7 contact columns')
-        body = rows[1:]; bad_a = [r for r in body if not r[0].strip()]; bad_f = [r for r in body if not FD.fullmatch(r[3])]
-        ok(body and not bad_a and not bad_f and all(len(r) == 7 and r[4] == 'Miami-Dade' and r[6] == 'FL' for r in body), f'{what}: {len(body)} rows, blank Address {len(bad_a)}, non-dashed Folio {len(bad_f)}')
+        ok(rows and rows[0] == HDR, f'{what}: header is exactly the 11 contact columns')
+        body = rows[1:]; bad_a = [r for r in body if not r[1].strip()]; bad_f = [r for r in body if not FD.fullmatch(r[10])]
+        ok(body and not bad_a and not bad_f and all(len(r) == 11 and r[5] == 'Miami-Dade' and r[3] == 'FL' for r in body), f'{what}: {len(body)} rows, blank Address {len(bad_a)}, non-dashed Folio {len(bad_f)}')
+        bad_z = [r[4] for r in body if r[4] and not ZIP.fullmatch(r[4])]; ok(not bad_z and sum(1 for r in body if r[4]) >= 0.95 * len(body), f'{what}: Property Zip is 5-digit text ({sum(1 for r in body if r[4])}/{len(body)} filled, bad {bad_z[:3]})')
+        mp = [r for r in body if r[7]]; bad_m = [r for r in mp if not (re.fullmatch(r'[A-Z]{2}', r[8]) and ZIP.fullmatch(r[9]) and ', ' + r[7] + ',' not in ', ' + r[6] + ',')]
+        ok(not bad_m and all(not (r[8] or r[9]) for r in body if not r[7]), f'{what}: mailing city/state/zip split ({len(mp)}/{len(body)} parsed, bad {[r[6:10] for r in bad_m[:2]]})')
         return body
     go('q=' + ' '.join(BLANKS) + '&gov=1'); n = pg.evaluate('PF.sample(10)')['n']
     if n != 3:   # search may not take several folios at once: fall back to the vacant type
@@ -36,8 +39,8 @@ with sync_playwright() as pw:
     body = check(export(), f'export ({n} via folio search)')
     st = pg.evaluate('PF.expStat()'); print(f'[{TAG}] address stats {st}')
     for f in BLANKS:
-        r = [x for x in body if x[3].replace('-', '') == f]
-        if r: ok(r[0][0].startswith('No site address – ') and ('near ' in r[0][0] or len(r[0][0]) > 25), f'{f}: blank roll address -> "{r[0][0]}"')
+        r = [x for x in body if x[10].replace('-', '') == f]
+        if r: ok(r[0][1].startswith('No site address – ') and ('near ' in r[0][1] or len(r[0][1]) > 25), f'{f}: blank roll address -> "{r[0][1]}"')
     go('type=vacant&gov=1'); body = check(export(), 'vacant-land export'); st = pg.evaluate('PF.expStat()')
     print(f'[{TAG}] vacant address stats {st}'); ok(st['near'] + st['legal'] + st['use'] > 0 and st['use'] <= 0.02 * len(body), f'fallbacks: near street {st["near"]}, legal {st["legal"]}, land use only {st["use"]}; real {st["real"]}')
     # dashed and plain folio search both work

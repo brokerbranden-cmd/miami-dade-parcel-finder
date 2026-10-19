@@ -415,7 +415,7 @@ Tests:
 - Tests: `tests/e2e_clerk.py URL [desktop|mobile]` and scenarios s34–s38.
 
 ## CSV export (Oct 14, 2026)
-The main **Export CSV** and the **Send to** list exports contain only: `Address, Owner Name, Mailing Address, Folio, County, City` (County is always Miami-Dade; Mailing Address is the owner mailing address from the PA roll whenever present). Send to "Mark as sent" is unchanged. The Saved-list CSV/JSON exports are separate and unchanged.
+The main **Export CSV**, the **Send to** list exports and the Saved-list CSV contain only: `Owner Name, Property Address, Property City, Property State, Property Zip, Property County, Mailing Address, Mailing City, Mailing State, Mailing Zip, Folio`. Property Zip is the parcel's site zip from the county pack (`zip` column; blank when the roll has none). The packs hold the owner mailing address as one string, so the export splits a US `street, CITY, ST 12345[-6789]` tail into Mailing City / State / Zip; foreign or unparseable addresses stay whole in Mailing Address with the parts blank. Zips are written as text (Monroe 4-digit New England zips get their leading zero back). Send to "Mark as sent" is unchanged. The Saved-list CSV/JSON exports are separate and unchanged.
 
 ## Counties (multi-county)
 `counties.js` is the county registry, and it loads before every other script. Each entry sets the name, map center and bounds, `dataDir`, the available `layers`, the Property Appraiser link and a storage suffix.

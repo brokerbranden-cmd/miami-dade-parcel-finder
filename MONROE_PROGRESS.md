@@ -32,3 +32,4 @@ Started 2026-10-16. Raw inputs: /workspace/raw/monroe/. Scripts: scripts/countie
 - Root cause: build-time owner_kind.py let some organization names through as 'person' (IGLESIA/FELLOWSHIP/CATHEDRAL/CH OF GOD etc., clubs, posts, names cut at 30 chars in Monroe/Broward, 'ATT ...'/'C O D ...' read as care-of). The filters themselves were correct.
 - Fix: app-side orgName() reclassifies on load (MD 206, Monroe 112, Broward 868 parcels). Python twin scripts/org_name.py.
 - tests/e2e_filter_audit.py + scripts/pre_push_regression.sh + git hook; regression at d41c912: unit, ownerkind, scenarios/export/monroe/broward desktop PASS; filter audit + mobile running.
+- Oct 19 15:07 ET: pushed e727d4d (13/13 regression green); live on Pages (sw v21); live e2e_ownerkind PASS (RC+Individuals 203, 0 entity names; Monroe/Broward Individuals 0 entity names).

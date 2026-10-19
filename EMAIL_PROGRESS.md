@@ -5,3 +5,4 @@ DNS (read-only, 16:13 ET): SPF ok (includes spf.protection.outlook.com + secures
 Rules: never git clean, explicit git add paths, no shots/ test_runs/ tests/export_sample.csv. Regression on PORT=8097 via nohup.
 ## Log
 - 16:40 built feature (app.js markEmailed/emBadge, skiptrace-ui.js Email button/template/repeat warning, index.html stTplBtn, ui.css, sw v22); tests/e2e_email.py desktop+mobile PASS locally; added to pre_push_regression.sh. Next: full regression (nohup), push, live verify.
+- 17:46 full pre-push regression 15/15 green (summary_prepush_20261019-161806). Pushed 5a4b775 (with 1c70795, ac7aac7). Live e2e_email desktop+mobile ALL PASS (50 checks each). DONE.

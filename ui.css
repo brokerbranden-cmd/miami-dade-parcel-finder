@@ -175,3 +175,16 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .tt.taxb{border:1px solid var(--amber,#b54708);color:var(--amber,#b54708);background:var(--amber-soft,#fff4e5)}.tt.taxb.t2,.tt.taxb.t3{border-color:var(--danger,#b42318);color:var(--danger,#b42318);background:var(--danger-soft,#fdeceb)}
 .mtline .v{overflow-wrap:anywhere}
 #mtMin{max-width:220px}
+/* email owners from your own Outlook (skiptrace-ui.js) */
+.stem{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0}
+.stem .stl.em{min-width:0}
+.stl.stemb{flex:none}
+.sentb.emb{background:var(--accent-soft,#e6f3f4)}
+.sttpl label{display:block;font-size:13px;font-weight:600;margin:8px 0 2px}
+.sttpl input[type=text],.sttpl textarea{display:block;width:100%;box-sizing:border-box;font:inherit;font-weight:400;padding:6px 8px;border:1px solid var(--line,#ccc);border-radius:6px}
+.sttpl .sttplrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.sttpl .sttplrow{grid-template-columns:1fr}}
+.sttpl .stmode{border:1px solid var(--line,#ccc);border-radius:6px;padding:6px 10px}
+.sttpl .stmode label{font-weight:400}
+.sttips{margin:10px 0;padding:8px 12px;border-radius:6px;background:var(--accent-soft,#e6f3f4);font-size:13px}
+.sttips ul{margin:4px 0 0 18px;padding:0}

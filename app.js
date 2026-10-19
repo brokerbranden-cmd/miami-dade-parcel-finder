@@ -368,7 +368,13 @@ function expMark(k){ const P0=EXP_PENDING; EXP_PENDING=null; renderExpBar(); if(
 const tagCount=k=>Object.values(SEND.tags).filter(r=>r&&r[k]).length;
 const dayStr=d=>{ d=new Date(d); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 function sendBtns(folio){ return `<span class="sendtools">${TEAMS.map(t=>{ const on=isTagged(folio,t.k); return `<button type="button" class="sbtn ${on?'on':''}" data-sendtag="${t.k}" data-folio="${folio}" aria-pressed="${on}" title="${on?`On the ${t.noun} list (tagged ${dayStr(SEND.tags[folio][t.k])}). Click to remove`:`Add this property to the ${t.noun} list`}">${t.label}</button>`; }).join('')}</span>`; }
-function sentBadges(folio){ return TEAMS.map(t=>{ const s=sentOf(folio,t.k); return s?`<span class="sentb" title="Exported to the ${t.noun} list ${s.list?'“'+esc(s.list)+'” ':''}on ${s.d}. It won't be exported to the ${t.noun} again unless you retag it or press Re-send.">${t.label} · Sent ${s.d} <button type="button" class="resend" data-resend="${t.k}" data-folio="${folio}">Re-send</button></span>`:''; }).join(''); }
+function emBadge(folio){ const s=sentOf(folio,'em'); if(!s) return ''; const n=s.addrs?Object.keys(s.addrs).length:1; return `<span class="sentb emb" data-emailed="${folio}" title="Emailed ${esc(s.addr||'')} from your Outlook on ${esc(svDate(s.t)||s.d)}${n>1?` (${n} addresses emailed)`:''}">Emailed ${esc(svDate(s.t)||s.d)}</span>`; }
+/* email outreach (Email button in skiptrace-ui.js opens Outlook; nothing is sent from this site): mark the owner contacted by email */
+function markEmailed(f,addr,id){ const iso=new Date().toISOString(), d=dayStr(iso), r=SEND.sent[f]||(SEND.sent[f]={}), prev=r.em&&r.em.addrs||{}; r.em={d,t:iso,list:'Email',addr,addrs:{...prev,[addr]:d}}; saveSend();
+  if(SV.has(f)) SV.logActivity(f,{type:'email',d:todayDay(),outcome:'',note:'Emailed '+addr+' from Outlook'},id!=null&&id>=0?savedInfo(id):undefined);
+  refreshSendUi(f); if(S.cont||S.hideSent) run(); }
+const emailedTo=(f,addr)=>{ const s=sentOf(f,'em'); return s&&s.addrs&&s.addrs[addr]||null; };
+function sentBadges(folio){ return emBadge(folio)+TEAMS.map(t=>{ const s=sentOf(folio,t.k); return s?`<span class="sentb" title="Exported to the ${t.noun} list ${s.list?'“'+esc(s.list)+'” ':''}on ${s.d}. It won't be exported to the ${t.noun} again unless you retag it or press Re-send.">${t.label} · Sent ${s.d} <button type="button" class="resend" data-resend="${t.k}" data-folio="${folio}">Re-send</button></span>`:''; }).join(''); }
 const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
 const mzKey=i=>MZ[i]?MZ[i][1]+'|'+MZ_UP[i]:'';
 function mzAllow(q){ const toks=mzTokens(q); if(!toks.length && !S.mzSel.size) return null; const a=new Uint8Array(MZ.length); for(let i=1;i<MZ.length;i++){ const c=MZ_UP[i]; if(S.mzSel.size && S.mzSel.has(mzKey(i))){ a[i]=1; continue; } for(const t of toks){ if(c===t || c.startsWith(t)){ a[i]=1; break; } } } return a; }
@@ -1784,7 +1790,7 @@ async function boot(){
     setTimeout(ensureComps,300);
     /* small internal API for drive.js / lenders.js (same page, nothing leaves the browser) */
     const skInfo=id=>{ const p=P(id), i=I(id), c=p.c; return {folio:getStr(p,'folio',i), addr:getStr(p,'addr',i).trim(), city:D.city[c.city[i]]||'', zip:D.zip[c.zip[i]]||'', owner:getStr(p,'owner',i), mail:getStr(p,'mail',i), gov:!!(c.flags[i]&FLAG.govt)}; };
-    const skBridge={ results:()=>results, info:skInfo, folioOf:id=>getStr(P(id),'folio',I(id)), folioOut:folio13, ensureDetail, order:PFC.cfg.nameOrder||'first-last', contacted, sentOf, toast, download, dayStr,
+    const skBridge={ results:()=>results, info:skInfo, folioOf:id=>getStr(P(id),'folio',I(id)), folioOut:folio13, ensureDetail, order:PFC.cfg.nameOrder||'first-last', contacted, sentOf, markEmailed, emailedTo, toast, download, dayStr,
       loadAll:async()=>{ if(!PACKS[1]){ try{ await loadPack(1,'Loading condo units…'); }catch(e){} } await ensureDetail(); },
       scan:async(cb,prog)=>{ const cur={folio:'',addr:'',zip:'',gov:false}; let pk=null, ii=0; Object.defineProperties(cur,{owner:{get:()=>getStr(pk,'owner',ii),enumerable:true},mail:{get:()=>getStr(pk,'mail',ii),enumerable:true}});
         let total=0; for(const p of PACKS) if(p) total+=p.n; let done=0, nextY=0;

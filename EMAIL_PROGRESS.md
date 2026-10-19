@@ -4,3 +4,4 @@ Plan: skiptrace-ui.js (Email button + template editor modal + repeat warning), a
 DNS (read-only, 16:13 ET): SPF ok (includes spf.protection.outlook.com + secureserver.net, -all); MX ok (prophunters-com01b.mail.protection.outlook.com); DKIM selector1/2 CNAMEs present but targets NXDOMAIN -> DKIM signing not enabled in M365; DMARC p=none, no rua.
 Rules: never git clean, explicit git add paths, no shots/ test_runs/ tests/export_sample.csv. Regression on PORT=8097 via nohup.
 ## Log
+- 16:40 built feature (app.js markEmailed/emBadge, skiptrace-ui.js Email button/template/repeat warning, index.html stTplBtn, ui.css, sw v22); tests/e2e_email.py desktop+mobile PASS locally; added to pre_push_regression.sh. Next: full regression (nohup), push, live verify.

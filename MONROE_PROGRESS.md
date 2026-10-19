@@ -27,3 +27,8 @@ Started 2026-10-16. Raw inputs: /workspace/raw/monroe/. Scripts: scripts/countie
 - Tests: e2e_monroe.py extended (58 checks desktop+mobile incl. export header). Regression runner: /workspace/tmp/full9.sh
 - 01:15 Monroe tax regression ALL GREEN (16/16, summary9). Pushed.
 - 01:20 Monroe tax layer LIVE VERIFIED (e2e_monroe desktop+mobile PASS on Pages, sw v18).
+
+## Oct 19, 2026 - owner-kind fix (RC + Individuals leak)
+- Root cause: build-time owner_kind.py let some organization names through as 'person' (IGLESIA/FELLOWSHIP/CATHEDRAL/CH OF GOD etc., clubs, posts, names cut at 30 chars in Monroe/Broward, 'ATT ...'/'C O D ...' read as care-of). The filters themselves were correct.
+- Fix: app-side orgName() reclassifies on load (MD 206, Monroe 112, Broward 868 parcels). Python twin scripts/org_name.py.
+- tests/e2e_filter_audit.py + scripts/pre_push_regression.sh + git hook; regression at d41c912: unit, ownerkind, scenarios/export/monroe/broward desktop PASS; filter audit + mobile running.

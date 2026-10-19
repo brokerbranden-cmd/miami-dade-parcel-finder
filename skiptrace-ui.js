@@ -487,7 +487,7 @@
     ST.onChange(refreshPanel); refreshPanel();
     window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.openApi = () => apiModal(B); window.PFSkipUI.traceOne = (id, folio) => traceOne(B, id, folio); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text); window.PFSkipUI.openTemplate = () => templateModal(B); window.PFSkipUI.emailUrlFor = (id, folio, to) => emailUrl(to, emailVars(B, id, folio));
   }
-  window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
+  window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
   const start = () => wire(window.PF.skBridge);
   if (window.PF_READY && window.PF) start(); else document.addEventListener('pf:ready', start, { once: true });
 })();

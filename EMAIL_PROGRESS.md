@@ -6,3 +6,7 @@ Rules: never git clean, explicit git add paths, no shots/ test_runs/ tests/expor
 ## Log
 - 16:40 built feature (app.js markEmailed/emBadge, skiptrace-ui.js Email button/template/repeat warning, index.html stTplBtn, ui.css, sw v22); tests/e2e_email.py desktop+mobile PASS locally; added to pre_push_regression.sh. Next: full regression (nohup), push, live verify.
 - 17:46 full pre-push regression 15/15 green (summary_prepush_20261019-161806). Pushed 5a4b775 (with 1c70795, ac7aac7). Live e2e_email desktop+mobile ALL PASS (50 checks each). DONE.
+## Skip traced view (2026-10-19 evening)
+- Built in /workspace/pf-fx (ff'd to ec443d5): 'Skip traced' view tab (app.js renderTraced/trRows/trCSV, index.html #vTraced/#trbox, ui.css, skiptrace-ui emailHTML export), sw v23, tests/e2e_traced.py desktop+mobile PASS locally, added to pre-push regression.
+- Worker has no history endpoint (only /status, /skiptrace) and was left unchanged: the view lists the per-county local store, which holds every Worker result returned on this device + imports.
+- Regression runs from /workspace/parcel-finder (8097 server serves that dir) after ff to the pf-fx commit; push from there.

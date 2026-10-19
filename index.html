@@ -303,7 +303,7 @@
       </div>
       <div class="actions">
         <select id="sortSel" aria-label="Sort by"></select>
-        <div class="seg" role="group" aria-label="View"><button type="button" id="vCards" class="on">Cards</button><button type="button" id="vTable">Table</button><button type="button" id="vMap">Map</button><button type="button" id="vPipe" title="Your outreach pipeline by stage">Pipeline</button></div>
+        <div class="seg" role="group" aria-label="View"><button type="button" id="vCards" class="on">Cards</button><button type="button" id="vTable">Table</button><button type="button" id="vMap">Map</button><button type="button" id="vPipe" title="Your outreach pipeline by stage">Pipeline</button><button type="button" id="vTraced" title="Every property you skip traced in this county, with phones, emails and contact status">Skip traced</button></div>
         <button class="btn" id="copyBtn" type="button">Copy folios</button>
         <button class="btn" id="linkBtn" type="button" title="Copy a link that reopens this exact search">Copy link</button>
         <button class="btn primary" id="exportBtn" type="button">Export CSV</button>
@@ -317,6 +317,11 @@
   <div class="pipebox" id="pipebox" hidden>
     <div class="pipe-h"><span class="note" id="pipeInfo"></span><span class="pipe-act"><button class="btn" type="button" id="pipeExport" title="Backup of your saved list with outreach logs">Backup outreach (JSON)</button><label class="btn" for="svImport" tabindex="0" role="button" id="pipeImportLbl">Restore / merge (JSON)</label></span></div>
     <div class="pipecols" id="pipeCols"></div>
+  </div>
+  <div class="trbox" id="trbox" hidden>
+    <div class="tr-h"><input type="search" id="trQ" placeholder="Search owner, address, phone or email" aria-label="Search skip traced properties"><select id="trSort" aria-label="Sort skip traced properties"><option value="date_d">Newest traced</option><option value="date_a">Oldest traced</option><option value="addr">Address A-Z</option><option value="owner">Owner A-Z</option><option value="phones">Most phones</option><option value="new">Not contacted first</option></select><button class="btn" type="button" id="trExport" title="Owner, property and mailing columns plus traced date, phones (with DNC / litigator flags) and emails">Export CSV</button></div>
+    <div class="note" id="trInfo" role="status" aria-live="polite"></div>
+    <div class="trlist" id="trList"></div>
   </div>
   <div class="tablebox" id="tablebox" hidden="">
     <div class="scroller" id="scroller"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>

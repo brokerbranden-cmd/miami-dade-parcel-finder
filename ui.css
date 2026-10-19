@@ -188,3 +188,19 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .sttpl .stmode label{font-weight:400}
 .sttips{margin:10px 0;padding:8px 12px;border-radius:6px;background:var(--accent-soft,#e6f3f4);font-size:13px}
 .sttips ul{margin:4px 0 0 18px;padding:0}
+/* Skip traced view (app.js renderTraced) */
+.trbox{margin:8px 0 24px}
+.tr-h{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+.tr-h input[type=search]{flex:1 1 240px;min-width:0;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:6px}
+.tr-h select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
+.trlist{display:grid;gap:8px;margin-top:8px}
+.trrow{display:grid;grid-template-columns:minmax(200px,1.1fr) 2fr minmax(160px,.9fr);gap:8px 14px;align-items:start;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface,#fff);cursor:pointer}
+.trrow:hover,.trrow:focus{border-color:#FC4C02;outline:none}
+.trrow.missing{cursor:default;opacity:.85}
+.trmain{display:flex;flex-direction:column;gap:2px;min-width:0}
+.trmain small,.trcity{color:var(--muted)}
+.trowner{font-size:13px}
+.trcontact{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;min-width:0}
+.trstat{display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start}
+.trnew{font-size:12px;color:var(--muted);border:1px dashed var(--line);border-radius:4px;padding:1px 6px}
+@media (max-width:760px){.trrow{grid-template-columns:1fr}}

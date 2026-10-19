@@ -372,7 +372,7 @@ function emBadge(folio){ const s=sentOf(folio,'em'); if(!s) return ''; const n=s
 /* email outreach (Email button in skiptrace-ui.js opens Outlook; nothing is sent from this site): mark the owner contacted by email */
 function markEmailed(f,addr,id){ const iso=new Date().toISOString(), d=dayStr(iso), r=SEND.sent[f]||(SEND.sent[f]={}), prev=r.em&&r.em.addrs||{}; r.em={d,t:iso,list:'Email',addr,addrs:{...prev,[addr]:d}}; saveSend();
   if(SV.has(f)) SV.logActivity(f,{type:'email',d:todayDay(),outcome:'',note:'Emailed '+addr+' from Outlook'},id!=null&&id>=0?savedInfo(id):undefined);
-  refreshSendUi(f); if(S.cont||S.hideSent) run(); }
+  refreshSendUi(f); if(S.view==='traced') renderTraced(); if(S.cont||S.hideSent) run(); }
 const emailedTo=(f,addr)=>{ const s=sentOf(f,'em'); return s&&s.addrs&&s.addrs[addr]||null; };
 function sentBadges(folio){ return emBadge(folio)+TEAMS.map(t=>{ const s=sentOf(folio,t.k); return s?`<span class="sentb" title="Exported to the ${t.noun} list ${s.list?'“'+esc(s.list)+'” ':''}on ${s.d}. It won't be exported to the ${t.noun} again unless you retag it or press Re-send.">${t.label} · Sent ${s.d} <button type="button" class="resend" data-resend="${t.k}" data-folio="${folio}">Re-send</button></span>`:''; }).join(''); }
 const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
@@ -482,7 +482,7 @@ function applyState(st){
   S.exZ=new Set((st.exZ||[]).map(v=>D.zoning.indexOf(v)).filter(i=>i>=0)); S.exL=new Set((st.exL||[]).map(v=>D.landuse.indexOf(v)).filter(i=>i>=0));
   S.owner=OWNER_KINDS.some(o=>o[0]===st.owner)?st.owner:'all'; S.flags={}; OWNER_ROWS.forEach(([k])=>{ S.flags[k]=(st.flags&&st.flags[k])||'any'; $('ow_'+k).value=S.flags[k]; });
   S.fx={}; FX_ROWS.forEach(([k])=>{ const v=st.fx&&st.fx[k]; S.fx[k]=fxAvail(k)&&(v==='yes'||v==='no')?v:'any'; const el=$('fx_'+k); if(el) el.value=S.fx[k]; });
-  S.sort=SORT_MAP[st.sort]?st.sort:'lot_d'; $('sortSel').value=S.sort; S.view=['cards','table','map','pipe'].includes(st.view)?st.view:(S.view||'cards');
+  S.sort=SORT_MAP[st.sort]?st.sort:'lot_d'; $('sortSel').value=S.sort; S.view=['cards','table','map','pipe','traced'].includes(st.view)?st.view:(S.view||'cards');
   $('ogMin').value=[0,2,3,5,10,25].includes(+st.ogMin)?String(+st.ogMin):'0'; $('ogDist').checked=!!st.ogDist; $('ogInst').checked=!!st.ogInst;
   if((st.ogf||'')!==S.ogf){ S.ogf=st.ogf||''; S.og=0; } $('ogRow').hidden=!S.ogf;
   S.vsig=new Set((st.vsig||[]).filter(k=>k in VBIT)); S.pcs=new Set((st.pcs||[]).filter(k=>k in PBIT)); $('vsMin').value=VS_STEPS.some(x=>x[0]===+st.vsMin)?String(+st.vsMin):'0'; $('vsMine').checked=!!st.vsMine;
@@ -749,10 +749,11 @@ function upLine(p,i){ const t=p.td; if(!t) return ''; const b=[]; const r1=v=>Ma
   if(t.below[i]===1) b.push('<span class="warmt">lot under zone min</span>'); else if(sp===1) b.push('<span class="okt">could be split</span>');
   return b.length?`<div class="line"><span class="k">Upside</span><span class="v">${b.join(' · ')}</span></div>`:''; }
 function renderResults(reset){
-  const n=results.length, cardsOn=S.view==='cards', mapOn=S.view==='map', tableOn=S.view==='table', pipeOn=S.view==='pipe';
-  $('empty').hidden=n>0 || mapOn || pipeOn;
-  $('vCards').classList.toggle('on',cardsOn); $('vTable').classList.toggle('on',tableOn); $('vMap').classList.toggle('on',mapOn); $('vPipe').classList.toggle('on',pipeOn);
-  $('cards').hidden=!cardsOn||!n; $('tablebox').hidden=!tableOn||!n; $('mapbox').hidden=!mapOn; $('pipebox').hidden=!pipeOn;
+  const n=results.length, cardsOn=S.view==='cards', mapOn=S.view==='map', tableOn=S.view==='table', pipeOn=S.view==='pipe', trOn=S.view==='traced';
+  $('empty').hidden=n>0 || mapOn || pipeOn || trOn;
+  $('vCards').classList.toggle('on',cardsOn); $('vTable').classList.toggle('on',tableOn); $('vMap').classList.toggle('on',mapOn); $('vPipe').classList.toggle('on',pipeOn); $('vTraced').classList.toggle('on',trOn);
+  $('cards').hidden=!cardsOn||!n; $('tablebox').hidden=!tableOn||!n; $('mapbox').hidden=!mapOn; $('pipebox').hidden=!pipeOn; $('trbox').hidden=!trOn;
+  if(trOn){ $('moreRow').hidden=true; if(reset) $('cards').innerHTML=''; renderTraced(); return; }
   if(pipeOn){ $('moreRow').hidden=true; if(reset) $('cards').innerHTML=''; renderPipe(); return; }
   if(mapOn){ $('moreRow').hidden=true; if(reset) $('cards').innerHTML=''; showMap(reset); return; }
   if(cardsOn){
@@ -901,6 +902,32 @@ function outInner(folio){ const x=SV.get(folio)||{stage:'New',next:'',acts:[]}, 
 function outreachHTML(id,folio){ return `<h3>Outreach</h3><div class="outbox" id="outBox" data-folio="${folio}" data-id="${id}">${outInner(folio)}</div>`; }
 function outFolios(){ if(!S.due&&!S.stage) return null; const t=todayDay(), out=new Set(); for(const x of SV.list()){ if(S.due&&!SV.dueState(x.folio,t)) continue; if(S.stage&&x.stage!==S.stage) continue; out.add(x.folio); } return out; }
 function dueCount(){ const t=todayDay(); let n=0; for(const x of SV.list()) if(SV.dueState(x.folio,t)) n++; return n; }
+/* Skip traced view: every property in this county's skip store (CSV imports + BatchData Worker results saved on this device) */
+const TR={q:'',sort:'date_d'};
+function trRows(){ const fs=[...SKS.tracedSet()], ids=folioIds(fs), q=TR.q.trim().toLowerCase(), qd=q.replace(/\D/g,''), out=[];
+  for(const f of fs){ const r=SKS.get(f); if(!r) continue; const id=ids.has(f)?ids.get(f):null, inf=id!=null?(()=>{ const p=P(id), i=I(id), c=p.c; return {folio:f, addr:getStr(p,'addr',i).trim(), city:D.city[c.city[i]]||'', zip:D.zip[c.zip[i]]||'', owner:getStr(p,'owner',i), mail:getStr(p,'mail',i)}; })():(()=>{ const x=SV.get(f)||{}; return {folio:f,addr:x.addr||'',city:x.city||'',zip:x.zip||'',owner:x.owner||r.n||'',mail:x.mail||''}; })();
+    const row={f,id,r,owner:inf.owner.split(' | ').filter(Boolean).join('; '),addr:inf.addr,city:inf.city,zip:inf.zip,mail:inf.mail,c:contacted(f)};
+    if(q){ const hay=(row.owner+' '+row.addr+' '+row.city+' '+row.zip+' '+f+' '+r.n+' '+r.e.join(' ')).toLowerCase(); if(!hay.includes(q) && !(qd.length>=3 && r.p.some(p=>p[0].includes(qd)))) continue; }
+    out.push(row); }
+  const cmp={date_d:(a,b)=>(b.r.a||'').localeCompare(a.r.a||'')||a.addr.localeCompare(b.addr), date_a:(a,b)=>(a.r.a||'').localeCompare(b.r.a||'')||a.addr.localeCompare(b.addr), addr:(a,b)=>(a.addr||'~').localeCompare(b.addr||'~',undefined,{numeric:true}), owner:(a,b)=>(a.owner||'~').localeCompare(b.owner||'~'), phones:(a,b)=>b.r.p.length-a.r.p.length||(b.r.a||'').localeCompare(a.r.a||''), new:(a,b)=>(a.c-b.c)||(b.r.a||'').localeCompare(a.r.a||'')}[TR.sort]||((a,b)=>0);
+  return out.sort(cmp); }
+function trStatus(f){ const em=sentOf(f,'em'), other=wasSent(f)&&Object.keys(SEND.sent[f]).some(k=>k!=='em'), lt=SV.lastTouch(f);
+  return (em?emBadge(f):'')+(other?TEAMS.map(t=>{ const s=sentOf(f,t.k); return s?`<span class="sentb">${t.label} · Sent ${esc(s.d)}</span>`:''; }).join(''):'')+(lt&&lt.type!=='email'?`<span class="sentb">Contacted · ${esc(ACT_LABEL[lt.type]||lt.type)} ${esc(lt.d)}</span>`:'')+(contacted(f)?'':'<span class="trnew">Not contacted</span>'); }
+function renderTraced(){ const all=SKS.count(), rows=trRows(), lim=500, show=rows.slice(0,lim);
+  $('trQ').value=TR.q; $('trSort').value=TR.sort;
+  $('trInfo').textContent=all?`${fmt.format(rows.length)}${rows.length!==all?' of '+fmt.format(all):''} skip traced ${all===1?'property':'properties'} in ${PFC.cfg.name} County on this device${rows.length>lim?` · showing the first ${lim}, refine the search or export the CSV for all`:''}. Results from the one-click skip trace (BatchData Worker) and imported files are kept here.`:`No skip traced properties in ${PFC.cfg.name} County on this device yet. Use Skip trace on a card, Skip trace these, or Import results in the filters panel.`;
+  $('trList').innerHTML=show.map(x=>{ const r=x.r, ph=r.p.map(SKU.phoneHTML).join(''), em=r.e.map(SKU.emailHTML).join('');
+    return `<article class="trrow${x.id==null?' missing':''}" data-trow="${x.f}" ${x.id!=null?`data-id="${x.id}"`:''} tabindex="0" aria-label="${esc(x.addr||folioFmt(x.f))}. Open details">
+      <div class="trmain"><b class="traddr">${esc(x.addr||'No street address')}</b><span class="trcity">${esc(x.city)} ${esc(x.zip)}</span><span class="trowner">${esc(x.owner||r.n||'')}</span><small>Traced ${esc(r.a||'')}${r.s?' · '+esc(r.s):''} · Folio ${esc(folioFmt(x.f))}</small></div>
+      <div class="trcontact stv" data-stfolio="${x.f}">${ph||(r.e.length?'':'<span class="stnone">No phone or email found</span>')}${em}</div>
+      <div class="trstat sendline">${trStatus(x.f)}</div></article>`; }).join('');
+}
+function trCSV(){ const rows=trRows(), NP=5, NE=3, fl=q=>[(q[2]&1)?'DNC':'',(q[2]&2)?'Litigator':''].filter(Boolean).join('; ');
+  const head=EXP_HEAD.trim()+',Traced Date,'+Array.from({length:NP},(_,k)=>`Phone ${k+1},Phone ${k+1} Type,Phone ${k+1} Flags`).join(',')+','+Array.from({length:NE},(_,k)=>'Email '+(k+1)).join(',')+'\n';
+  const T={m:'Mobile',l:'Landline',v:'VoIP'}; const lines=rows.map(x=>{ const base=x.id!=null?exportRow(P(x.id),I(x.id)):contactRow(x.owner,x.addr||'No site address',x.city,x.zip,x.mail,folio13(x.f)); const r=x.r;
+    const ph=Array.from({length:NP},(_,k)=>{ const q=r.p[k]; return q?[q[0],T[q[1]]||'',fl(q)]:['','','']; }).flat(), em=Array.from({length:NE},(_,k)=>r.e[k]||'');
+    return base+','+[r.a||'',...ph,...em].map(csvq).join(','); });
+  return {blob:new Blob([head+lines.join('\n')+(lines.length?'\n':'')],{type:'text/csv'}),n:rows.length}; }
 function renderPipe(){ const ids=savedIdx(), t=todayDay(), by=Object.fromEntries(SV.STAGES.map(s=>[s,[]]));
   for(const x of SV.list()) by[x.stage].push(x);
   const key=x=>{ const d=SV.dueState(x.folio,t); return [d?0:1, x.next||'9999', x.updatedAt]; };
@@ -1544,7 +1571,7 @@ function renderSavedUI(){
 }
 function refreshFolio(folio){
   { const ob=$('outBox'); if(ob&&ob.dataset.folio===folio&&!(document.activeElement&&ob.contains(document.activeElement)&&['actNote','outNext','actDate'].includes(document.activeElement.id))) ob.innerHTML=outInner(folio); }
-  if(S.view==='pipe') renderPipe();
+  if(S.view==='pipe') renderPipe(); if(S.view==='traced') renderTraced();
   { const fb=$('finBox'), sb=$('savedBox'); if(fb&&sb&&sb.dataset.folio===folio) fb.innerHTML=finHTML(folio); }
   document.querySelectorAll(`[data-star="${folio}"]`).forEach(b=>{ const on=SV.has(folio); b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); if(b.classList.contains('star')){ b.setAttribute('aria-label',on?'Remove from saved':'Save property'); b.title=on?'Saved · click to remove':'Save this property'; } });
   if(S.view==='cards'){ const el=document.querySelector(`#cards .card[data-folio="${folio}"]`); if(el){ const foc=document.activeElement&&el.contains(document.activeElement)&&document.activeElement.dataset.star; el.outerHTML=cardHTML(+el.dataset.id); if(foc){ const b=document.querySelector(`#cards .card[data-folio="${folio}"] [data-star]`); if(b) b.focus(); } } }
@@ -1715,6 +1742,12 @@ function wire(){
   $('vCards').onclick=()=>{ S.view='cards'; save(); renderResults(true); };
   $('vTable').onclick=()=>{ S.view='table'; save(); renderResults(true); };
   $('vMap').onclick=()=>{ S.view='map'; save(); renderResults(true); };
+  $('vTraced').onclick=async()=>{ S.view='traced'; if(!PACKS[1]&&SKS.count()){ try{ await loadPack(1,'Loading condo units for your skip traced list…'); }catch(e){} } save(); renderResults(true); };
+  $('trQ').addEventListener('input',()=>{ TR.q=$('trQ').value; renderTraced(); }); $('trSort').addEventListener('change',()=>{ TR.sort=$('trSort').value; renderTraced(); });
+  $('trExport').onclick=()=>{ const o=trCSV(); if(!o.n){ toast('Nothing to export.'); return; } download(`skip-traced-${PFC.id}-${stamp()}.csv`,o.blob); toast(`Exported ${fmt.format(o.n)} skip traced ${o.n===1?'property':'properties'}`); };
+  const trOpen=e=>{ const row=e.target.closest('[data-trow]'); if(!row||e.target.closest('a,button,input,select')) return; if(e.type==='keydown'&&e.key!=='Enter') return; if(row.dataset.id==null){ toast('This property is not in the current data.'); return; } openDrawer(+row.dataset.id); };
+  $('trList').addEventListener('click',trOpen); $('trList').addEventListener('keydown',trOpen);
+  SKS.onChange(()=>{ if(S.view==='traced') renderTraced(); });
   $('vPipe').onclick=async()=>{ S.view='pipe'; await ensureSavedPacks(); save(); renderResults(true); };
   $('pipeCols').addEventListener('click',async e=>{ const b=e.target.closest('[data-pipe]'); if(!b) return; await ensureSavedPacks(); const id=savedIdx().get(b.dataset.pipe); if(id==null){ toast('This property is not in the current data (still kept and exported).'); return; } openDrawer(id); });
   $('pipeExport').onclick=()=>$('svExportJson').click();

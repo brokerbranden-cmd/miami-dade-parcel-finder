@@ -1,7 +1,7 @@
 """Investor scenarios, end to end, against any URL (default: the LIVE site). argv: URL [desktop|mobile] [SHOTS_DIR]
 Each scenario drives the UI like a user, then cross-checks the results against the raw data via a sample of the result set
 (window.PF.sample: evenly spaced rows of the current results with the fields the filters use)."""
-import sys, re, csv, io, json, time, traceback
+import sys, re, csv, io, json, time, traceback, itertools
 from playwright.sync_api import sync_playwright
 URL = sys.argv[1] if len(sys.argv) > 1 else 'https://brokerbranden-cmd.github.io/miami-dade-parcel-finder/'
 MODE = sys.argv[2] if len(sys.argv) > 2 else 'desktop'
@@ -265,7 +265,9 @@ def s17_sort_orders():
 @scenario
 def s18_hide_companies_and_institutions():
     reset(); click('#ownerKind button[data-k="person"]'); settle(); n, rs = rows(400)
-    bad = [r['owner'] for r in rs if re.search(r'\b(LLC|INC|CORP|BANK|FPL|FLORIDA POWER|SFWMD|WATER MANAGEMENT|CITY OF|COUNTY|TRUST)\b', r['owner'])]
+    # owner lines only: a 'C/O' / '%' / 'ATTN' line is the mailing contact ('JUANJ DOMENECH | C/O INDUSTRIAL PARTS INC' is an individual)
+    own = lambda o: ' | '.join(itertools.takewhile(lambda l: not re.match(r'\s*(C ?/ ?O\b|%|ATTN\b|CARE OF)', l), o.split(' | ')))
+    bad = [r['owner'] for r in rs if re.search(r'\b(LLC|INC|CORP|BANK|FPL|FLORIDA POWER|SFWMD|WATER MANAGEMENT|CITY OF|COUNTY|TRUST)\b', own(r['owner']))]
     ok(not bad, f'"Individuals": {n:,}, no companies / utilities / banks / government in sample' + (f' (saw {bad[:3]})' if bad else ''))
     reset(); _, rs = rows(800)
     bad = [r['owner'] for r in rs if r['flags'] & 32 or re.search(r'SFWMD|WATER MANAGEMENT DIST|MIAMI-DADE COUNTY|CITY OF MIAMI\b|STATE OF FLORIDA', r['owner'])]

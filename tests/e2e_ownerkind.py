@@ -5,12 +5,25 @@ import sys
 from playwright.sync_api import sync_playwright
 import legacy_ui  # noqa: F401  (simplified UI in legacy mode, see legacy_ui.py)
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
+MODE = sys.argv[2] if len(sys.argv) > 2 else 'desktop'
+import re
+# entity / church keywords that never belong to an individual (care-of lines, 'REM' remainder lines and person-marked lines skipped)
+ENT = re.compile(r"\b(?:L ?L ?C|INC|INCORPORATED|CORP|CORPORATION|LTD|LLP|PLLC|MINISTRIES|MINISTRY|CONGREGATION|SYNAGOGUE|MOSQUE|TABERNACLE|DIOCESE|ARCHDIOCESE|CATHEDRAL|EVANGELICAL|FELLOWSHIP|ASSEMBLY OF GOD|BAPTIST CHURCH|CHURCH OF|ASSOCIATION|ASSN|FOUNDATION|SOCIETY|CLUB|TRUSTEES OF|HOUSING AUTHORITY|CITY OF|IGLESIA (?:DE|DEL|BAUTISTA|EVANGELICA|CRISTIANA))\b")
+PERS = re.compile(r"&\s?[WH]\b|\bH ?/ ?E\b|\bLE\b|\bETAL\b|\bJTRS\b")
+def entity(o):
+    for l in str(o).upper().split('|'):
+        l = l.strip()
+        if re.match(r'(C ?/ ?O\b|%|ATTN\b|CARE OF)', l): break
+        if l.startswith('REM '): continue
+        l = re.sub(r'\s+', ' ', re.sub(r"[^A-Z0-9&/]+", ' ', l.replace('.', '').replace("'", ''))).strip()
+        if ENT.search(l) and not PERS.search(l): return True
+    return False
 errs = []
 def ok(cond, msg):
     print(('PASS ' if cond else 'FAIL ') + msg)
     if not cond: errs.append('assert: ' + msg)
 with sync_playwright() as pw:
-    b = pw.chromium.launch(); pg = b.new_context(viewport={'width': 1360, 'height': 900}).new_page()
+    b = pw.chromium.launch(); pg = b.new_context(viewport={'width': 390, 'height': 844} if MODE == 'mobile' else {'width': 1360, 'height': 900}).new_page()
     pg.on('pageerror', lambda e: errs.append('pageerror: ' + str(e)))
     pg.goto(URL); pg.wait_for_selector('#results:not([hidden])', timeout=180000); pg.wait_for_timeout(800)
     ok('Companies' in pg.inner_text('#ownerKind'), 'owner filter label: ' + pg.inner_text('#ownerKind').replace('\n', ' | ')[:80])
@@ -33,5 +46,34 @@ with sync_playwright() as pw:
     for q in ['MARIA POWER', 'JOHN BANK']:
         a = count(q, 'all'); p = count(q, 'person')
         ok(a == p, f'{q}: all={a} individuals={p}')
+    # regression (Oct 19, 2026): 'Recert overdue' + 'Individuals' listed churches and companies. Individuals must never hold an entity name,
+    # with RC, with other signals, and in all three counties; the owner-kind counts must add up to 'All owners'.
+    def hsearch(h):
+        r0 = pg.evaluate('PF.runN()'); pg.evaluate(f"location.hash={h!r}")
+        try: pg.wait_for_function(f'PF.runN()>{r0}', timeout=20000)
+        except Exception: pass
+        pg.wait_for_timeout(600); return pg.evaluate('PF.auditRows(5000)')
+    def kinds():
+        t = pg.inner_text('#ownerKind'); return [int(x.replace(',', '')) for x in re.findall(r'(?<![\d.])(\d[\d,]*)(?![\d.KM])', t)]
+    def person_check(county, h, need=True):
+        r = hsearch(h); bad = [x['owner'] for x in r['rows'] if entity(x['owner'])]
+        ok(not bad and (r['n'] > 0 or not need), f"{county} {h}: individuals={r['n']} entity-named={len(bad)} {bad[:5]}")
+        return r
+    r = person_check('miami-dade', '#sig=RC&owner=person')
+    ok(all(x['folio'] != '0141110010350' for x in r['rows']), "RC + Individuals: 'IGLESIA DEL DIOS VIVO COLUMNA & APOYO...' (0141110010350) is not an individual")
+    k = kinds(); ok(len(k) == 4 and k[0] == k[1] + k[2] + k[3] and k[1] == r['n'], f"RC owner-kind counts add up and match the results: {k} n={r['n']}")
+    rc = hsearch('#sig=RC&owner=corp'); ok(any(x['folio'] == '0141110010350' for x in rc['rows']), 'RC + Companies & organizations includes IGLESIA DEL DIOS VIVO')
+    for sg in ['LP', 'TD', 'TC', 'US', 'BV', 'CC', 'LN', 'PR', 'DC', 'FC']: person_check('miami-dade', f'#sig={sg}&owner=person', need=False)
+    person_check('miami-dade', '#owner=person&type=condo'); person_check('miami-dade', '#owner=person&ds=50', need=False)
+    for county, names in [('monroe', ['C O D SUPPLIES', 'HABITAT FOR HUMANITY', 'IGLESIA BAUTISTA']), ('broward', ['ATT RESIDENCE 1', 'IGLESIA DE DIOS', 'GOLF & TENNIS CLUB', 'CATHEDRAL OF PRAISE'])]:
+        pg.goto(URL + '?county=' + county); pg.wait_for_function('window.PF_READY', timeout=240000); pg.wait_for_timeout(1500)
+        for h in ['#owner=person', '#owner=person&mtax=any', '#owner=person&o_oos=yes', '#owner=person&o_absz=yes', '#owner=person&x_life=yes', '#owner=person&td=basic']:
+            person_check(county, h, need=h in ('#owner=person', '#owner=person&mtax=any'))
+        k = kinds(); ok(len(k) == 4 and k[0] == k[1] + k[2] + k[3], f'{county} owner-kind counts add up: {k}')
+        for q in names:
+            from urllib.parse import quote
+            p_ = hsearch('#owner=person&q=' + quote(q)); c_ = hsearch('#owner=corp&q=' + quote(q))
+            ok(p_['n'] == 0 and c_['n'] > 0, f"{county} '{q}': individuals={p_['n']} companies&orgs={c_['n']}")
+        fx = pg.evaluate('PF.okFix()'); print(county, 'reclassified', fx); ok(fx[0]['fixed'] > 0, f'{county}: app reclassified some owner names')
     b.close()
 print('ERRORS:', errs if errs else 'none'); sys.exit(1 if errs else 0)

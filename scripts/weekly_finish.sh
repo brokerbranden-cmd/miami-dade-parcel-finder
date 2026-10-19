@@ -24,6 +24,8 @@ else
   else
     git commit -q -m "Weekly data refresh $(date -d "$DAY" '+%b %-d, %Y' 2>/dev/null || echo "$DAY"): $(sed -n 1,2p "$ST/status.txt" | tr '\n' ' ' | cut -c1-200)" || { echo "commit failed"; exit 1; }
   fi
+  # the weekly suites (incl. tests/e2e_filter_audit.py) passed on exactly this content: record it for scripts/git-hooks/pre-push
+  mkdir -p .git/pf-regression; cp "$W/tests.txt" ".git/pf-regression/$(git rev-parse 'HEAD^{tree}').ok" 2>/dev/null
   ok=0; for i in 1 2 3; do
     git pull --rebase --autostash -q || { echo "pull --rebase failed (conflict?) - resolve by hand, nothing was force-pushed"; git rebase --abort 2>/dev/null; exit 1; }
     if git push -q origin HEAD; then ok=1; break; fi; sleep 10; done

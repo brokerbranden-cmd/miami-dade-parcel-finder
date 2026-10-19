@@ -17,6 +17,7 @@ the name has other organization words, or it does NOT look like "GIVEN-NAME [INI
 `given` = set of common first words, from build_given(); pass None to disable that check.
 """
 import re, collections
+from org_name import org_name
 
 def norm(s):
     s = str(s or '').upper().replace('&', ' & ')
@@ -144,9 +145,17 @@ def classify_one(raw, given=None):
     if TRUST.search(s): return ('trust', '')
     return ('person', '')
 
-CAREOF = re.compile(r"^\s*(?:C\s?/\s?O|%|ATTN|ATT|ATTENTION|CARE OF|C O )\b|^\s*%|^\s*ATTN")
+# not bare "ATT" / "C O ": they start real owner names ("ATT RESIDENCE 1 LLC", "C O D SUPPLIES INC")
+CAREOF = re.compile(r"^\s*(?:C\s?/\s?O\b|%|ATTN\b|ATT:|ATTENTION\b|CARE OF\b)")
 _RANK = {'govt': 3, 'corp': 2, 'trust': 1, 'person': 0}
 def classify(owners, given=None):
+    k = _classify(owners, given)
+    if k[0] == 'person' and org_name(' | '.join(str(o or '') for o in owners)):
+        s = norm(' '.join(str(o or '') for o in owners))
+        return ('corp', 'bank' if SUB_BANK.search(s) else 'assoc' if SUB_ASSOC.search(s) else 'inst' if SUB_INST.search(s) or re.search(r'\b(?:IGLESIA|FELLOWSHIP|CATHEDRAL|EVANGELIC\w*|CHABAD|CH)\b', s) else 'biz')
+    return k
+
+def _classify(owners, given=None):
     """owners: the (up to 3) owner-name strings of one parcel -> (kind, sub). Lines from the first 'C/O', 'ATTN', '%' on are mailing
     contacts, not owners, and are ignored. The remaining lines are read as one name ('SOUTH FLORIDA WATER' + 'MANAGEMENT DISTRICT',
     'CEMEX CONSTRUCTION MATERIALS' + 'FLORIDA LLC'); the first line alone is also tried, and the more organization-like result wins."""

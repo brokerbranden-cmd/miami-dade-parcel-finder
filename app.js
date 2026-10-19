@@ -139,6 +139,45 @@ async function loadZoneRules(){
   if(EX){ CNMAP=new Map(); for(const [k,s] of Object.entries(EX.cn.groups)){ const m=parseInt(k,10); let v=0; for(const t of s.split(',')){ v+=parseInt(t,36); CNMAP.set(v,m); } } APSET=new Set(EX.ap.folios); }
 }
 /* per-pack zoning upside (rule-independent) + tier / split (depends on S.rules) */
+/* Owner-kind safety net (app side, no data rebuild). The packed owner kind comes from scripts/owner_kind.py at build time; names it misses
+   (churches / religious orgs such as IGLESIA, FELLOWSHIP, CATHEDRAL, CH OF GOD; 'SALVATION ARMY', 'HABITAT FOR HUMANITY', clubs, posts, lodges;
+   suffixes cut off by the 30-character roll field in Monroe/Broward such as 'ASSOCIATIO', 'CONDOMINI', 'HMOWNRS', 'INVESTMEN'; and 'ATT ...' /
+   'C O D ...' names the build mistook for care-of lines) are re-read here from the owner name and moved from Individuals to Companies &
+   organizations. Lines from the first C/O, %, ATTN on are mailing contacts, and 'REM ...' lines are remaindermen; both are ignored. */
+const ORG_CAREOF=/^\s*(?:C\s?\/\s?O\b|%|ATTN\b|ATTENTION\b|CARE OF\b)/;
+const ORG_HARD=new RegExp('\\b(?:'+[
+  'L ?L ?C','L ?L ?L ?P','L ?L ?P','P ?L ?L ?C','INC','INCORPORATED','CORP','CORPORATION','LTD','LIMITED PARTNERSHIP',
+  'MINISTRY','MINISTRIES','MINISTERIO\\w*','MINISTERIAL','CONGREGATION\\w*','SYNAGOGUE','MOSQUE','TABERNACLE','DIOCESE','ARCHDIOCESE','ARCHBISHOP','CATHEDRAL','EVANGELIC\\w*','EVANGICAL',
+  'ASSEMBLY OF','ASAMBLEA','IGLESIA (?:DE|DEL|BAUTISTA|EVANGELICA|CRISTIANA|CRISTO|NAZARENO|PENTECOSTAL|ADVENTISTA|METODISTA|CATOLICA|ALIANZA|C)','PRIMERA IGLESIA','EGLISE','CHABAD','LUBAVITCH','ISLAMIC','BUDDHIST','JEHOVAH?S? WITNESSES','KINGDOM HALL','WATCHTOWER','SEVENTH DAY','ADVENTISTS?','NAZARENE','APOSTOLIC',
+  'PENTECOSTAL','BAPTIST','METHODIST','EPISCOPAL','LUTHERAN','PRESBYTERIAN','CATHOLIC','CATOLIC[OA]','FELLOWSHIP','OF GOD','HOUSE OF GOD',
+  '(?:BAPT|BAP|LUTH|EPIS|METH|MB|AME|CME|ADVENTIST|MIS|MISS|COGIC|BAPTIST) CH','CHU? OF','CHRUCH','CHURCHES',
+  'SALVATION ARMY','HABITAT FOR? HUMANITY','BOY SCOUTS?','GIRL SCOUTS?','SCOUTS OF','YMCA','YWCA','MASONIC','FRATERNAL','ORDER OF','AMERICAN LEGION','POST NO \\d+','VFW',
+  'FOUNDATION','FUNDACION','ASSOCIATION\\w*','ASSOCIATIO\\w*','ASSN','ASSCN','SOCIETY','SOCIE','CLUB','CHARITIES','INSTITUTE','MUSEUM',
+  'CONDOMINI\\w*','HOMEOWNERS?','HMOWN\\w*','HMEOWN\\w*','HOMEOWN\\w*','(?:COMM|PROP|PROPERTY|OWNERS|HOMEOWNERS|CONDO) ASS\\w*',
+  'INVESTMEN\\w*','INVESTM','INVESTMNT','INVESTMENT','INVESTMENTS','INVESTORS?','ENTRPRISES','APTS','APARTMENTS','HOSP','HOSPITAL',
+  'JEWISH (?:FED\\w*|CENTER|CTR|COMM\\w*|HOME|DAY|FAMILY)','(?:CREDIT|LOCAL|TEACHERS) UNION','UNION LO?CA?L','(?:URBAN|CIVIC) LEAGUE','LEAGUE OF',
+  '(?:ZETA|ALUMNI|ALPHA|BETA|DELTA|KAPPA|OMEGA|SIGMA|THETA) CHAPTER','TRUSTEES OF','BANK OF','(?:NATL|NATIONAL|SAVINGS|FED|STATE|TRUST|COMMUNITY|FIRST) BANK','BANK (?:N ?A|FSB)',
+  'NATL BNK','FED SAV\\w*','SAV & LOAN','SAVINGS & LOAN'].join('|')+')\\b');
+const ORG_LEGAL_END=/\s(?:LC|LL|LP|COMPANY)$/, ORG_LC_SP=/\sL C$/, ORG_TRUNC=/\s(?:BAPTIS|MINISTRI|CONDOMI|CONDOM|HOMEOWNE|ASSOCIA\w*)$/;
+const ORG_LEGAL=/\b(?:L ?L ?C|INC|CORP|CORPORATION|LTD|L ?L ?P|P ?L ?L ?C)\b/;   // 'GRAND CYPRESS ESTATES L C', a 30-char cut 'UNLTD INVEST LL'
+const ORG_CHURCH=/\b(?:CHURC?H?|TEMPLE|PARISH|MISSION|MISION|CHAPEL|IGLESIA)\b/;
+const ORG_CHURCH_BACK=/\b(?:OF|THE|GOD|DIOS|CHRIST\w*|CRISTO|CRISTIANA|JESUS|HOLY|MEMORIAL|BAPT\w*|AME|CME|ST|SAINT|SANTA|SAN|LIFE|VIDA|COMMUNITY|NEW|NUEVA|FIRST|BIBLE|GOSPEL|APOSTOLIC|MISSIONARY|ASSEMBLY|UNITED|ALLIANCE|LUTH\w*|PRESBYTERIAN|EPISCOPAL|CATHOLIC|ADVENTIST|NAZARENE|FAITH|GRACE|VICTORY|TRINITY|CALVARY|HOPE|PRAISE|WORD|KINGDOM|ZION|BETHEL|SHILOH|MT|MOUNT|TEMPLE|TESTAMENT|INTERNATIONAL|FULL|REAL|RESCUE|DE|DEL|LA|EL|EVANGELICA|PENTECOSTAL|MISIONERA|HISPANA|SPANISH|HAITIAN|KOREAN|CHINESE|GREEK|BAPTIST|METHODIST|HWY|BAY|CHURCH|SHORE)\b/;
+const ORG_PERSON=/(?:&\s?[WH]\b|\bH\s?\/\s?E\b|\bH\/E\b|\bLE\b|\bL E\b|\bETAL\b|\bETUX\b|\bJTRS\b|\bJR\b|\bSR\b|\bIII?\b)/;
+function orgName(raw){
+  const lines=String(raw||'').toUpperCase().split(/\s*\|\s*/); const keep=[];
+  for(const l of lines){ if(ORG_CAREOF.test(l)) break; if(/^\s*REM\b/.test(l)) continue; keep.push(l); }
+  for(const l0 of keep){
+    const l=l0.replace(/['’.]/g,'').replace(/[^A-Z0-9&\/]+/g,' ').replace(/\s+/g,' ').trim(); if(!l) continue;
+    const w=l.split(' '), pers=ORG_PERSON.test(l);
+    if(ORG_LEGAL.test(l)) return true;
+    if(!pers && ORG_HARD.test(l)) return true;
+    if(!pers && w.length>=2 && (ORG_LEGAL_END.test(l) || (ORG_LC_SP.test(l)&&!l.includes('&')) || (l0.length>=28&&ORG_TRUNC.test(l)))) return true;
+    const m=l.match(ORG_CHURCH);
+    if(m && !ORG_PERSON.test(l) && w.length>=2){ const rest=l.replace(m[0],' '); if(ORG_CHURCH_BACK.test(rest)) { if(m[0]!=='IGLESIA'||/\bIGLESIA (?:DE|DEL|LA|EL|BAUTISTA|EVANGELICA|CRISTIANA|CRISTO|PENTECOSTAL|ADVENTISTA|METODISTA|CATOLICA|NUEVA|HISPANA|MISIONERA|DIOS)\b/.test(l)||/^IGLESIA \w+ \w+/.test(l)) return true; } }
+  }
+  return false;
+}
+function reclassOwners(p){ if(!p||p.okFix!=null) return; const ow=strCol(p,'owner'), f=p.c.flags, fx=[]; for(let i=0;i<p.n;i++) if(!(f[i]&(8|16|32)) && orgName(ow[i])){ f[i]|=8; fx.push(i); } p.okFix=fx.length; p.okFixIdx=new Set(fx); }
 function prepPack(p){
   if(!p||p.td||!ZREC) return; const c=p.c, n=p.n;
   const um=new Float32Array(n), qm=new Float32Array(n), sm=new Float32Array(n), al=new Float32Array(n), below=new Int8Array(n), zmin=new Float32Array(n), sfz=new Int8Array(n);
@@ -376,7 +415,7 @@ async function loadPack(i,label){
   const raw=await fetchAll(pk.files,n=>{ got+=n; $('loadBar').style.width=Math.min(100,got/pk.bytes*100).toFixed(1)+'%'; $('loadSub').textContent=(got/1e6).toFixed(1)+' of '+(pk.bytes/1e6).toFixed(1)+' MB'; });
   $('loadMsg').textContent=label;
   $('loadSub').textContent='Unpacking…';
-  PACKS[i]=parsePack(await gunzip(raw),pk.name,i); prepPack(PACKS[i]); if(ASM) asmIndexPack(PACKS[i]);
+  PACKS[i]=parsePack(await gunzip(raw),pk.name,i); reclassOwners(PACKS[i]); prepPack(PACKS[i]); if(ASM) asmIndexPack(PACKS[i]);
   $('loadbox').hidden=true;
 }
 const DET=[];
@@ -550,8 +589,9 @@ function run(){
   results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,apN,pfN,pbN,asmGroups:asmSeen?asmSeen.size:0};
   if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status))) r.push(id); } results=Uint32Array.from(r); }
   renderSavedUI();
-  doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true);
+  doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true); RUN_N++;
 }
+let RUN_N=0;
 
 /* sorting */
 const SORTS=[
@@ -1759,7 +1799,10 @@ async function boot(){
         out.push({folio:getStr(p,'folio',i), owner:getStr(p,'owner',i), addr:getStr(p,'addr',i), city:D.city[c.city[i]], zip:D.zip[c.zip[i]], lu:D.landuse[c.landuse[i]], type:LU_T[c.landuse[i]], mzCode:mz[0]||'', mzJur:mz[1]||'',
           mkt:c.mkt[i], land:c.land[i], lot:c.lot[i], yb:c.yb[i], units:c.units[i], flags:c.flags[i], dsig:c.dsig[i], dscore:c.dscore[i], sd1:c.sd1[i], sale1:c.sale1[i], og:c.og[i],
           tier:p.td?p.td.tier[i]:null, ap:p.ap?p.ap[i]:0, stage:(SV.get(getStr(p,'folio',i))||{}).stage||null, due:!!SV.dueState(getStr(p,'folio',i),todayDay()), sg:p.sg?p.sg[i]:0, cmd:CMM.get(getStr(p,'folio',i))||null, pf:PFM.get(getStr(p,'folio',i))||null, pb:PBM.get(getStr(p,'folio',i))||null, au:AUM.get(getStr(p,'folio',i))||null, comps:(()=>{ const x=compsOf(p,i); return x?{n:x.n,rad:x.rad,band:x.band,useB:x.useB,size:x.size,sameCn:x.sameCn,com:!!x.com,ppsf:x.ppsf||0,lo:x.lo||0,hi:x.hi||0,est:x.est||0}:null; })(), asm:g?{id:g.id,upside:g.upside,muni:g.muni}:null}); } return {n, rows:out, dbit:DBIT, sort:S.sort}; },
-      sigMeta:()=>SIG&&SIG.meta, compsMeta:()=>CP&&CP.meta, compsReady:()=>!!CP&&PACKS.every(p=>!p||!!p.geo), ensureComps};
+      // test hook (tests/e2e_filter_audit.py): the raw pack columns of an evenly spaced sample of the current results, so the audit can re-check every active filter itself
+      auditRows:(k=3000)=>{ const n=results.length, out=[], m=Math.min(n,k); for(let t=0;t<m;t++){ const j=Math.floor(t*n/m), id=results[j], p=P(id), i=I(id), c=p.c, r={pack:p.name, folio:getStr(p,'folio',i), owner:getStr(p,'owner',i), grantor:p.s.grantor?getStr(p,'grantor',i):null, type:LU_T[c.landuse[i]], city:D.city[c.city[i]]||'', zip:D.zip[c.zip[i]]||'', tier:p.td?p.td.tier[i]:0};
+        for(const k2 in c){ const a=c[k2]; if(a&&a.length===p.n&&typeof a[i]==='number'&&!(k2 in r)&&k2!=='lat'&&k2!=='lon') r[k2]=a[i]; } out.push(r); } return {n, shown:$('sCount').textContent, today, sent:Object.keys(SEND.sent).filter(wasSent), rows:out}; },
+      runN:()=>RUN_N, okFix:()=>PACKS.map(p=>p?{name:p.name,n:p.n,fixed:p.okFix||0}:null), okFixInResults:()=>{ let n=0; for(const id of results){ const p=P(id); if(p.okFixIdx&&p.okFixIdx.has(I(id))) n++; } return n; }, orgName, sigMeta:()=>SIG&&SIG.meta, compsMeta:()=>CP&&CP.meta, compsReady:()=>!!CP&&PACKS.every(p=>!p||!!p.geo), ensureComps};
     document.dispatchEvent(new Event('pf:ready')); window.PF_READY=true;
     if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) { const hadCtl=!!navigator.serviceWorker.controller; navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update().catch(()=>{}); }).catch(()=>{});
       navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(!hadCtl||document.getElementById('swUpd')) return; const b=document.createElement('div'); b.id='swUpd'; b.className='swupd'; b.innerHTML='A new version of Parcel Finder is ready. <button type="button">Reload</button>'; b.querySelector('button').onclick=()=>location.reload(); document.body.appendChild(b); }); }

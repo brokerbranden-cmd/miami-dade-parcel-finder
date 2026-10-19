@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Blocks a push unless the pushed tree passed scripts/pre_push_regression.sh (incl. tests/e2e_filter_audit.py, desktop + mobile).
+# Enable once per clone: git config core.hooksPath scripts/git-hooks
+cd "$(git rev-parse --show-toplevel)" || exit 1
+z=0000000000000000000000000000000000000000
+while read -r lref lsha rref rsha; do
+  [ "$lsha" = "$z" ] && continue
+  t=$(git rev-parse "$lsha^{tree}") || exit 1
+  [ -f ".git/pf-regression/$t.ok" ] && continue
+  if [ "$(git rev-parse 'HEAD^{tree}')" != "$t" ]; then echo "pre-push: no green regression for $lsha; check it out and run scripts/pre_push_regression.sh"; exit 1; fi
+  echo "pre-push: no green regression recorded for tree $t, running scripts/pre_push_regression.sh (sequential, ~1-2 h)"
+  bash scripts/pre_push_regression.sh < /dev/null || { echo "pre-push: regression FAILED, push blocked"; exit 1; }
+  [ -f ".git/pf-regression/$t.ok" ] || { echo "pre-push: regression passed but the tree was not clean, push blocked"; exit 1; }
+done
+exit 0

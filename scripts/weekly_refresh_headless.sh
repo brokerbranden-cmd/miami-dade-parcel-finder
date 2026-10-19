@@ -6,7 +6,7 @@
 # Finished when $RAW/.build_state/weekly/latest/done exists (first word PASS or FAIL). Then: bash scripts/weekly_finish.sh
 #
 # Steps: lock -> back up repo raw/ -> build_all.sh (up to BUILD_TRIES=3, resumes; exit 3 = finished with stale sources) ->
-#        re-apply Monroe/Broward tax layers if a rebuild dropped them -> e2e suites behind a 3 GB MemAvailable gate ->
+#        re-apply Monroe/Broward tax layers if a rebuild dropped them -> e2e suites (incl. the filter-correctness audit, tests/e2e_filter_audit.py) behind a 3 GB MemAvailable gate ->
 #        top_leads.py --since 7 days -> email body (Data refresh status + leads) -> done marker.
 # It never commits, pushes or sends mail (weekly_finish.sh pushes; the agent sends the email via Gmail).
 #
@@ -68,9 +68,10 @@ if [ "${FAST:-0}" != 1 ] && [ "$RESULT" = PASS ]; then
     if [ $rc = 0 ]; then echo "PASS $n" >> "$S"; else echo "FAIL $n (exit $rc) $(grep -m1 -E '^FAIL|FAILED|Error' "$L/$n.log" | cut -c1-200)" >> "$S"; fi; }
   run unit node tests/unit_skiptrace.js
   for m in desktop mobile; do
-    for t in e2e_monroe e2e_broward e2e_export e2e_sendmark e2e_deterrents e2e_skiptrace scenarios; do run "${t#e2e_}_$m" python3 tests/$t.py "$U" $m; done
+    for t in e2e_monroe e2e_broward e2e_export e2e_sendmark e2e_deterrents e2e_skiptrace scenarios e2e_filter_audit; do run "${t#e2e_}_$m" python3 tests/$t.py "$U" $m; done
   done
   run county python3 tests/e2e_county.py "$U"
+  run ownerkind python3 tests/e2e_ownerkind.py "$U"
   echo "# DONE $(date +%T)" >> "$S"; cp "$S" "$W/tests.txt"
   np=$(grep -c '^PASS' "$S"); nf=$(grep -c '^FAIL' "$S"); log "tests: $np passed, $nf failed ($S)"; [ "$nf" = 0 ] || RESULT=FAIL
 elif [ "${FAST:-0}" = 1 ]; then echo "FAST mode: tests not run" > "$W/tests.txt"

@@ -43,8 +43,9 @@ with sync_playwright() as pw:
         q = parse_qs(urlsplit(u).query); g = lambda k: (q.get(k) or [''])[0]
         ok(g('to') == to, f'{tag}: to={g("to")}')
         ok(g('subject') == f'Question about {addr}', f'{tag}: subject "{g("subject")}" (expected "Question about {addr}")')
-        body = g('body'); ok(body.startswith(f'Hi {first},'), f'{tag}: body greets "{body[:30]}" (expected Hi {first},)')
-        ok(addr in body and '(305) 812-9445' in body and 'Branden with Prop Hunters' in body and "If you'd rather not hear from me, just reply and let me know." in body, f'{tag}: placeholders filled (address, my_phone, my_name) + opt-out line')
+        body = g('body'); ok(body.startswith(f'Hey {first},'), f'{tag}: body greets "{body[:30]}" (expected Hey {first},)')
+        exp = f"Hey {first},\n\nMy name is Branden with Prop Hunters. I'm an investor/buyer and wanted to see if you'd consider an offer on {addr}.\nif you're open to a quick conversation, you can reach me at (305) 812-9445.\n\nThanks,\nBranden"
+        ok(body == exp, f'{tag}: body is exactly Branden\'s template with first name + title-cased address filled' + ('' if body == exp else f' GOT {body!r}'))
         ok('{' not in body and 'http' not in body.lower() and '<' not in body, f'{tag}: plain text, no leftover placeholders or links')
 
     # ---------- Miami-Dade: FIRST LAST owner ----------
@@ -85,7 +86,7 @@ with sync_playwright() as pw:
     # LLC owner -> "there"
     go(f'q={C["folio"]}&hg=0'); pg.wait_for_selector(f'.card[data-folio="{C["folio"]}"] [data-stemail]', timeout=60000)
     pg.click(f'.card[data-folio="{C["folio"]}"] [data-stemail]'); pg.wait_for_timeout(500)
-    ok((parse_qs(urlsplit(last()).query).get('body') or [''])[0].startswith('Hi there,'), f'LLC owner ({C["owner"]}) falls back to "Hi there,"')
+    ok((parse_qs(urlsplit(last()).query).get('body') or [''])[0].startswith('Hey there,'), f'LLC owner ({C["owner"]}) falls back to "Hey there,"')
     # Saved list: Email works there and logs an outreach activity
     pg.evaluate(f"PF.SV.add({json.dumps(A2['folio'])}, {{addr:{json.dumps(A2['addr'])}, city:{json.dumps(A2['city'])}, zip:{json.dumps(A2['zip'])}, pack:'main'}})")
     go('saved=1&hg=0'); pg.wait_for_selector(f'.card[data-folio="{A2["folio"]}"] [data-stemail]', timeout=60000)
@@ -93,6 +94,13 @@ with sync_playwright() as pw:
     check_url(last(), 'owner.b@example.com', tc(A2['owner'].split()[0]), ac(A2['addr'].strip()), 'Saved list')
     it = pg.evaluate(f"PF.SV.get({json.dumps(A2['folio'])})") or {}
     ok(it.get('acts') and it['acts'][0]['type'] == 'email' and 'owner.b@example.com' in it['acts'][0]['note'] and it.get('stage') == 'Contacted', 'Saved: email activity logged, stage Contacted')
+    # stored templates: an unedited copy of the old default migrates to the new one; an edited one is kept
+    OLD = "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know."
+    pg.evaluate(f"localStorage.setItem('pf.emailtpl.v1', JSON.stringify({{mode:'web', my_name:'Branden', my_phone:'(305) 812-9445', subject:'Question about {{property_address}}', body:{json.dumps(OLD)}}}))")
+    ok(pg.evaluate("PFSkipUI.tplGet().body").startswith('Hey {first_name},'), 'saved copy of the old default migrates to the new template')
+    pg.evaluate("localStorage.setItem('pf.emailtpl.v1', JSON.stringify({body:'Hello {first_name}, custom'}))")
+    ok(pg.evaluate("PFSkipUI.tplGet().body") == 'Hello {first_name}, custom', 'an edited template is kept')
+    pg.evaluate("localStorage.removeItem('pf.emailtpl.v1')")
     # template editor: tips, edit + mailto mode
     go('hg=0'); pg.evaluate("document.getElementById('stTplBtn').click()"); pg.wait_for_selector('#stTips')
     tips = pg.inner_text('#stTips'); ok('Inbox tips' in tips and 'modest number' in tips and 'plain text' in tips and 'links' in tips and 'Stop' in tips, 'template editor shows Inbox tips')

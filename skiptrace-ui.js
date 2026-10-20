@@ -24,8 +24,10 @@
   /* ---------- email owners from your own Outlook (this site never sends mail) ---------- */
   const TPL_KEY = 'pf.emailtpl.v1';
   const TPL_DEF = { mode: 'web', my_name: 'Branden', my_phone: '(305) 812-9445', subject: 'Question about {property_address}',
-    body: "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know." };
-  function tplGet() { let o = {}; try { o = JSON.parse(localStorage.getItem(TPL_KEY) || '{}') || {}; } catch (e) {} const t = { ...TPL_DEF }; for (const k in TPL_DEF) if (typeof o[k] === 'string') t[k] = o[k]; if (t.mode !== 'mailto') t.mode = 'web'; return t; }
+    body: "Hey {first_name},\n\nMy name is Branden with Prop Hunters. I'm an investor/buyer and wanted to see if you'd consider an offer on {property_address}.\nif you're open to a quick conversation, you can reach me at (305) 812-9445.\n\nThanks,\nBranden" };
+  /* the earlier default body: a saved template that still equals it moves to the new default; edited ones are kept */
+  const TPL_OLD_BODY = "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know.";
+  function tplGet() { let o = {}; try { o = JSON.parse(localStorage.getItem(TPL_KEY) || '{}') || {}; } catch (e) {} const t = { ...TPL_DEF }; if (o.body === TPL_OLD_BODY) delete o.body; for (const k in TPL_DEF) if (typeof o[k] === 'string') t[k] = o[k]; if (t.mode !== 'mailto') t.mode = 'web'; return t; }
   function tplSet(t) { try { localStorage.setItem(TPL_KEY, JSON.stringify(t)); return true; } catch (e) { return false; } }
   const titleCase = s => String(s || '').toLowerCase().replace(/(^|[\s\-'\/(])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Llc|Inc|Lp|Llp|Pa|Pllc|Ltd|Ii|Iii|Iv)\b/g, w => w.toUpperCase()).replace(/\bMc([a-z])/g, (m, a) => 'Mc' + a.toUpperCase());
   const addrCase = s => titleCase(s).replace(/\b(Nw|Ne|Sw|Se)\b/g, w => w.toUpperCase());
@@ -34,7 +36,7 @@
     if (o.isCompany || !o.first) return { first: 'there', name: titleCase(o.isCompany ? (o.company || o.full) : [o.first, o.last].filter(Boolean).join(' ') || o.full) };
     return { first: titleCase(o.first), name: titleCase([o.first, o.last].filter(Boolean).join(' ')) };
   }
-  const fill = (s, v) => String(s || '').replace(/\{(owner_first|owner_name|property_address|city|my_name|my_phone)\}/g, (m, k) => v[k] == null ? '' : v[k]);
+  const fill = (s, v) => String(s || '').replace(/\{(first_name|owner_first|owner_name|property_address|city|my_name|my_phone)\}/g, (m, k) => { if (k === 'first_name') k = 'owner_first'; return v[k] == null ? '' : v[k]; });
   function emailUrl(to, vars, t) {
     t = t || tplGet(); const subject = fill(t.subject, vars), body = fill(t.body, vars).replace(/\r\n?/g, '\n'), E = encodeURIComponent;
     if (t.mode === 'mailto') return `mailto:${E(to).replace(/%40/g, '@')}?subject=${E(subject)}&body=${E(body.replace(/\n/g, '\r\n'))}`;
@@ -65,7 +67,7 @@
     openEmail(B, id, folio, to);
   }
   function templateModal(B) {
-    const t = tplGet(), PH = '{owner_first} {owner_name} {property_address} {city} {my_name} {my_phone}';
+    const t = tplGet(), PH = '{first_name} {owner_name} {property_address} {city} {my_name} {my_phone}';
     openModal('Email template', `<div class="sttpl" id="stTpl">
       <p class="note">The <b>Email</b> button next to a skip-traced email opens a pre-filled message in <b>your own Outlook</b>. Nothing is sent from this site: you review it and press Send. Placeholders: <code>${PH}</code></p>
       <fieldset class="stmode"><legend>Open emails in</legend>
@@ -74,7 +76,7 @@
       <div class="sttplrow"><label>Your name <input type="text" id="stTplName" value="${esc(t.my_name)}" autocomplete="name"></label><label>Your phone <input type="text" id="stTplPhone" value="${esc(t.my_phone)}" autocomplete="tel"></label></div>
       <label class="sttplfull">Subject <input type="text" id="stTplSubj" value="${esc(t.subject)}"></label>
       <label class="sttplfull">Message (plain text) <textarea id="stTplBody" rows="10">${esc(t.body)}</textarea></label>
-      <div class="sttips" id="stTips" role="note"><b>Inbox tips</b><ul><li>Send a modest number a day from your own mailbox, not a blast.</li><li>Keep it plain text and personal: short, written like a one-to-one note.</li><li>Avoid links, images and attachments.</li><li>Stop right away if someone asks you to; keep the opt-out line.</li></ul></div>
+      <div class="sttips" id="stTips" role="note"><b>Inbox tips</b><ul><li>Send a modest number a day from your own mailbox, not a blast.</li><li>Keep it plain text and personal: short, written like a one-to-one note.</li><li>Avoid links, images and attachments.</li><li>Stop right away if someone asks you to.</li></ul></div>
       <div class="stact"><button type="button" class="btn primary" id="stTplSave">Save template</button><button type="button" class="btn" id="stTplReset">Reset to default</button><button type="button" class="btn" data-stclose>Close</button><span class="note" id="stTplMsg" role="status" aria-live="polite"></span></div></div>`);
     const read = () => ({ mode: $('stTplMailto').checked ? 'mailto' : 'web', my_name: $('stTplName').value, my_phone: $('stTplPhone').value, subject: $('stTplSubj').value, body: $('stTplBody').value });
     $('stTplSave').onclick = () => { $('stTplMsg').textContent = tplSet(read()) ? 'Saved.' : "Couldn't save in this browser."; };

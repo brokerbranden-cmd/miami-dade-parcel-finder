@@ -37,14 +37,20 @@
       addr: String(x.addr || '').slice(0, 200), city: String(x.city || '').slice(0, 80), zip: String(x.zip || '').slice(0, 10),
       pack: x.pack === 'condo' ? 'condo' : 'main',
       stage: STAGES.includes(x.stage) ? x.stage : 'New', next: isDay(x.next) ? x.next : '',
-      acts: sortActs((Array.isArray(x.acts) ? x.acts : []).map(cleanAct).filter(Boolean)).slice(0, 500) };
+      acts: sortActs((Array.isArray(x.acts) ? x.acts : []).map(cleanAct).filter(Boolean)).slice(0, 500),
+      folders: (() => { const a = Array.isArray(x.folders) ? [...new Set(x.folders.filter(v => typeof v === 'string' && /^[a-z0-9]{1,24}$/.test(v)))].slice(0, 50) : null; return a && a.length ? a : ['default']; })() };   // older items (no folders) land in the default folder
   }
   function clean(obj){ const out = {}; if(obj && typeof obj === 'object') for(const [f, x] of Object.entries(obj)){ const c = cleanItem(x, f); if(c) out[c.folio] = c; } return out; }
   items = clean(backend.load());
+  /* folders (named lists, per county): [{id, name}]; 'default' always exists and cannot be deleted. Items carry folders: [id,...] */
+  const FKEY = window.PFCounty ? window.PFCounty.key('mdpf.folders.v1') : 'mdpf.folders.v1', DEF_NAME = 'My saved';
+  const cleanFolders = a => { const out = [], seen = new Set(); for(const x of Array.isArray(a) ? a : []){ if(!x || typeof x.id !== 'string' || !/^[a-z0-9]{1,24}$/.test(x.id) || seen.has(x.id)) continue; seen.add(x.id); out.push({ id: x.id, name: String(x.name || '').trim().slice(0, 60) || 'Folder' }); } if(!seen.has('default')) out.unshift({ id: 'default', name: DEF_NAME }); return out; };
+  let folders = (() => { try{ return cleanFolders(JSON.parse(localStorage.getItem(FKEY) || '[]')); }catch(e){ return cleanFolders([]); } })();
+  const saveFolders = () => { try{ localStorage.setItem(FKEY, JSON.stringify(folders)); return true; }catch(e){ lastError = 'Could not save folders in this browser.'; return false; } };
   function emit(why, folio){ rev++; subs.forEach(fn => { try{ fn(why, folio); }catch(e){ console.warn(e); } }); }
   let batching = 0, dirty = false;
   function persist(why, folio){ if(batching){ dirty = true; return true; } lastError = backend.save(items) ? '' : 'Could not write to this browser\'s storage (full or blocked).'; emit(why, folio); return !lastError; }
-  window.addEventListener('storage', e => { if(e.key === KEY){ items = clean(backend.load()); emit('external'); } });   // another tab changed the list
+  window.addEventListener('storage', e => { if(e.key === FKEY){ folders = cleanFolders(JSON.parse(e.newValue || '[]')); emit('folders'); } if(e.key === KEY){ items = clean(backend.load()); emit('external'); } });   // another tab changed the list
 
   const api = {
     STATUSES, STAGES, ACT_TYPES, OUTCOMES, KEY,
@@ -53,7 +59,19 @@
     batch(fn){ batching++; try{ fn(); } finally { batching--; if(!batching && dirty){ dirty = false; persist('batch'); } } },
     has: f => !!items[f], get: f => items[f] || null, count: () => Object.keys(items).length,
     list: () => Object.values(items).sort((a, b) => b.savedAt < a.savedAt ? -1 : 1),
-    add(f, info){ if(items[f]) return items[f]; const t = now(); items[f] = cleanItem({ ...info, folio: f, savedAt: t, updatedAt: t, status: 'New', note: '', vacant: false, cond: '' }); persist('add', f); return items[f]; },
+    /* folders */
+    folders: () => folders.map(x => ({ ...x })), folderName: id => (folders.find(x => x.id === id) || {}).name || '',
+    folderCount: id => Object.values(items).filter(x => x.folders.includes(id)).length,
+    inFolder: (f, id) => !!(items[f] && items[f].folders.includes(id)),
+    addFolder(name){ name = String(name || '').trim().slice(0, 60); if(!name) return null; const ex = folders.find(x => x.name.toLowerCase() === name.toLowerCase()); if(ex) return ex.id;
+      const id = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); folders.push({ id, name }); saveFolders(); emit('folders'); return id; },
+    renameFolder(id, name){ name = String(name || '').trim().slice(0, 60); const x = folders.find(y => y.id === id); if(!x || !name) return false; x.name = name; saveFolders(); emit('folders'); return true; },
+    // deleting a folder never unsaves a property: anything left in no folder goes back to the default folder
+    deleteFolder(id){ if(id === 'default' || !folders.some(x => x.id === id)) return false; folders = folders.filter(x => x.id !== id);
+      for(const x of Object.values(items)) if(x.folders.includes(id)){ x.folders = x.folders.filter(v => v !== id); if(!x.folders.length) x.folders = ['default']; }
+      saveFolders(); persist('folders'); return true; },
+    setFolders(f, ids){ if(!items[f]) return null; const ok = new Set(folders.map(x => x.id)); const a = [...new Set(ids)].filter(v => ok.has(v)); return api.update(f, { folders: a.length ? a : ['default'] }); },
+    add(f, info, fids){ if(items[f]) return items[f]; const t = now(); items[f] = cleanItem({ ...info, folders: Array.isArray(fids) && fids.length ? fids.filter(v => folders.some(x => x.id === v)) : ['default'], folio: f, savedAt: t, updatedAt: t, status: 'New', note: '', vacant: false, cond: '' }); persist('add', f); return items[f]; },
     update(f, patch){ if(!items[f]) return null; const c = cleanItem({ ...items[f], ...patch, folio: f, savedAt: items[f].savedAt, updatedAt: now() }); if(c){ items[f] = c; persist('update', f); } return items[f]; },
     remove(f){ if(!items[f]) return; delete items[f]; persist('remove', f); },
     /* outreach: logging on an unsaved property saves it first; the first contact moves a New lead to Contacted */
@@ -67,11 +85,12 @@
     dueState(f, today){ const x = items[f]; if(!x || !x.next || x.stage === 'Closed' || x.stage === 'Dead') return null; const t = today || new Date().toLocaleDateString('en-CA');
       const days = Math.round((Date.parse(t) - Date.parse(x.next)) / 864e5); return days < 0 ? null : { days, overdue: days > 0 }; },
     toggle(f, info){ if(items[f]){ api.remove(f); return false; } api.add(f, info); return true; },
-    exportJSON: () => ({ app: 'miami-dade-parcel-finder', kind: 'saved-properties', version: 2, exported: now(), count: api.count(), items: api.list() }),
+    exportJSON: () => ({ app: 'miami-dade-parcel-finder', kind: 'saved-properties', version: 3, exported: now(), count: api.count(), folders: api.folders(), items: api.list() }),
     /* merge: new folios are added; for folios already saved the copy with the newer updatedAt wins */
     importJSON(data){
       const src = Array.isArray(data) ? data : Array.isArray(data && data.items) ? data.items : (data && typeof data === 'object' ? Object.values(data) : null);
       if(!src) throw new Error('Not a saved-properties file');
+      if(data && Array.isArray(data.folders)){ let ch = false; for(const fo of cleanFolders(data.folders)) if(!folders.some(x => x.id === fo.id)){ folders.push(fo); ch = true; } if(ch) saveFolders(); }
       let added = 0, updated = 0, same = 0, bad = 0;
       for(const raw of src){ const c = cleanItem(raw); if(!c){ bad++; continue; }
         const cur = items[c.folio];

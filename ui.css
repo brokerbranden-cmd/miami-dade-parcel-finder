@@ -204,3 +204,15 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .trstat{display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start}
 .trnew{font-size:12px;color:var(--muted);border:1px dashed var(--line);border-radius:4px;padding:1px 6px}
 @media (max-width:760px){.trrow{grid-template-columns:1fr}}
+/* Saved folders */
+.svfolders{margin:6px 0 2px}
+.svfolders .chip.add{border-style:dashed}
+.svfact{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0}
+.svfact:empty{display:none}
+.svfform{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.svfform input{font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:6px}
+.svfbtn{font:inherit;font-size:12.5px;background:transparent;border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.svfbtn:hover{border-color:#FC4C02}
+.svpick{position:fixed;z-index:3000;background:var(--surface,#fff);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px 12px;display:grid;gap:6px;max-height:70vh;overflow:auto}
+.svpick .svpnew{display:flex;gap:6px}.svpick .svpnew input{flex:1;min-width:0;font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:6px}
+.svpick .svpact{display:flex;justify-content:flex-end}

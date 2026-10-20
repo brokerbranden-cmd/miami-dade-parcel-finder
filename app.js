@@ -441,6 +441,8 @@ const SV=window.PFSaved;
 const STAR_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg>';
 const stKey=s=>String(s).toLowerCase().replace(/[^a-z]+/g,'-');
 const svDate=iso=>{ const d=new Date(iso); return isNaN(d)?'':MON[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear(); };
+const SVF={cur:''};   // Saved list folder tab ('' = All saved)
+function folderLine(folio){ const x=SV.get(folio); if(!x) return ''; const names=x.folders.map(SV.folderName).filter(Boolean); return `<div class="line svfl"><span class="k">Folders</span><span class="v"><button type="button" class="svfbtn" data-svfold="${folio}" title="Choose which saved folders this property is in">${esc(names.join(', ')||SV.folderName('default'))} ▾</button></span></div>`; }
 function starHTML(id,folio,extra=''){ const on=SV.has(folio); return `<button type="button" class="star ${on?'on':''} ${extra}" data-star="${folio}" data-id="${id}" aria-pressed="${on}" aria-label="${on?'Remove from saved':'Save property'}" title="${on?'Saved · click to remove':'Save this property'}">${STAR_SVG}</button>`; }
 function savedInfo(id){ const p=P(id), i=I(id), c=p.c; return {addr:getStr(p,'addr',i), city:D.city[c.city[i]]||'', zip:D.zip[c.zip[i]]||'', pack:p.name}; }
 let SVIDX={key:'',ids:new Map()};      // folio -> id for saved folios present in the loaded packs
@@ -593,7 +595,7 @@ function run(){
     }
   }
   results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,apN,pfN,pbN,asmGroups:asmSeen?asmSeen.size:0};
-  if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status))) r.push(id); } results=Uint32Array.from(r); }
+  if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status)) && (!SVF.cur||x.folders.includes(SVF.cur))) r.push(id); } results=Uint32Array.from(r); }
   renderSavedUI();
   doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true); RUN_N++;
 }
@@ -738,7 +740,7 @@ function cardHTML(id){
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
     ${HAS('mscreen')?mrCardLine(c,i):''}${HAS('mtax')?mtCardLine(c,i):''}${upLine(p,i)}
-    ${compsLine(id)}${cmLine(folio)}${auLine(folio)}${outLine(folio)}${SKU.cardLine(folio)}
+    ${compsLine(id)}${cmLine(folio)}${auLine(folio)}${outLine(folio)}${folderLine(folio)}${SKU.cardLine(folio)}
     <div class="sendline">${sendBtns(folio)}${sentBadges(folio)}${p.ap&&p.ap[i]?'<span class="hot apb" title="Adverse possession claim noted in the Property Appraiser legal description">Adverse possession</span>':''}</div>
     <div class="ob">${dueBadge(folio)}${clerkBadges(folio)}${cmBadges(folio)}${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
@@ -938,7 +940,7 @@ function renderPipe(){ const ids=savedIdx(), t=todayDay(), by=Object.fromEntries
 function savedBoxHTML(id,folio){
   const sv=SV.get(folio);
   if(!sv) return `<div class="svbox off"><button type="button" class="btn svsave" data-star="${folio}" data-id="${id}" aria-pressed="false">${STAR_SVG}Save this property</button><span class="note">Keep it on your saved list with a status and notes.</span></div>`;
-  return `<div class="svbox"><div class="svhead"><button type="button" class="btn svsave on" data-star="${folio}" data-id="${id}" aria-pressed="true" title="Remove from saved">${STAR_SVG}Saved</button><span class="note">Saved ${svDate(sv.savedAt)}${sv.updatedAt!==sv.savedAt?' · edited '+svDate(sv.updatedAt):''}</span></div>
+  return `<div class="svbox"><div class="svhead"><button type="button" class="btn svsave on" data-star="${folio}" data-id="${id}" aria-pressed="true" title="Remove from saved">${STAR_SVG}Saved</button><span class="note">Saved ${svDate(sv.savedAt)}${sv.updatedAt!==sv.savedAt?' · edited '+svDate(sv.updatedAt):''}</span></div>${folderLine(folio)}
     <label class="svl" for="svStatusSel">Status</label><select id="svStatusSel">${SV.STATUSES.map(s=>`<option ${s===sv.status?'selected':''}>${s}</option>`).join('')}</select>
     <label class="svl" for="svNote">Notes</label><textarea id="svNote" rows="3" placeholder="Called owner, left voicemail…" maxlength="5000">${esc(sv.note)}</textarea>
     <label class="check svvac"><input type="checkbox" id="svVacant" ${sv.vacant?'checked':''}> Looks vacant / damaged</label>
@@ -1566,6 +1568,9 @@ function renderSavedUI(){
   if(!S.saved) return;
   const cnt={}; for(const x of SV.list()) cnt[x.status]=(cnt[x.status]||0)+1;
   $('svStatus').innerHTML=`<button type="button" class="chip ${!S.svSt.size?'on':''}" data-st="" aria-pressed="${!S.svSt.size}">All<span class="n">${fmt.format(n)}</span></button>`+SV.STATUSES.map(s=>{ const on=S.svSt.has(s), k=cnt[s]||0; return `<button type="button" class="chip ${on?'on':''} ${!k&&!on?'zero':''}" data-st="${esc(s)}" aria-pressed="${on}">${esc(s)}<span class="n">${k}</span></button>`; }).join('');
+  if(SVF.cur && !SV.folderName(SVF.cur)) SVF.cur='';
+  $('svFolders').innerHTML=`<button type="button" role="tab" class="chip ${!SVF.cur?'on':''}" data-svf="" aria-selected="${!SVF.cur}">All saved<span class="n">${fmt.format(n)}</span></button>`+SV.folders().map(fo=>`<button type="button" role="tab" class="chip ${SVF.cur===fo.id?'on':''}" data-svf="${fo.id}" aria-selected="${SVF.cur===fo.id}">${esc(fo.name)}<span class="n">${fmt.format(SV.folderCount(fo.id))}</span></button>`).join('')+`<button type="button" class="chip add" id="svfNew" title="Create a folder">+ New folder</button>`;
+  const cf=SVF.cur; $('svfAct').innerHTML=cf?`<span class="note">Folder <b>${esc(SV.folderName(cf))}</b>:</span><button type="button" class="btn" id="svfRename">Rename</button>${cf==='default'?'':`<button type="button" class="btn" id="svfDelete" title="Delete the folder; its properties stay saved">Delete folder</button>`}<button type="button" class="btn" id="svfExport">Export this folder (CSV)</button>`:'';
   const missing=n-savedIdx().size;
   $('svInfo').textContent=!n?'Nothing saved yet. Tap the ☆ on any property to save it.':`${fmt.format(n)} saved${missing?` · ${missing} not in the current data (still kept and exported)`:''}`;
 }
@@ -1580,16 +1585,18 @@ function refreshFolio(folio){
 }
 function download(name,blob){ const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
 const stamp=()=>{ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); };
-function savedListCSV(){
-  // same contact-only columns as every property export (EXP_HEAD)
-  const ids=savedIdx(); for(const k in EXPSTAT) EXPSTAT[k]=0; const rows=SV.list().map(x=>{ const id=ids.get(x.folio);
+function savedListCSV(fid){
+  // same contact-only columns as every property export (EXP_HEAD); fid = one folder only
+  const ids=savedIdx(); for(const k in EXPSTAT) EXPSTAT[k]=0; const rows=SV.list().filter(x=>!fid||x.folders.includes(fid)).map(x=>{ const id=ids.get(x.folio);
     if(id!=null) return exportRow(P(id),I(id)); EXPSTAT.real++;
     return contactRow(x.owner||'',x.addr||'No site address',x.city||'',x.zip||'',x.mail||'',folio13(x.folio)); });
   return new Blob([EXP_HEAD+rows.join('\n')+(rows.length?'\n':'')],{type:'text/csv'});
 }
 function wireSaved(){
   document.addEventListener('click',e=>{ const b=e.target.closest('[data-star]'); if(!b) return; e.preventDefault(); e.stopPropagation();
-    const f=b.dataset.star, on=SV.toggle(f,savedInfo(+b.dataset.id)); toast(SV.error||(on?'Saved':'Removed from saved')); });
+    const f=b.dataset.star; let on; if(SV.has(f)){ SV.remove(f); on=false; } else { SV.add(f,savedInfo(+b.dataset.id),S.saved&&SVF.cur?[SVF.cur]:undefined); on=true; }
+    toast(SV.error||(on?`Saved to ${SV.get(f).folders.map(SV.folderName).join(', ')}`:'Removed from saved'));
+    if(on&&SV.folders().length>1){ const nb=document.querySelector(`[data-star="${f}"]`)||b; window.PFOpenFolderPick(f,nb.isConnected?nb:document.body); } });
   SV.onChange((why,folio)=>{
     if(why==='update'){ refreshFolio(folio); renderSavedUI(); return; }
     if(folio) refreshFolio(folio);
@@ -1598,6 +1605,28 @@ function wireSaved(){
   });
   $('savedBtn').onclick=async()=>{ S.saved=!S.saved; if(S.saved){ await ensureSavedPacks(); } clearIdea(); run(); if(S.saved) $('results').scrollIntoView({block:'start'}); };
   $('svBack').onclick=()=>{ S.saved=false; run(); };
+  /* folders: tabs, new / rename / delete, per-folder CSV, folder picker (from the save button and saved cards / drawer) */
+  const svfForm=(label,val,done)=>{ $('svfAct').innerHTML=`<form id="svfForm" class="svfform"><label>${esc(label)} <input type="text" id="svfName" maxlength="60" value="${esc(val)}" required></label><button type="submit" class="btn primary">Save</button><button type="button" class="btn" id="svfCancel">Cancel</button></form>`; const i=$('svfName'); i.focus(); i.select();
+    $('svfCancel').onclick=()=>renderSavedUI(); $('svfForm').onsubmit=e=>{ e.preventDefault(); const v=i.value.trim(); if(v) done(v); renderSavedUI(); }; };
+  let svfArm=0;
+  $('savedBar').addEventListener('click',async e=>{ const t=e.target.closest('[data-svf],#svfNew,#svfRename,#svfDelete,#svfExport'); if(!t) return;
+    if(t.dataset.svf!=null){ SVF.cur=t.dataset.svf; svfArm=0; run(); return; }
+    if(t.id==='svfNew') return svfForm('New folder name','',v=>{ const id=SV.addFolder(v); if(id){ SVF.cur=id; toast(`Folder “${v}” ready`); run(); } });
+    if(t.id==='svfRename') return svfForm('Rename folder',SV.folderName(SVF.cur),v=>{ SV.renameFolder(SVF.cur,v); toast('Folder renamed'); });
+    if(t.id==='svfDelete'){ if(svfArm!==1){ svfArm=1; t.textContent=`Yes, delete “${SV.folderName(SVF.cur)}”`; setTimeout(()=>{ if(svfArm===1&&t.isConnected){ svfArm=0; t.textContent='Delete folder'; } },6000); return; }
+      svfArm=0; const nm=SV.folderName(SVF.cur); SV.deleteFolder(SVF.cur); SVF.cur=''; toast(`Folder “${nm}” deleted. Its properties are still saved.`); run(); return; }
+    if(t.id==='svfExport'){ await ensureSavedPacks(); try{ await ensureDetail(); await ensureGeo(); }catch(e){} const fid=SVF.cur, n=SV.folderCount(fid), nm=SV.folderName(fid).replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||'folder'; download(`parcel-finder-saved-${nm}-${stamp()}.csv`,savedListCSV(fid)); toast(`${fmt.format(n)} properties in “${SV.folderName(fid)}” exported`); } });
+  const closePick=()=>{ const p=$('svPick'); if(p) p.remove(); };
+  function openPick(folio,anchor){ closePick(); if(!SV.has(folio)) return; const p=document.createElement('div'); p.id='svPick'; p.className='svpick'; p.setAttribute('role','dialog'); p.setAttribute('aria-label','Saved folders');
+    const draw=()=>{ p.innerHTML=`<b>Save to folders</b>${SV.folders().map(fo=>`<label class="check"><input type="checkbox" data-pf="${fo.id}" ${SV.inFolder(folio,fo.id)?'checked':''}> ${esc(fo.name)}</label>`).join('')}<form class="svpnew"><input type="text" maxlength="60" placeholder="New folder" aria-label="New folder name"><button type="submit" class="btn">Add</button></form><div class="svpact"><button type="button" class="btn primary" data-pdone>Done</button></div>`; };
+    draw(); document.body.appendChild(p); p.dataset.folio=folio;
+    const r=anchor.getBoundingClientRect(), w=Math.min(280,innerWidth-16); p.style.width=w+'px'; p.style.left=Math.max(8,Math.min(innerWidth-w-8,r.left))+'px'; p.style.top=Math.min(innerHeight-20,r.bottom+6)+'px';
+    p.addEventListener('change',e=>{ const c=e.target.closest('[data-pf]'); if(!c) return; const ids=[...p.querySelectorAll('[data-pf]:checked')].map(x=>x.dataset.pf); SV.setFolders(folio,ids); if(!ids.length) p.querySelector('[data-pf="default"]').checked=true; });
+    p.addEventListener('submit',e=>{ e.preventDefault(); const i=p.querySelector('.svpnew input'), v=i.value.trim(); if(!v) return; const id=SV.addFolder(v); if(id){ const x=SV.get(folio); SV.setFolders(folio,[...x.folders.filter(f=>f!=='default'||x.folders.length>1),id]); } draw(); });
+    p.addEventListener('click',e=>{ e.stopPropagation(); if(e.target.closest('[data-pdone]')) closePick(); }); }
+  document.addEventListener('click',e=>{ const b=e.target.closest('[data-svfold]'); if(b){ e.preventDefault(); e.stopPropagation(); openPick(b.dataset.svfold,b); return; } if($('svPick')&&!e.target.closest('#svPick')) closePick(); },true);
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('svPick')){ closePick(); e.stopPropagation(); } },true);
+  window.PFOpenFolderPick=openPick;
   $('svStatus').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(!b) return; const s=b.dataset.st; if(!s) S.svSt.clear(); else S.svSt.has(s)?S.svSt.delete(s):S.svSt.add(s); run(); });
   $('svExportJson').onclick=()=>{ download(`parcel-finder-saved-${stamp()}.json`,new Blob([JSON.stringify(SV.exportJSON(),null,1)],{type:'application/json'})); toast(fmt.format(SV.count())+' saved properties exported'); };
   $('svExportCsv').onclick=async()=>{ await ensureSavedPacks(); try{ await ensureDetail(); await ensureGeo(); }catch(e){} download(`parcel-finder-saved-${stamp()}.csv`,savedListCSV()); toast(fmt.format(SV.count())+' saved properties exported'); };

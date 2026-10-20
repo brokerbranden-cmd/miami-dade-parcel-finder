@@ -94,16 +94,52 @@ with sync_playwright() as pw:
     check_url(last(), 'owner.b@example.com', tc(A2['owner'].split()[0]), ac(A2['addr'].strip()), 'Saved list')
     it = pg.evaluate(f"PF.SV.get({json.dumps(A2['folio'])})") or {}
     ok(it.get('acts') and it['acts'][0]['type'] == 'email' and 'owner.b@example.com' in it['acts'][0]['note'] and it.get('stage') == 'Contacted', 'Saved: email activity logged, stage Contacted')
+    # Email owner: one message, To = Branden, BCC = owner's emails (deduped, invalid skipped, max 5), repeat warning lists the emailed ones
+    from urllib.parse import unquote
+    D0 = A2
+    EM = ['x1@example.com', 'X1@Example.com', 'not-an-email', 'x2@example.com', 'x3@example.com']
+    pg.evaluate(f"(()=>{{ const k={json.dumps(skey('miami-dade'))}, o=JSON.parse(localStorage.getItem(k)||'{{}}'); o[{json.dumps(D0['folio'])}]={{a:'2026-10-19',s:'test',n:'',p:[],e:{json.dumps(EM)}}}; localStorage.setItem(k,JSON.stringify(o)); PFSkip.store.reload(); PF.rerun(); }})()"); pg.wait_for_timeout(1500)
+    go(f'q={D0["folio"]}&hg=0'); ob = f'.card[data-folio="{D0["folio"]}"] [data-stown]'; pg.wait_for_selector(ob, timeout=60000)
+    ok(pg.inner_text(ob).strip() == 'Email owner (3)' and pg.query_selector(f'.card[data-folio="{D0["folio"]}"] [data-stemail]') is not None, f'card: one "Email owner" button ({pg.inner_text(ob).strip()}) + per-email buttons kept')
+    n0 = opened(); pg.click(ob); pg.wait_for_timeout(800); u = last()
+    ok(opened() == n0 + 1 and u.startswith(DEEP.replace('?', '?mailtouri=mailto%3A')), f'Email owner opens one Outlook web compose via mailtouri ({u[:90]})')
+    mt = unquote(u.split('mailtouri=', 1)[1]); q = parse_qs(urlsplit(mt).query); to = mt[7:].split('?')[0]
+    bcc = (q.get('bcc') or [''])[0].split(',')
+    ok(to == 'Branden@prop-hunters.com', f'To is Branden@prop-hunters.com ({to})')
+    ok(bcc == ['x1@example.com', 'x2@example.com', 'x3@example.com'], f'BCC deduped, invalid skipped: {bcc}')
+    ok(pg.evaluate("PFSkipUI.BCC_MAX") == 5, 'BCC capped at 5')
+    bd = (q.get('body') or [''])[0].replace('\r\n', '\n'); fd = tc(D0['owner'].split()[0])
+    ok(bd.startswith(f'Hey {fd},') and '(305) 812-9445' in bd and 'http' not in bd and 'rather not hear' not in bd, 'owner email body: template, plain text, no links, no opt-out line')
+    em = (json.loads(pg.evaluate(f"localStorage.getItem({json.dumps(sendkey('miami-dade'))})") or '{}').get('sent', {}).get(D0['folio']) or {}).get('em') or {}
+    ok(set(bcc) <= set(em.get('addrs', {})), f'every BCC address recorded as emailed: {sorted(em.get("addrs", {}))}')
+    ok(pg.query_selector(f'.card[data-folio="{D0["folio"]}"] .emb') is not None, 'card shows Emailed')
+    n1 = opened(); pg.click(ob); pg.wait_for_selector('#stEmAgain', timeout=10000); wt = pg.inner_text('#stEmAgain')
+    ok(all(x in wt for x in bcc) and 'x4@example.com' not in wt, 'repeat warning lists every address already emailed')
+    pg.click('[data-stclose]'); pg.wait_for_timeout(300)
+    pg.evaluate(f"(()=>{{ const k={json.dumps(skey('miami-dade'))}, o=JSON.parse(localStorage.getItem(k)); o[{json.dumps(D0['folio'])}].e=['x1@example.com','x2@example.com','x3@example.com','x4@example.com','x5@example.com']; localStorage.setItem(k,JSON.stringify(o)); PFSkip.store.reload(); PF.rerun(); }})()"); pg.wait_for_timeout(1500)
+    pg.click(ob); pg.wait_for_selector('#stEmNew', timeout=10000)
+    pg.click('#stEmNew'); pg.wait_for_timeout(600); u2 = unquote(last().split('mailtouri=', 1)[1])
+    ok(opened() == n1 + 1 and (parse_qs(urlsplit(u2).query).get('bcc') or [''])[0] == 'x4@example.com,x5@example.com', f'"Email only the new" BCCs the 2 not yet emailed')
+    aid = pg.get_attribute(f'.card[data-folio="{D0["folio"]}"]', 'data-id'); pg.evaluate(f"PF.openDrawer({aid})"); pg.wait_for_selector('.stdraw [data-stown]', timeout=60000); ok(True, 'drawer has Email owner'); pg.keyboard.press('Escape'); pg.wait_for_timeout(400)
+    pg.evaluate("localStorage.setItem('pf.emailtpl.v1', JSON.stringify({mode:'mailto', to_addr:'me@prop-hunters.com'}))")
+    ok(pg.evaluate(f"PF.skBridge && (()=>{{ return true; }})()"), 'bridge')
+    pg.click(ob); pg.wait_for_selector('#stEmGo'); pg.click('#stEmGo'); pg.wait_for_timeout(500); lm = pg.evaluate('window.PF_LAST_EMAIL')
+    ok(lm['url'].startswith('mailto:me@prop-hunters.com?bcc=x1@example.com,') and lm['mode'] == 'mailto', f'mailto mode: To from settings + bcc= ({lm["url"][:70]})')
+    pg.evaluate("localStorage.removeItem('pf.emailtpl.v1')")
     # stored templates: an unedited copy of the old default migrates to the new one; an edited one is kept
     OLD = "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know."
     pg.evaluate(f"localStorage.setItem('pf.emailtpl.v1', JSON.stringify({{mode:'web', my_name:'Branden', my_phone:'(305) 812-9445', subject:'Question about {{property_address}}', body:{json.dumps(OLD)}}}))")
     ok(pg.evaluate("PFSkipUI.tplGet().body").startswith('Hey {first_name},'), 'saved copy of the old default migrates to the new template')
     pg.evaluate("localStorage.setItem('pf.emailtpl.v1', JSON.stringify({body:'Hello {first_name}, custom'}))")
     ok(pg.evaluate("PFSkipUI.tplGet().body") == 'Hello {first_name}, custom', 'an edited template is kept')
+    EDITED = "Hello {first_name},\nCustom line about {property_address}.\n\nIf you'd rather not hear from me, just reply and let me know.\n\nBest,\nB"
+    pg.evaluate(f"localStorage.setItem('pf.emailtpl.v1', JSON.stringify({{body:{json.dumps(EDITED)}}}))")
+    ok(pg.evaluate("PFSkipUI.tplGet().body") == "Hello {first_name},\nCustom line about {property_address}.\n\nBest,\nB", 'opt-out line (and its blank line) stripped from an edited saved template, rest kept')
+    ok("rather not hear" not in pg.evaluate("PFSkipUI.TPL_DEF.body"), 'default template has no opt-out line')
     pg.evaluate("localStorage.removeItem('pf.emailtpl.v1')")
     # template editor: tips, edit + mailto mode
     go('hg=0'); pg.evaluate("document.getElementById('stTplBtn').click()"); pg.wait_for_selector('#stTips')
-    tips = pg.inner_text('#stTips'); ok('Inbox tips' in tips and 'modest number' in tips and 'plain text' in tips and 'links' in tips and 'Stop' in tips, 'template editor shows Inbox tips')
+    tips = pg.inner_text('#stTips'); ok('Inbox tips' in tips and 'one at a time at a normal pace' in tips and 'modest at first' in tips and 'plain text' in tips and 'links' in tips and 'Stop' in tips, 'template editor shows Inbox tips'); ok(pg.input_value('#stTplTo') == 'Branden@prop-hunters.com', 'template editor: editable To address')
     ok(pg.input_value('#stTplPhone') == '(305) 812-9445' and pg.input_value('#stTplName') == 'Branden' and pg.input_value('#stTplSubj') == 'Question about {property_address}', 'template defaults')
     pg.fill('#stTplSubj', 'Hello {owner_name} re {city}'); pg.check('#stTplMailto'); pg.click('#stTplSave'); pg.wait_for_timeout(300); pg.keyboard.press('Escape')
     t = json.loads(pg.evaluate("localStorage.getItem('pf.emailtpl.v1')")); ok(t['mode'] == 'mailto' and t['subject'].startswith('Hello'), 'template saved to localStorage')

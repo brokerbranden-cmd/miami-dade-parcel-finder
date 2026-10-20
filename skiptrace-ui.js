@@ -23,11 +23,13 @@
 
   /* ---------- email owners from your own Outlook (this site never sends mail) ---------- */
   const TPL_KEY = 'pf.emailtpl.v1';
-  const TPL_DEF = { mode: 'web', my_name: 'Branden', my_phone: '(305) 812-9445', subject: 'Question about {property_address}',
+  const TPL_DEF = { mode: 'web', to_addr: 'Branden@prop-hunters.com', my_name: 'Branden', my_phone: '(305) 812-9445', subject: 'Question about {property_address}',
     body: "Hey {first_name},\n\nMy name is Branden with Prop Hunters. I'm an investor/buyer and wanted to see if you'd consider an offer on {property_address}.\nif you're open to a quick conversation, you can reach me at (305) 812-9445.\n\nThanks,\nBranden" };
   /* the earlier default body: a saved template that still equals it moves to the new default; edited ones are kept */
   const TPL_OLD_BODY = "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know.";
-  function tplGet() { let o = {}; try { o = JSON.parse(localStorage.getItem(TPL_KEY) || '{}') || {}; } catch (e) {} const t = { ...TPL_DEF }; if (o.body === TPL_OLD_BODY) delete o.body; for (const k in TPL_DEF) if (typeof o[k] === 'string') t[k] = o[k]; if (t.mode !== 'mailto') t.mode = 'web'; return t; }
+  // Branden removed this line everywhere: stripped (with its blank line) from any saved template, edited or not
+  const OPT_OUT_RE = /(?:\r?\n[ \t]*)*[ \t]*If you[’']d rather not hear from me, just reply and let me know\.[ \t]*(?=\r?\n|$)/g;
+  function tplGet() { let o = {}; try { o = JSON.parse(localStorage.getItem(TPL_KEY) || '{}') || {}; } catch (e) {} const t = { ...TPL_DEF }; if (o.body === TPL_OLD_BODY) delete o.body; if (typeof o.body === 'string') o.body = o.body.replace(OPT_OUT_RE, ''); for (const k in TPL_DEF) if (typeof o[k] === 'string') t[k] = o[k]; if (t.mode !== 'mailto') t.mode = 'web'; return t; }
   function tplSet(t) { try { localStorage.setItem(TPL_KEY, JSON.stringify(t)); return true; } catch (e) { return false; } }
   const titleCase = s => String(s || '').toLowerCase().replace(/(^|[\s\-'\/(])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Llc|Inc|Lp|Llp|Pa|Pllc|Ltd|Ii|Iii|Iv)\b/g, w => w.toUpperCase()).replace(/\bMc([a-z])/g, (m, a) => 'Mc' + a.toUpperCase());
   const addrCase = s => titleCase(s).replace(/\b(Nw|Ne|Sw|Se)\b/g, w => w.toUpperCase());
@@ -46,6 +48,35 @@
     const t = tplGet(); let info = null; try { if (id != null && id >= 0) info = B.info(id); } catch (e) {}
     const r = ST.get(folio) || {}; const on = ownerNames(info ? info.owner : (r.n || ''), B.order, info && info.gov);
     return { owner_first: on.first, owner_name: on.name, property_address: addrCase(info ? info.addr : ''), city: titleCase(info ? info.city : ''), my_name: t.my_name, my_phone: t.my_phone };
+  }
+  /* Email owner: one message, To = your own address, BCC = the owner's skip-traced emails (deduped, valid only, max BCC_MAX) */
+  const BCC_MAX = 5, EMAIL_RE = /^[^\s@<>(),;:"'\[\]\\]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i;
+  const ownerEmails = folio => { const r = ST.get(folio), seen = new Set(), out = []; for (const e of (r && r.e) || []) { const v = String(e || '').trim(); const k = v.toLowerCase(); if (!EMAIL_RE.test(v) || seen.has(k)) continue; seen.add(k); out.push(v); } return out; };
+  const ownerBtn = folio => { const n = ownerEmails(folio).length; return n ? `<button type="button" class="stl stown" data-stown="${esc(folio)}" title="One email from your Outlook: To yourself, the owner's ${n} ${n === 1 ? 'address' : 'addresses'} in BCC">Email owner${n > 1 ? ' (' + Math.min(n, BCC_MAX) + ')' : ''}</button>` : ''; };
+  function bccUrl(to, bcc, vars, t) {
+    t = t || tplGet(); const subject = fill(t.subject, vars), body = fill(t.body, vars).replace(/\r\n?/g, '\n'), E = encodeURIComponent;
+    const mailto = `mailto:${E(to).replace(/%40/g, '@')}?bcc=${bcc.map(E).join(',').replace(/%40/g, '@')}&subject=${E(subject)}&body=${E(body.replace(/\n/g, '\r\n'))}`;
+    // Outlook on the web: the compose deeplink documents only to / subject / body, so the whole mailto (with bcc=) goes in mailtouri=
+    return t.mode === 'mailto' ? mailto : `https://outlook.office.com/mail/deeplink/compose?mailtouri=${E(mailto)}`;
+  }
+  function openOwner(B, id, folio, list) {
+    const t = tplGet(), to = (t.to_addr || '').trim() || TPL_DEF.to_addr, url = bccUrl(to, list, emailVars(B, id, folio), t);
+    window.PF_LAST_EMAIL = { url, folio, to, bcc: list.slice(), mode: t.mode };
+    if (t.mode === 'mailto') { const a = document.createElement('a'); a.href = url; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }
+    else window.open(url, '_blank', 'noopener');
+    B.markEmailed(folio, list, id); const all = ownerEmails(folio).length;
+    B.toast(`Opened one email in Outlook with ${list.length} ${list.length === 1 ? 'address' : 'addresses'} in BCC. Marked as emailed.` + (all > list.length ? ` ${all - list.length} more not included (max ${BCC_MAX} per message).` : ''));
+  }
+  function ownerClick(B, b) {
+    const folio = b.dataset.stown, idEl = b.closest('[data-id]') || document.getElementById('savedBox'), id = idEl && idEl.dataset.id != null ? +idEl.dataset.id : -1;
+    const all = ownerEmails(folio); if (!all.length) { B.toast('No valid email for this owner.'); return; }
+    const fresh = all.filter(e => !B.emailedTo(folio, e)), old = all.filter(e => B.emailedTo(folio, e));
+    const pick = a => a.slice(0, BCC_MAX);
+    if (!old.length) { openOwner(B, id, folio, pick(all)); return; }
+    openModal('Email this owner again?', `<div id="stEmAgain"><div class="stwarn" role="alert">Already emailed:<ul>${old.map(e => `<li><b>${esc(e)}</b> on ${esc(B.emailedTo(folio, e))}</li>`).join('')}</ul>Sending the same owner repeat emails is the quickest way to land in spam or get reported.</div>
+      <div class="stact">${fresh.length ? `<button type="button" class="btn primary" id="stEmNew">Email only the ${fresh.length} new</button>` : ''}<button type="button" class="btn${fresh.length ? '' : ' primary'}" id="stEmGo">Email all again</button><button type="button" class="btn" data-stclose>Cancel</button></div></div>`);
+    if (fresh.length) $('stEmNew').onclick = () => { closeModal(); openOwner(B, id, folio, pick(fresh)); };
+    $('stEmGo').onclick = () => { closeModal(); openOwner(B, id, folio, pick([...fresh, ...old])); };
   }
   function openEmail(B, id, folio, to) {
     const t = tplGet(), url = emailUrl(to, emailVars(B, id, folio), t);
@@ -73,25 +104,26 @@
       <fieldset class="stmode"><legend>Open emails in</legend>
         <label class="check"><input type="radio" name="stTplMode" id="stTplWeb" value="web" ${t.mode === 'web' ? 'checked' : ''}> Outlook on the web (outlook.office.com)</label>
         <label class="check"><input type="radio" name="stTplMode" id="stTplMailto" value="mailto" ${t.mode === 'mailto' ? 'checked' : ''}> Desktop Outlook app (mailto: link)</label></fieldset>
+      <label class="sttplfull">“Email owner” sends To (your own address; the owner's emails go in BCC) <input type="email" id="stTplTo" value="${esc(t.to_addr)}" autocomplete="email"></label>
       <div class="sttplrow"><label>Your name <input type="text" id="stTplName" value="${esc(t.my_name)}" autocomplete="name"></label><label>Your phone <input type="text" id="stTplPhone" value="${esc(t.my_phone)}" autocomplete="tel"></label></div>
       <label class="sttplfull">Subject <input type="text" id="stTplSubj" value="${esc(t.subject)}"></label>
       <label class="sttplfull">Message (plain text) <textarea id="stTplBody" rows="10">${esc(t.body)}</textarea></label>
-      <div class="sttips" id="stTips" role="note"><b>Inbox tips</b><ul><li>Send a modest number a day from your own mailbox, not a blast.</li><li>Keep it plain text and personal: short, written like a one-to-one note.</li><li>Avoid links, images and attachments.</li><li>Stop right away if someone asks you to.</li></ul></div>
+      <div class="sttips" id="stTips" role="note"><b>Inbox tips</b><ul><li>Send one at a time at a normal pace, and keep daily volume modest at first (new senders build trust slowly).</li><li>“Email owner” puts at most 5 of an owner's addresses in BCC per message.</li><li>Keep it plain text and personal: short, written like a one-to-one note.</li><li>Avoid links, images and attachments.</li><li>Stop right away if someone asks you to.</li></ul></div>
       <div class="stact"><button type="button" class="btn primary" id="stTplSave">Save template</button><button type="button" class="btn" id="stTplReset">Reset to default</button><button type="button" class="btn" data-stclose>Close</button><span class="note" id="stTplMsg" role="status" aria-live="polite"></span></div></div>`);
-    const read = () => ({ mode: $('stTplMailto').checked ? 'mailto' : 'web', my_name: $('stTplName').value, my_phone: $('stTplPhone').value, subject: $('stTplSubj').value, body: $('stTplBody').value });
+    const read = () => ({ mode: $('stTplMailto').checked ? 'mailto' : 'web', to_addr: $('stTplTo').value.trim() || TPL_DEF.to_addr, my_name: $('stTplName').value, my_phone: $('stTplPhone').value, subject: $('stTplSubj').value, body: $('stTplBody').value });
     $('stTplSave').onclick = () => { $('stTplMsg').textContent = tplSet(read()) ? 'Saved.' : "Couldn't save in this browser."; };
-    $('stTplReset').onclick = () => { const d = TPL_DEF; $('stTplWeb').checked = true; $('stTplName').value = d.my_name; $('stTplPhone').value = d.my_phone; $('stTplSubj').value = d.subject; $('stTplBody').value = d.body; tplSet({ ...d }); $('stTplMsg').textContent = 'Reset to the default template.'; };
+    $('stTplReset').onclick = () => { const d = TPL_DEF; $('stTplWeb').checked = true; $('stTplTo').value = d.to_addr; $('stTplName').value = d.my_name; $('stTplPhone').value = d.my_phone; $('stTplSubj').value = d.subject; $('stTplBody').value = d.body; tplSet({ ...d }); $('stTplMsg').textContent = 'Reset to the default template.'; };
   }
   const goBtn = (folio, label) => `<button type="button" class="stgo" data-stgo="${esc(folio)}" title="Look up this owner's phones and emails with BatchData (one record is billed by BatchData only if there is a match)">${label}</button>`;
   function cardLine(folio) {
     const r = ST.get(folio); if (!r) return API ? `<div class="line skgo" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v">${goBtn(folio, 'Skip trace')}</span></div>` : '';
     if (!r.p.length && !r.e.length) return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Skip trace</span><span class="v"><span class="stnone">Traced, no phone found</span></span></div>`;
     const ph = r.p.slice(0, 2).map(phoneHTML).join(''), more = r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2} more</span>` : '';
-    return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v stv">${ph}${more}${r.e[0] ? mailto(r.e[0]) : ''}</span></div>`;
+    return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v stv">${ph}${more}${ownerBtn(folio)}${r.e[0] ? mailto(r.e[0]) : ''}</span></div>`;
   }
   function cellHTML(folio) {
     const r = ST.get(folio); if (!r) return '–'; if (!r.p.length && !r.e.length) return '<span class="stnone">traced · none</span>';
-    return (r.p.slice(0, 2).map(phoneHTML).join('') || '') + (r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2}</span>` : '') + (r.e[0] ? mailto(r.e[0]) : '');
+    return (r.p.slice(0, 2).map(phoneHTML).join('') || '') + (r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2}</span>` : '') + ownerBtn(folio) + (r.e[0] ? mailto(r.e[0]) : '');
   }
   function drawerBody(folio) {
     const r = ST.get(folio);
@@ -99,7 +131,7 @@
     const anyDnc = r.p.some(q => q[2] & 3), none = !r.p.length && !r.e.length;
     return `${none ? '<div class="note">Skip traced: the provider found no phone or email.</div>' : ''}
       ${r.p.length ? `<ul class="stlist">${r.p.map(q => `<li>${phoneHTML(q)}</li>`).join('')}</ul>` : ''}
-      ${r.e.length ? `<div class="stemails">${r.e.map(mailto).join('')}</div>` : ''}
+      ${r.e.length ? `<div class="stemails">${ownerBtn(folio)}${r.e.map(mailto).join('')}</div>` : ''}
       ${anyDnc ? '<div class="stwarn" role="note"><b>DNC / litigator flag.</b> Flagged numbers have no tap-to-call or text link and are never put on the Text list. TCPA and state calling/texting rules are your responsibility; this is a reminder, not legal advice.</div>' : ''}
       <div class="note">${r.n ? 'Provider name: ' + esc(r.n) + ' · ' : ''}${r.s === (API && API.SRC) ? 'Skip traced' : 'Imported'} ${esc(r.a || '')}${r.s ? ' · ' + esc(r.s) : ''}. <button type="button" class="lnk" data-stdel="${esc(folio)}">Remove this property's skip trace data</button></div>`;
   }
@@ -478,6 +510,7 @@
     if (!$('stGrp')) return; let busy = false; const guard = fn => async () => { if (busy) return; busy = true; try { await fn(); } catch (e) { console.error(e); B.toast('Skip trace: ' + (e && e.message || e)); } busy = false; };
     if ($('stApiBtn')) $('stApiBtn').onclick = guard(() => apiModal(B));
     document.addEventListener('click', e => { const b = e.target.closest('[data-stgo]'); if (!b || !API) return; e.preventDefault(); e.stopPropagation(); const f = b.dataset.stgo; const holder = b.closest('[data-id]') || document.getElementById('savedBox'); const id = holder && holder.dataset.id != null ? +holder.dataset.id : -1; if (id < 0) { B.toast('Open the property and try again.'); return; } traceOne(B, id, f, b).catch(err => { console.error(err); B.toast('Skip trace: ' + (err && err.message || err)); }); });
+    document.addEventListener('click', e => { const b = e.target.closest('[data-stown]'); if (!b) return; e.preventDefault(); e.stopPropagation(); ownerClick(B, b); }, true);
     document.addEventListener('click', e => { const b = e.target.closest('[data-stemail]'); if (!b) return; e.preventDefault(); e.stopPropagation(); emailClick(B, b); }, true);
     if ($('stTplBtn')) $('stTplBtn').onclick = () => templateModal(B);
     $('stExportBtn').onclick = guard(() => exportModal(B)); $('stTextBtn').onclick = guard(() => textModal(B));
@@ -489,7 +522,7 @@
     ST.onChange(refreshPanel); refreshPanel();
     window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.openApi = () => apiModal(B); window.PFSkipUI.traceOne = (id, folio) => traceOne(B, id, folio); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text); window.PFSkipUI.openTemplate = () => templateModal(B); window.PFSkipUI.emailUrlFor = (id, folio, to) => emailUrl(to, emailVars(B, id, folio));
   }
-  window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
+  window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, BCC_MAX, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
   const start = () => wire(window.PF.skBridge);
   if (window.PF_READY && window.PF) start(); else document.addEventListener('pf:ready', start, { once: true });
 })();

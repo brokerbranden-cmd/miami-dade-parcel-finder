@@ -233,3 +233,6 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .askex .chips{display:contents}
 .askex .chip{font-size:12.5px}
 @media (max-width:760px){.askbar{padding:0 10px}.askex{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}.askex .chip{white-space:nowrap}}
+.stl.stown{background:var(--accent,#0b6b75);color:#fff;border-color:var(--accent,#0b6b75)}
+.stl.stown:hover{filter:brightness(1.1);background:var(--accent,#0b6b75)}
+.stl.stemb{font-weight:500}

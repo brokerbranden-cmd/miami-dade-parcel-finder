@@ -57,6 +57,9 @@
 
     /* 2. county */
     const cm = eat(/\b(?:in |the )?(broward|monroe|miami[- ]dade|dade|the (?:florida )?keys|florida keys)(?: county)?\b/);
+    let cmc = cm ? null : (() => { const mine = (ctx.cities && ctx.cities.length ? ctx.cities : CITY_OF[county] || []).map(c => c.toLowerCase());
+      for (const [k, list] of Object.entries(CITY_OF)) { if (k === county) continue; for (const c of list) { const lc = c.toLowerCase(); if (!mine.includes(lc) && !mine.some(m => m.includes(lc)) && new RegExp('\\b' + lc + '\\b').test(w)) return k; } } return null; })();
+    if (cmc) { out.county = cmc; add('county', COUNTIES[cmc] + ' County', {}, { county: cmc }); }
     if (cm) { const c = /broward/.test(cm[1]) ? 'broward' : /monroe|keys/.test(cm[1]) ? 'monroe' : 'miami-dade'; out.county = c; if (c !== county) add('county', COUNTIES[c] + ' County', {}, { county: c }); }
     const cc = out.county, hasC = l => cc === county ? has(l) : ({ 'miami-dade': ['distress', 'zoning', 'vacancy', 'commercial', 'asm', 'owners', 'teardown'], monroe: ['mscreen', 'rogo', 'mtax', 'teardown', 'owners'], broward: ['mscreen', 'broward', 'mtax', 'mtdeed', 'teardown', 'owners'] }[cc] || []).includes(l);
 
@@ -99,7 +102,7 @@
 
     /* 8. year built, units, beds */
     const yb = eat(/\b(?:built\s+)?(before|prior to|pre|older than|after|since|newer than)[- ]?(\d{4})\b/) || eat(/\bbuilt in (?:the )?(\d{4})s\b/);
-    if (yb) { if (yb[2] && /before|prior|pre|older/.test(yb[1])) add('built', 'Built before ' + yb[2], { ybMax: +yb[2] - 1 }); else if (yb[2]) add('built', 'Built after ' + yb[2], { ybMin: +yb[2] + 1 }); else add('built', `Built in the ${yb[1]}s`, { ybMin: +yb[1], ybMax: +yb[1] + 9 }); }
+    if (yb) { if (typeof yb[2] !== 'string') yb[2] = undefined; if (yb[2] && /before|prior|pre|older/.test(yb[1])) add('built', 'Built before ' + yb[2], { ybMax: +yb[2] - 1 }); else if (yb[2]) add('built', 'Built after ' + yb[2], { ybMin: +yb[2] + 1 }); else add('built', `Built in the ${yb[1]}s`, { ybMin: +yb[1], ybMax: +yb[1] + 9 }); }
     const un = eat(/\b(\d{1,3})\s*(?:-|to)\s*(\d{1,3})\s*units?\b/) || eat(/\b(?:at least |over |more than )?(\d{1,3})\s*(\+|plus|or more)?\s*units?\b/);
     if (un) { if (un[2] && /^\d+$/.test(un[2])) add('units', `${un[1]}–${un[2]} units`, { unMin: +un[1], unMax: +un[2] }); else add('units', `${un[1]}+ units`, { unMin: +un[1] }); }
     const bd = eat(/\b(\d)\s*(\+|plus|or more)?\s*(?:bed(?:room)?s?|br|bd)\b/); if (bd) add('beds', `${bd[1]}+ bedrooms`, { bdMin: +bd[1] });

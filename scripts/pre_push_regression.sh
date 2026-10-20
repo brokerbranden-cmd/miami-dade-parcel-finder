@@ -14,9 +14,10 @@ run(){ local n=$1; shift; while [ "$(free -g | awk '/Mem:/{print $7}')" -lt "$ME
   timeout 3600 "$@" > "$L/$n.log" 2>&1; local rc=$?
   if [ $rc = 0 ]; then echo "PASS $n" | tee -a "$S"; else echo "FAIL $n (exit $rc) $(grep -m1 -E '^FAIL|FAILED|Error' "$L/$n.log" | cut -c1-200)" | tee -a "$S"; fi; }
 run unit node tests/unit_skiptrace.js
+run unit_ask node tests/unit_ask.js
 run ownerkind python3 tests/e2e_ownerkind.py "$U"
 for m in desktop mobile; do
-  for t in scenarios e2e_export e2e_monroe e2e_broward e2e_filter_audit e2e_email e2e_traced e2e_folders; do run "${t#e2e_}_$m" python3 tests/$t.py "$U" $m; done
+  for t in scenarios e2e_export e2e_monroe e2e_broward e2e_filter_audit e2e_email e2e_traced e2e_folders e2e_ask; do run "${t#e2e_}_$m" python3 tests/$t.py "$U" $m; done
 done
 run county python3 tests/e2e_county.py "$U"
 echo "# DONE $(date +%T) logs: $L" >> "$S"

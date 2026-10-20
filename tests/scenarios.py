@@ -88,7 +88,7 @@ def s01_every_preset():
     names = pg.eval_on_selector_all('#ideas .chip[data-i]', 'e=>e.sort((a,b)=>a.dataset.i-b.dataset.i).map(x=>x.textContent.trim())')
     ok(len(names) >= 20, f'{len(names)} presets')
     for i, nm in enumerate(names):
-        click(f'#ideas .chip[data-i="{i}"]', force=True); settle(1300); n = cnt()
+        reveal(f'#ideas .chip[data-i="{i}"]'); pg.dispatch_event(f'#ideas .chip[data-i="{i}"]', 'click'); settle(1300); n = cnt()
         ok(0 < n < TOTAL['all'], f'preset "{nm}" -> {n:,}')
         ok(pg.get_attribute(f'#ideas .chip[data-i="{i}"]', 'class').find('on') >= 0, f'preset "{nm}" highlighted')
 @scenario

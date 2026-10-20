@@ -40,7 +40,7 @@ def rows(k=300):
 def preset(name_part):
     names = pg.eval_on_selector_all('#ideas .chip[data-i]', 'e=>e.sort((a,b)=>a.dataset.i-b.dataset.i).map(x=>x.textContent.trim())')
     i = next(k for k, x in enumerate(names) if name_part.lower() in x.lower())
-    click(f'#ideas .chip[data-i="{i}"]', force=True); settle(1500); return names[i]
+    reveal(f'#ideas .chip[data-i="{i}"]'); pg.dispatch_event(f'#ideas .chip[data-i="{i}"]', 'click'); settle(1500); return names[i]
 def money(sel, v):
     fill(sel, v); pg.press(sel, 'Tab'); settle(1000)
 def csv_of(click_sel):

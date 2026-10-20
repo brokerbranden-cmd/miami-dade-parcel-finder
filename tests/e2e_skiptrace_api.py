@@ -148,7 +148,7 @@ with sync_playwright() as pw:
     ok(pg.evaluate("document.getElementById('drawerHost').children.length") == 0, 'clicking the button does not open the drawer')
     cardA = f'#cards .card[data-folio="{fA}"]'
     ok(pg.query_selector(f'{cardA} a[href="sms:+13055559001"]') is not None and pg.query_selector(f'{cardA} [data-stgo]') is None, 'phone appears on the card at once with Call + Text links; button gone')
-    ok(pg.query_selector(f'{cardA} .dncb') is not None and pg.query_selector(f'{cardA} a[href="tel:+13055559002"]') is None, 'DNC badge shown and no tap links on the DNC number')
+    ok(pg.query_selector(f'{cardA} .dncb') is None and 'DNC' not in pg.inner_text(cardA) and pg.query_selector(f'{cardA} a[href="tel:+13055559002"]') is not None and pg.query_selector(f'{cardA} a[href="sms:+13055559002"]') is not None, 'DNC number shows plain with Call + Text, no badge')
     ok('ana@example.com' in pg.inner_text(cardA) and pg.query_selector(f'{cardA} a[href="mailto:ana@example.com"]') is not None, 'email shown as a mailto link')
     ok(store()[fA]['p'][0][:2] == ['3055559001', 'm'] and store()[fA]['s'] == 'BatchData API', 'saved in the county store')
     one = pg.evaluate('window.PF_LAST_SKAPI_ONE'); ok(one and one['folio'] == fA and one['phones'] == 2 and one['emails'] == 1 and one['dnc'] == 1, f'single-run summary (found 2 phones, 1 email, 1 DNC) {one}')
@@ -168,7 +168,7 @@ with sync_playwright() as pw:
     pg.evaluate(f"document.querySelector('#cards .card[data-folio=\"{fD}\"]').click()"); pg.wait_for_selector('.drawer .stdraw [data-stgo]')
     ok('Skip trace this owner' in pg.inner_text('.drawer .stdraw'), "drawer has 'Skip trace this owner'"); M['calls'].clear()
     pg.evaluate("document.querySelector('.drawer .stdraw [data-stgo]').click()"); pg.wait_for_selector('.drawer .stdraw a[href="tel:+13055559101"]', timeout=60000)
-    ok(len(M['calls']) == 1 and pg.query_selector('.drawer .stdraw .dncb.lit') is not None and 'not legal advice' in pg.inner_text('.drawer .stdraw').lower(), 'drawer shows phones at once, litigator/TCPA badge + caution')
+    ok(len(M['calls']) == 1 and pg.query_selector('.drawer .stdraw .dncb') is None and 'Litigator' not in pg.inner_text('.drawer .stdraw'), 'drawer shows phones at once, no litigator badge')
     pg.evaluate("document.getElementById('closeD').click()"); pg.wait_for_timeout(300)
     ok(pg.query_selector(f'#cards .card[data-folio="{fD}"] a[href="tel:+13055559101"]') is not None, 'the card behind the drawer shows the phone too')
 

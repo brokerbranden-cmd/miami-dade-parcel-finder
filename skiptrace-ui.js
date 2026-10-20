@@ -13,13 +13,17 @@
 
   /* ---------- rendering (cards / drawer / table) ---------- */
   function phoneHTML(q) {
-    const n = q[0], t = q[1], dnc = q[2] & 1, lit = q[2] & 2, flagged = dnc || lit;
-    const badges = (t ? `<span class="phty ${t}">${TYPE[t]}</span>` : '') + (dnc ? `<span class="dncb" title="${esc(DNC_TIP)}">DNC</span>` : '') + (lit ? `<span class="dncb lit" title="${esc(LIT_TIP)}">Litigator</span>` : '');
-    const call = flagged ? '' : `<a class="stl" href="tel:+1${n}" title="Call ${SK.fmtPhone(n)}">Call</a>`;
-    const text = SK.canText(q) ? `<a class="stl" href="sms:+1${n}" title="Text ${SK.fmtPhone(n)}">Text</a>` : '';
-    return `<span class="stph${flagged ? ' flagged' : ''}"><b class="stnum">${SK.fmtPhone(n)}</b>${badges}${call}${text}</span>`;
+    const n = q[0], t = q[1];   // DNC / litigator flags stay stored in q[2] but are not shown (Branden's call)
+    const badges = t ? `<span class="phty ${t}">${TYPE[t]}</span>` : '';
+    return `<span class="stph"><b class="stnum">${SK.fmtPhone(n)}</b>${badges}<a class="stl" href="tel:+1${n}" title="Call ${SK.fmtPhone(n)}">Call</a><a class="stl" href="sms:+1${n}" title="Text ${SK.fmtPhone(n)}">Text</a></span>`;
   }
-  const mailto = e => `<span class="stem"><a class="stl em" href="mailto:${esc(e)}" title="Email ${esc(e)}">${esc(e)}</a><button type="button" class="stl stemb" data-stemail="${esc(e)}" title="Open a pre-filled email to ${esc(e)} in your Outlook (sent from your own mailbox)">Email</button></span>`;
+
+  const BAD_KEY = 'pf.bademail.v1', BAD_KNOWN = ['cal_l_cox@yahoo.com', 'jamesw830@earthlink.com', 'arinajohanajulio@yahoo.es'];
+  const badMap = () => { let o = {}; try { o = JSON.parse(localStorage.getItem(BAD_KEY) || '{}') || {}; } catch (e) {} return o; };
+  const isBad = e => { const k = String(e || '').trim().toLowerCase(), o = badMap(); return k in o ? !!o[k] : BAD_KNOWN.includes(k); };
+  const setBad = (e, v) => { const o = badMap(); o[String(e).trim().toLowerCase()] = !!v; try { localStorage.setItem(BAD_KEY, JSON.stringify(o)); } catch (x) {} };
+  const goodEmails = r => ((r && r.e) || []).filter(e => !isBad(e));
+  const mailto = e => isBad(e) ? `<span class="stem bad" title="Marked as a bad email (bounced): left out of Email owner and has no Email button"><s class="stl em">${esc(e)}</s><span class="badem">Bad email</span><button type="button" class="lnk stbad" data-stbad="${esc(e)}" data-v="0" title="Unmark ${esc(e)}">Unmark</button></span>` : `<span class="stem"><a class="stl em" href="mailto:${esc(e)}" title="Email ${esc(e)}">${esc(e)}</a><button type="button" class="stl stemb" data-stemail="${esc(e)}" title="Open a pre-filled email to ${esc(e)} in your Outlook (sent from your own mailbox)">Email</button><button type="button" class="lnk stbad" data-stbad="${esc(e)}" data-v="1" title="Mark ${esc(e)} as a bad email (bounced)">Bad?</button></span>`;
 
   /* ---------- email owners from your own Outlook (this site never sends mail) ---------- */
   const TPL_KEY = 'pf.emailtpl.v1';
@@ -51,7 +55,7 @@
   }
   /* Email owner: one message, To = your own address, BCC = the owner's skip-traced emails (deduped, valid only, max BCC_MAX) */
   const BCC_MAX = 5, EMAIL_RE = /^[^\s@<>(),;:"'\[\]\\]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i;
-  const ownerEmails = folio => { const r = ST.get(folio), seen = new Set(), out = []; for (const e of (r && r.e) || []) { const v = String(e || '').trim(); const k = v.toLowerCase(); if (!EMAIL_RE.test(v) || seen.has(k)) continue; seen.add(k); out.push(v); } return out; };
+  const ownerEmails = folio => { const r = ST.get(folio), seen = new Set(), out = []; for (const e of (r && r.e) || []) { const v = String(e || '').trim(); const k = v.toLowerCase(); if (!EMAIL_RE.test(v) || seen.has(k) || isBad(v)) continue; seen.add(k); out.push(v); } return out; };
   const ownerBtn = folio => { const n = ownerEmails(folio).length; return n ? `<button type="button" class="stl stown" data-stown="${esc(folio)}" title="One email from your Outlook: To yourself, the owner's ${n} ${n === 1 ? 'address' : 'addresses'} in BCC">Email owner${n > 1 ? ' (' + Math.min(n, BCC_MAX) + ')' : ''}</button>` : ''; };
   function bccUrl(to, bcc, vars, t) {
     t = t || tplGet(); const subject = fill(t.subject, vars), body = fill(t.body, vars).replace(/\r\n?/g, '\n'), E = encodeURIComponent;
@@ -119,20 +123,19 @@
     const r = ST.get(folio); if (!r) return API ? `<div class="line skgo" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v">${goBtn(folio, 'Skip trace')}</span></div>` : '';
     if (!r.p.length && !r.e.length) return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Skip trace</span><span class="v"><span class="stnone">Traced, no phone found</span></span></div>`;
     const ph = r.p.slice(0, 2).map(phoneHTML).join(''), more = r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2} more</span>` : '';
-    return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v stv">${ph}${more}${ownerBtn(folio)}${r.e[0] ? mailto(r.e[0]) : ''}</span></div>`;
+    return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v stv">${ph}${more}${ownerBtn(folio)}${(goodEmails(r)[0] || r.e[0]) ? mailto(goodEmails(r)[0] || r.e[0]) : ''}</span></div>`;
   }
   function cellHTML(folio) {
     const r = ST.get(folio); if (!r) return '–'; if (!r.p.length && !r.e.length) return '<span class="stnone">traced · none</span>';
-    return (r.p.slice(0, 2).map(phoneHTML).join('') || '') + (r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2}</span>` : '') + ownerBtn(folio) + (r.e[0] ? mailto(r.e[0]) : '');
+    return (r.p.slice(0, 2).map(phoneHTML).join('') || '') + (r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2}</span>` : '') + ownerBtn(folio) + ((goodEmails(r)[0] || r.e[0]) ? mailto(goodEmails(r)[0] || r.e[0]) : '');
   }
   function drawerBody(folio) {
     const r = ST.get(folio);
     if (!r) return `${API ? `<div class="stdgo">${goBtn(folio, 'Skip trace this owner')}<span class="note" role="status" aria-live="polite" data-stmsg></span></div>` : ''}<div class="note">No skip trace results for this property yet. Press <b>Skip trace this owner</b>, or use <b>Skip trace these</b> / <b>Skip trace export</b> in the filters panel (export, run the file through your provider, then <b>Import results</b>).</div>`;
-    const anyDnc = r.p.some(q => q[2] & 3), none = !r.p.length && !r.e.length;
+    const none = !r.p.length && !r.e.length;
     return `${none ? '<div class="note">Skip traced: the provider found no phone or email.</div>' : ''}
       ${r.p.length ? `<ul class="stlist">${r.p.map(q => `<li>${phoneHTML(q)}</li>`).join('')}</ul>` : ''}
       ${r.e.length ? `<div class="stemails">${ownerBtn(folio)}${r.e.map(mailto).join('')}</div>` : ''}
-      ${anyDnc ? '<div class="stwarn" role="note"><b>DNC / litigator flag.</b> Flagged numbers have no tap-to-call or text link and are never put on the Text list. TCPA and state calling/texting rules are your responsibility; this is a reminder, not legal advice.</div>' : ''}
       <div class="note">${r.n ? 'Provider name: ' + esc(r.n) + ' · ' : ''}${r.s === (API && API.SRC) ? 'Skip traced' : 'Imported'} ${esc(r.a || '')}${r.s ? ' · ' + esc(r.s) : ''}. <button type="button" class="lnk" data-stdel="${esc(folio)}">Remove this property's skip trace data</button></div>`;
   }
   const drawerHTML = folio => `<h3>Phones &amp; email</h3><div class="stdraw" data-stfolio="${esc(folio)}">${drawerBody(folio)}</div>`;
@@ -510,6 +513,7 @@
     if (!$('stGrp')) return; let busy = false; const guard = fn => async () => { if (busy) return; busy = true; try { await fn(); } catch (e) { console.error(e); B.toast('Skip trace: ' + (e && e.message || e)); } busy = false; };
     if ($('stApiBtn')) $('stApiBtn').onclick = guard(() => apiModal(B));
     document.addEventListener('click', e => { const b = e.target.closest('[data-stgo]'); if (!b || !API) return; e.preventDefault(); e.stopPropagation(); const f = b.dataset.stgo; const holder = b.closest('[data-id]') || document.getElementById('savedBox'); const id = holder && holder.dataset.id != null ? +holder.dataset.id : -1; if (id < 0) { B.toast('Open the property and try again.'); return; } traceOne(B, id, f, b).catch(err => { console.error(err); B.toast('Skip trace: ' + (err && err.message || err)); }); });
+    document.addEventListener('click', e => { const b = e.target.closest('[data-stbad]'); if (!b) return; e.preventDefault(); e.stopPropagation(); setBad(b.dataset.stbad, b.dataset.v === '1'); ST.reload(); document.querySelectorAll('.stdraw[data-stfolio]').forEach(x => { x.innerHTML = drawerBody(x.dataset.stfolio); }); }, true);
     document.addEventListener('click', e => { const b = e.target.closest('[data-stown]'); if (!b) return; e.preventDefault(); e.stopPropagation(); ownerClick(B, b); }, true);
     document.addEventListener('click', e => { const b = e.target.closest('[data-stemail]'); if (!b) return; e.preventDefault(); e.stopPropagation(); emailClick(B, b); }, true);
     if ($('stTplBtn')) $('stTplBtn').onclick = () => templateModal(B);
@@ -522,7 +526,7 @@
     ST.onChange(refreshPanel); refreshPanel();
     window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.openApi = () => apiModal(B); window.PFSkipUI.traceOne = (id, folio) => traceOne(B, id, folio); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text); window.PFSkipUI.openTemplate = () => templateModal(B); window.PFSkipUI.emailUrlFor = (id, folio, to) => emailUrl(to, emailVars(B, id, folio));
   }
-  window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, BCC_MAX, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
+  window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, BCC_MAX, isBad, setBad, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
   const start = () => wire(window.PF.skBridge);
   if (window.PF_READY && window.PF) start(); else document.addEventListener('pf:ready', start, { once: true });
 })();

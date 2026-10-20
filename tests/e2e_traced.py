@@ -40,9 +40,9 @@ with sync_playwright() as pw:
     ok(r == [B2['folio'], C['folio'], A['folio']], 'default sort: newest traced first')
     txt = pg.inner_text(f'[data-trow="{A["folio"]}"]')
     ok(A['addr'].strip().split()[0] in txt and A['owner'].split()[0] in txt.upper() and '2026-10-12' in txt, 'row shows address, owner, traced date')
-    ok('(305) 555-0101' in txt and 'DNC' in txt and 'a.owner@example.com' in txt, 'row shows phones with DNC flag + emails')
-    ok('Litigator' in pg.inner_text(f'[data-trow="{B2["folio"]}"]'), 'litigator flag shown')
-    ok(pg.query_selector(f'[data-trow="{A["folio"]}"] a[href="tel:+13055550101"]') and pg.query_selector(f'[data-trow="{A["folio"]}"] a[href="sms:+13055550101"]') and not pg.query_selector(f'[data-trow="{A["folio"]}"] a[href="tel:+13055550102"]'), 'Call / Text on the clean number, none on the DNC number')
+    ok('(305) 555-0101' in txt and 'DNC' not in txt and 'a.owner@example.com' in txt, 'row shows phones (no DNC label) + emails')
+    ok('Litigator' not in pg.inner_text(f'[data-trow="{B2["folio"]}"]') and 'Flagged' not in pg.inner_text('#trList'), 'no litigator / flagged label')
+    ok(pg.query_selector(f'[data-trow="{A["folio"]}"] a[href="tel:+13055550101"]') and pg.query_selector(f'[data-trow="{A["folio"]}"] a[href="sms:+13055550101"]') and pg.query_selector(f'[data-trow="{A["folio"]}"] a[href="tel:+13055550102"]'), 'Call / Text on every number, DNC one included')
     ok('Not contacted' in txt, 'status: Not contacted before emailing')
     # Email from the view
     pg.click(f'[data-trow="{A["folio"]}"] [data-stemail]'); pg.wait_for_timeout(900)
@@ -60,10 +60,10 @@ with sync_playwright() as pw:
     # CSV
     with pg.expect_download(timeout=60000) as d: pg.click('#trExport')
     rows = list(csv.reader(io.StringIO(open(d.value.path(), encoding='utf-8').read())))
-    ok(rows[0][:11] == STD and rows[0][11] == 'Traced Date' and 'Phone 1' in rows[0] and 'Phone 1 Flags' in rows[0] and 'Email 1' in rows[0], f'CSV header: standard columns + traced date / phones / emails ({len(rows[0])} cols)')
+    ok(rows[0][:11] == STD and rows[0][11] == 'Traced Date' and 'Phone 1' in rows[0] and not any('Flags' in c for c in rows[0]) and 'Email 1' in rows[0], f'CSV header: standard columns + traced date / phones / emails ({len(rows[0])} cols)')
     ok(len(rows) == 4, f'CSV has the 3 traced properties ({len(rows)-1})')
     h = rows[0]; ra = next(x for x in rows[1:] if x[10].replace('-', '') == A['folio'])
-    ok(ra[h.index('Phone 1')] == '3055550101' and ra[h.index('Phone 2 Flags')] == 'DNC' and ra[h.index('Email 1')] == 'a.owner@example.com' and ra[h.index('Traced Date')] == '2026-10-12', 'CSV row carries phones, flags, email, date')
+    ok(ra[h.index('Phone 1')] == '3055550101' and ra[h.index('Phone 2')] != '' and ra[h.index('Email 1')] == 'a.owner@example.com' and ra[h.index('Traced Date')] == '2026-10-12', 'CSV row carries phones (plain), email, date')
     # row click -> drawer
     pg.click(f'[data-trow="{C["folio"]}"] .traddr'); pg.wait_for_selector('#savedBox', timeout=60000)
     ok(pg.get_attribute('#savedBox', 'data-folio') == C['folio'], 'clicking a row opens the drawer for that property')

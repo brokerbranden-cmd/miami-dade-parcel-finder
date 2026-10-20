@@ -126,6 +126,17 @@ with sync_playwright() as pw:
     pg.click(ob); pg.wait_for_selector('#stEmGo'); pg.click('#stEmGo'); pg.wait_for_timeout(500); lm = pg.evaluate('window.PF_LAST_EMAIL')
     ok(lm['url'].startswith('mailto:me@prop-hunters.com?bcc=x1@example.com,') and lm['mode'] == 'mailto', f'mailto mode: To from settings + bcc= ({lm["url"][:70]})')
     pg.evaluate("localStorage.removeItem('pf.emailtpl.v1')")
+    # Bad email: known bounces pre-marked; mark by hand; bad ones dimmed, no Email button, left out of BCC
+    pg.evaluate(f"(()=>{{ const k={json.dumps(skey('miami-dade'))}, o=JSON.parse(localStorage.getItem(k)); o[{json.dumps(D0['folio'])}].e=['Cal_L_Cox@yahoo.com','x1@example.com','x2@example.com']; localStorage.setItem(k,JSON.stringify(o)); PFSkip.store.reload(); }})()"); pg.wait_for_timeout(1500)
+    aid = pg.get_attribute(f'.card[data-folio="{D0["folio"]}"]', 'data-id'); pg.evaluate(f"PF.openDrawer({aid})"); pg.wait_for_selector('.stdraw .stem.bad', timeout=60000)
+    ok('Bad email' in pg.inner_text('.stdraw') and pg.query_selector('.stdraw [data-stemail="Cal_L_Cox@yahoo.com"]') is None, 'known bounce pre-marked Bad email, dimmed, no Email button')
+    ok(pg.inner_text('.stdraw [data-stown]').strip() == 'Email owner (2)', 'bad email left out of Email owner BCC')
+    pg.click('.stdraw [data-stbad="x2@example.com"][data-v="1"]'); pg.wait_for_selector('.stdraw [data-stbad="x2@example.com"][data-v="0"]', timeout=10000)
+    ok(pg.query_selector('.stdraw [data-stemail="x2@example.com"]') is None and pg.inner_text('.stdraw [data-stown]').strip() == 'Email owner', 'marking by hand: dimmed, no Email button, out of BCC')
+    ok(pg.evaluate("PFSkipUI.isBad('x2@example.com') && JSON.parse(localStorage.getItem('pf.bademail.v1'))['x2@example.com'] === true"), 'bad mark saved in the browser')
+    pg.click('.stdraw [data-stbad="x2@example.com"][data-v="0"]'); pg.wait_for_selector('.stdraw [data-stemail="x2@example.com"]', timeout=10000); ok(True, 'Unmark restores the Email button')
+    ok(pg.evaluate("PFSkipUI.isBad('jamesw830@earthlink.com') && PFSkipUI.isBad('arinajohanajulio@yahoo.es')"), 'all three known bounces pre-marked')
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(400)
     # stored templates: an unedited copy of the old default migrates to the new one; an edited one is kept
     OLD = "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know."
     pg.evaluate(f"localStorage.setItem('pf.emailtpl.v1', JSON.stringify({{mode:'web', my_name:'Branden', my_phone:'(305) 812-9445', subject:'Question about {{property_address}}', body:{json.dumps(OLD)}}}))")

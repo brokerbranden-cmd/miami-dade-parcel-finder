@@ -924,10 +924,10 @@ function renderTraced(){ const all=SKS.count(), rows=trRows(), lim=500, show=row
       <div class="trcontact stv" data-stfolio="${x.f}">${ph||(r.e.length?'':'<span class="stnone">No phone or email found</span>')}${em}</div>
       <div class="trstat sendline">${trStatus(x.f)}</div></article>`; }).join('');
 }
-function trCSV(){ const rows=trRows(), NP=5, NE=3, fl=q=>[(q[2]&1)?'DNC':'',(q[2]&2)?'Litigator':''].filter(Boolean).join('; ');
-  const head=EXP_HEAD.trim()+',Traced Date,'+Array.from({length:NP},(_,k)=>`Phone ${k+1},Phone ${k+1} Type,Phone ${k+1} Flags`).join(',')+','+Array.from({length:NE},(_,k)=>'Email '+(k+1)).join(',')+'\n';
+function trCSV(){ const rows=trRows(), NP=5, NE=3;
+  const head=EXP_HEAD.trim()+',Traced Date,'+Array.from({length:NP},(_,k)=>`Phone ${k+1},Phone ${k+1} Type`).join(',')+','+Array.from({length:NE},(_,k)=>'Email '+(k+1)).join(',')+'\n';
   const T={m:'Mobile',l:'Landline',v:'VoIP'}; const lines=rows.map(x=>{ const base=x.id!=null?exportRow(P(x.id),I(x.id)):contactRow(x.owner,x.addr||'No site address',x.city,x.zip,x.mail,folio13(x.f)); const r=x.r;
-    const ph=Array.from({length:NP},(_,k)=>{ const q=r.p[k]; return q?[q[0],T[q[1]]||'',fl(q)]:['','','']; }).flat(), em=Array.from({length:NE},(_,k)=>r.e[k]||'');
+    const ph=Array.from({length:NP},(_,k)=>{ const q=r.p[k]; return q?[q[0],T[q[1]]||'']:['','']; }).flat(), em=Array.from({length:NE},(_,k)=>r.e[k]||'');
     return base+','+[r.a||'',...ph,...em].map(csvq).join(','); });
   return {blob:new Blob([head+lines.join('\n')+(lines.length?'\n':'')],{type:'text/csv'}),n:rows.length}; }
 function renderPipe(){ const ids=savedIdx(), t=todayDay(), by=Object.fromEntries(SV.STAGES.map(s=>[s,[]]));

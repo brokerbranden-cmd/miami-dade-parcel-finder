@@ -16,3 +16,4 @@ Plan: ask.js (parser, pure, node-testable) + app.js wiring (PF.askApply via appl
 - sw v25; folder picker stays inside the viewport (mobile); scenarios s01 dispatch fix. Regression rerun next.
 - scenarios preset helper (line 43) also dispatches: force-clicks on hidden More-ideas chips landed on the new Ask bar at the top
 - 16:11 mobile fix: #expBar hidden while filter sheet open (was covering #ogInst; scenarios s18 mobile). Next: full regression, push, live verify.
+- 16:42 full regression running since 16:12 at 629c786 (summary_prepush_20261020-161221, nohup, 8097). Don't restart. Next: push from /workspace/parcel-finder, live verify.

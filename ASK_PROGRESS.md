@@ -18,3 +18,4 @@ Plan: ask.js (parser, pure, node-testable) + app.js wiring (PF.askApply via appl
 - 16:11 mobile fix: #expBar hidden while filter sheet open (was covering #ogInst; scenarios s18 mobile). Next: full regression, push, live verify.
 - 16:42 full regression running since 16:12 at 629c786 (summary_prepush_20261020-161221, nohup, 8097). Don't restart. Next: push from /workspace/parcel-finder, live verify.
 - 17:44 regression ALL GREEN 23/23 (summary_prepush_20261020-161221). Pushing.
+- 19:00 PUSHED e280b14 (hook regression 23/23 green, summary_prepush_20261020-174438). LIVE sw v25; live e2e_ask + e2e_email desktop+mobile ALL PASS. DONE.

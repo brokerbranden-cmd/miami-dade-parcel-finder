@@ -64,6 +64,9 @@
     for (const [re, lab] of PRESETS) { const m = eat(re); if (!m) continue; const label = cc === county ? ideas.find(l => l.replace(/^[^\w]+/, '').startsWith(lab)) : lab;
       if (label || cc !== county) add('preset', (label || lab).replace(/^[^\w]+/, ''), {}, { preset: lab }); else out.hints.push(`“${m[0].trim()}” is a preset that isn't available in ${COUNTIES[cc]}.`); }
 
+    /* homestead phrases before cities (Homestead is also a city) */
+    if (eat(/\bno homestead(?: exemption)?\b|\bnon[- ]?homestead(?:ed)?\b|\bwithout (?:a )?homestead(?: exemption)?\b|\bnot homesteaded\b|\bnon[- ]owner[- ]occupied\b|\bnot owner[- ]occupied\b/)) add('flag', 'No homestead', { flags: { homestead: 'no' } });
+    else if (eat(/\bowner[- ]occupied\b|\bhomesteaded\b|\bhomestead exemption\b|\bowners? lives? there\b/)) add('flag', 'Owner lives there (homestead)', { flags: { homestead: 'yes' } });
     /* 4. owner name: "owned by john smith", "owner john smith", "properties of john smith" */
     const KIND = /^(individuals?|people|persons?|a person|private (owners?|individuals?)|llcs?|an llc|a company|companies|corporations?|corporate|businesses|investors?|trusts?|a trust|families|family)$/;
     const om = /\b(?:owned by|belonging to|owner(?: named| is| name)?|properties of|property of|owners? called)\s+([a-z][a-z.'&-]*(?:\s+[a-z][a-z.'&-]*){0,4}?)(?=\s+(?:in|with|over|under|above|below|and|that|who|built|owned|for|on|near|zoned|from)\b|\s*$|\s*,)/.exec(w);
@@ -73,9 +76,6 @@
       w = w.replace(om[0], ' '.repeat(om[0].length)); add('owner', 'Owner name contains “' + q + '”', { q, qScope: 'ao' });
     }
 
-    /* homestead phrases before cities (Homestead is also a city) */
-    if (eat(/\bno homestead(?: exemption)?\b|\bnon[- ]?homestead(?:ed)?\b|\bwithout (?:a )?homestead(?: exemption)?\b|\bnot homesteaded\b|\bnon[- ]owner[- ]occupied\b|\bnot owner[- ]occupied\b/)) add('flag', 'No homestead', { flags: { homestead: 'no' } });
-    else if (eat(/\bowner[- ]occupied\b|\bhomesteaded\b|\bhomestead exemption\b|\bowners? lives? there\b/)) add('flag', 'Owner lives there (homestead)', { flags: { homestead: 'yes' } });
     /* 5. neighborhoods + cities */
     if (cc === 'miami-dade') for (const h of Object.keys(HOODS).sort((a, b) => b.length - a.length)) { if (eat(new RegExp('\\b' + h + '\\b'))) { add('zip', title(h) + ' (ZIP ' + HOODS[h].join(', ') + ')', { zips: HOODS[h].join(', ') }); break; } }
     const cityList = (cc === county && ctx.cities && ctx.cities.length ? ctx.cities : CITY_OF[cc] || []).filter(Boolean);

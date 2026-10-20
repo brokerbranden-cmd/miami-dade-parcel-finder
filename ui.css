@@ -216,3 +216,20 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .svpick{position:fixed;z-index:3000;background:var(--surface,#fff);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px 12px;display:grid;gap:6px;max-height:70vh;overflow:auto}
 .svpick .svpnew{display:flex;gap:6px}.svpick .svpnew input{flex:1;min-width:0;font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:6px}
 .svpick .svpact{display:flex;justify-content:flex-end}
+/* Ask box (ask.js + app.js askRun) */
+.askbar{box-sizing:border-box;width:100%;max-width:min(1280px,100vw);min-width:0;margin:8px auto 4px;padding:0 16px}
+.askex,.askout,#askForm{max-width:100%;min-width:0;box-sizing:border-box}
+#askForm{display:flex;align-items:center;gap:8px;border:2px solid #FC4C02;border-radius:10px;background:var(--surface,#fff);padding:4px 4px 4px 10px}
+#askForm svg{width:20px;height:20px;flex:none;fill:#FC4C02}
+#askQ{flex:1;min-width:0;border:0;outline:0;font:inherit;font-size:16px;padding:8px 4px;background:transparent}
+.askout{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.asklab{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-right:2px}
+.askc{display:inline-flex;align-items:center;gap:4px;padding-right:4px}
+.askc.off{opacity:.55;text-decoration:line-through}
+.askdel{border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;padding:0 5px;color:inherit;min-width:24px;min-height:24px}
+.askhint{flex-basis:100%;font-size:13px;color:#8a4b00;background:#fff4e5;border-radius:6px;padding:6px 10px}
+.askhint[hidden],.askhint:empty{display:none}
+.askex{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.askex .chips{display:contents}
+.askex .chip{font-size:12.5px}
+@media (max-width:760px){.askbar{padding:0 10px}.askex{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}.askex .chip{white-space:nowrap}}

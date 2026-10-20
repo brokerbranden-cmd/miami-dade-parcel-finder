@@ -30,6 +30,15 @@
     <div class="src" id="srcLine">Every property on the Miami-Dade Property Appraiser roll, <b>updated <span id="srcDate">…</span></b>. <b id="srcCount">…</b> properties, farmland removed.</div>
   </header>
 
+  <section class="askbar" id="askBar" aria-label="Ask for a list or a property">
+    <form id="askForm" role="search" autocomplete="off"><label for="askQ" class="sr">Ask for a list or a property</label>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4z"/><path d="M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z"/></svg>
+      <input type="search" id="askQ" enterkeyhint="search" placeholder="Ask: Hialeah teardowns under 500k owned 20+ years" aria-describedby="askHelp">
+      <button class="btn primary" type="submit" id="askGo">Ask</button></form>
+    <div class="askout" id="askOut" hidden><span class="asklab">Understood:</span><div class="chips" id="askChips"></div><div class="askhint" id="askHint" role="status" aria-live="polite"></div></div>
+    <div class="askex" id="askHelp"><span class="asklab">Try</span><span class="chips" id="askEx"></span><span class="chips" id="askRecent"></span></div>
+  </section>
+
   <div class="stickybar" id="stickybar">
     <div class="sb-count"><span class="sb-num" id="liveCount">–</span><span class="sb-lab">properties match</span><span class="on-count" id="onCount" hidden>0 filters on</span></div>
     <div class="sb-act">
@@ -374,6 +383,7 @@
 <script src="skiptrace-ui.js"></script>
 <script src="lenders.js"></script>
 <script src="teardown.js"></script>
+<script src="ask.js"></script>
 <script src="app.js"></script>
 <script src="ui.js"></script>
 <script src="drive.js"></script>

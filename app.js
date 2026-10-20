@@ -1763,6 +1763,40 @@ function wire(){
     $(f+'List').addEventListener('change',e=>{ const t=e.target; if(!t.dataset.f) return; const set=f==='zoning'?S.exZ:S.exL, i=+t.dataset.i; t.checked?set.add(i):set.delete(i); schedule(100); });
   });
   $('ideas').innerHTML=IDEAS.map(([l],i)=>ideaOk(l)?`<button type="button" class="chip" data-i="${i}">${l}</button>`:'').join('');
+  /* Ask: plain-English request -> the same filters (ask.js parses, no AI service); chips show what was understood */
+  const ASK_RECENT='pf.ask.recent.v1', ASK_PENDING='pf.ask.pending';
+  const ASK_EX={'miami-dade':['Hialeah teardowns under 500k owned 20+ years by individuals','recert overdue in Little Havana','vacant lots over 10,000 sqft','lis pendens in Miami Gardens','properties owned by John Smith'],
+    monroe:['vacant lots in Key West','tax delinquent 2+ years','Marathon houses under 900k owned 20+ years','ROGO'],
+    broward:['tax delinquent 2+ years in Pembroke Pines','Fort Lauderdale houses under 400k owned 20+ years','foreclosure in Hollywood','vacant lots over 10,000 sqft']}[PFC.id]||[];
+  let ASKP=null;
+  const askRecent=()=>{ try{ return (JSON.parse(localStorage.getItem(ASK_RECENT)||'[]')||[]).filter(x=>typeof x==='string').slice(0,6); }catch(e){ return []; } };
+  function askRenderHelp(){ $('askEx').innerHTML=ASK_EX.map(t=>`<button type="button" class="chip askx" data-ask="${esc(t)}">${esc(t)}</button>`).join('');
+    const r=askRecent(); $('askRecent').innerHTML=r.length?`<span class="asklab">Recent</span>`+r.map(t=>`<button type="button" class="chip askr" data-ask="${esc(t)}">${esc(t)}</button>`).join(''):''; }
+  const ideaIdx=lab=>IDEAS.findIndex(([l])=>ideaOk(l)&&l.replace(/^[^\w]+/,'').startsWith(lab));
+  function askState(r){ const parts=r.parts.filter(p=>!p.off), pres=parts.filter(p=>p.preset).map(p=>ideaIdx(p.preset)).filter(i=>i>=0);
+    const st=pres.length?IDEAS[pres[0]][1]():{...BLANK()}; for(const i of pres.slice(1)) PFAsk.merge(st,IDEAS[i][1]()); for(const p of parts) PFAsk.merge(st,p.set);
+    if(!pres.length) st.sort=PFAsk.sortFor(st); st.view=['pipe','traced'].includes(S.view)?'cards':S.view; st.bbox=null; return st; }
+  function askRenderOut(){ const r=ASKP; if(!r){ $('askOut').hidden=true; return; } $('askOut').hidden=false;
+    $('askChips').innerHTML=r.parts.filter(p=>!p.county).map((p,i)=>`<span class="chip on askc${p.off?' off':''}" data-i="${r.parts.indexOf(p)}"><span>${esc(p.label)}</span><button type="button" class="askdel" data-askdel="${r.parts.indexOf(p)}" aria-label="${p.off?'Put back':'Remove'} ${esc(p.label)}" title="${p.off?'Put back':'Remove'}">${p.off?'+':'×'}</button></span>`).join('')||'<span class="note">nothing yet</span>';
+    const h=[...r.hints]; if(r.unknown.length) h.push(`Didn't understand: “${r.unknown.join(' ')}”. Use the filters below for anything I missed.`);
+    $('askHint').textContent=h.join(' '); $('askHint').hidden=!h.length; }
+  async function askApply(){ const r=ASKP; S.saved=false; applyState(askState(r)); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); clearIdea(); askRenderOut(); }
+  async function askRun(text){ text=String(text||'').trim(); if(!text) return; $('askQ').value=text;
+    const r=PFAsk.parse(text,{county:PFC.id, cities:D.city, has:HAS, ideas:IDEAS.map(x=>x[0]).filter(ideaOk), nameOrder:PFC.cfg.nameOrder});
+    try{ localStorage.setItem(ASK_RECENT,JSON.stringify([text,...askRecent().filter(x=>x.toLowerCase()!==text.toLowerCase())].slice(0,6))); }catch(e){}
+    askRenderHelp();
+    if(r.county!==PFC.id){ try{ sessionStorage.setItem(ASK_PENDING,text); }catch(e){} const u=new URLSearchParams(location.search); u.set('county',r.county); location.href=location.pathname+'?'+u.toString(); return; }
+    ASKP=r; window.PF_LAST_ASK=r;
+    if(r.jump&&r.jump.folio){ S.saved=false; applyState({...BLANK(), view:'cards'}); run(); askRenderOut(); await openDeep(r.jump.folio); return; }
+    await askApply();
+    if(r.jump&&r.jump.address){ if(results.length===1) openDrawer(results[0]); else toast(results.length?`${fmt.format(results.length)} properties match “${r.jump.address}”`:`No property at “${r.jump.address}” in ${PFC.cfg.name}`); }
+    else toast(`${fmt.format(results.length)} ${results.length===1?'property matches':'properties match'}`);
+    if(innerWidth<760 && results.length) setTimeout(()=>$('results').scrollIntoView({block:'start'}),50); }
+  $('askForm').addEventListener('submit',e=>{ e.preventDefault(); $('askQ').blur(); askRun($('askQ').value); });
+  $('askBar').addEventListener('click',e=>{ const b=e.target.closest('[data-ask]'); if(b){ askRun(b.dataset.ask); return; } const d=e.target.closest('[data-askdel]'); if(d&&ASKP){ const p=ASKP.parts[+d.dataset.askdel]; p.off=!p.off; askApply(); } });
+  askRenderHelp(); window.PFAskRun=askRun;
+  const askPend=()=>{ let t=''; try{ t=sessionStorage.getItem(ASK_PENDING)||''; sessionStorage.removeItem(ASK_PENDING); }catch(e){} if(t) setTimeout(()=>askRun(t),300); };
+  if(window.PF_READY) askPend(); else document.addEventListener('pf:ready',askPend,{once:true});
   $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); clearIdea(); b.classList.add('on'); });
   $('toResults').onclick=()=>{ const r=$('results'); const y=r.getBoundingClientRect().top+window.scrollY-($('stickybar').offsetHeight+16); window.scrollTo({top:y,behavior:'smooth'}); };
   if(HAS('mscreen')) mrWire();

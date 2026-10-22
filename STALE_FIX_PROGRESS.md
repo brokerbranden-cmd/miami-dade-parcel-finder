@@ -11,3 +11,5 @@
 - [21:45] Monroe clerk cases (foreclosure+probate) wired into weekly; fresh pull 1,560 cases, filings through 2026-10-21. Marathon code wired.
 - [21:47] Broward: Fort Lauderdale permits ArcGIS fetcher wired (31,194 parcels; source only updated to 2026-03-16). Broward OR (lis pendens) free SFTP script written; box egress blocks port 22 -> needs other runner. COVERAGE.md written (Broward cities other than FTL + 4 Monroe cities not yet probed).
 - EnerGov full pull still running (Miami Beach big).
+- [21:52] energov FIXED: full pull 0 errors in ~30 min, data through 2026-10-21. Rebuild (build_all resume) started -> /tmp/rebuild.log
+- [22:15] rebuild done (13/17 fresh; status honest). Committing packs, starting pre-push regression.

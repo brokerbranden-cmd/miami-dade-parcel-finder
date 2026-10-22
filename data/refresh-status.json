@@ -1,6 +1,6 @@
 {
- "built": "2026-10-19T11:01:06-04:00",
- "run_started": "2026-10-19T07:58:17-0400",
+ "built": "2026-10-21T21:58:28-04:00",
+ "run_started": "2026-10-21T21:50:34-0400",
  "sources": {
   "pagis": {
    "label": "Property Appraiser roll",
@@ -19,13 +19,16 @@
   },
   "clerk": {
    "label": "Clerk lis pendens",
-   "status": "fresh",
-   "last_good": "2026-10-19T08:00:02-0400"
+   "status": "stale",
+   "last_good": "2026-10-05",
+   "data_through": "2026-10-05",
+   "lag_days": 16
   },
   "clerk_clp": {
    "label": "Clerk CLP (open check)",
    "status": "stale",
-   "last_good": null
+   "last_good": null,
+   "data_through": null
   },
   "auctions": {
    "label": "Foreclosure/tax auctions",
@@ -44,8 +47,8 @@
   },
   "permits": {
    "label": "City of Miami permits",
-   "status": "stale",
-   "last_good": null
+   "status": "fresh",
+   "last_good": "2026-10-21T21:34:50-0400"
   },
   "county_permits": {
    "label": "County permits",
@@ -54,13 +57,43 @@
   },
   "energov": {
    "label": "EnerGov city permits",
-   "status": "stale",
-   "last_good": null
+   "status": "fresh",
+   "last_good": "2026-10-21T21:50:34-0400"
   },
   "parcels": {
    "label": "Parcel polygons",
    "status": "fresh",
    "last_good": "2026-10-19T10:48:18-0400"
+  },
+  "probate": {
+   "label": "Clerk probate (PAD/PRO/DCE)",
+   "status": "stale",
+   "last_good": "2026-10-08",
+   "data_through": "2026-10-08",
+   "lag_days": 13
+  },
+  "monroe_clerk": {
+   "label": "Monroe Clerk foreclosure+probate cases",
+   "status": "fresh",
+   "last_good": "2026-10-21",
+   "data_through": "2026-10-21",
+   "lag_days": 0
+  },
+  "monroe_marathon_code": {
+   "label": "Monroe: Marathon code hearings",
+   "status": "fresh",
+   "last_good": "2026-10-21T21:57:18-0400"
+  },
+  "broward_permits": {
+   "label": "Broward: Fort Lauderdale permits",
+   "status": "fresh",
+   "last_good": "2026-10-21T21:40:18-0400"
+  },
+  "broward_lp": {
+   "label": "Broward lis pendens (County Records FTP)",
+   "status": "stale",
+   "last_good": null,
+   "data_through": null
   }
  },
  "builds": {
@@ -79,14 +112,14 @@
   "parcels": 922797,
   "salesThrough": "09/22/2026",
   "rollYear": 2026,
-  "lis_pendens_matched": 911,
+  "lis_pendens_matched": 910,
   "lis_pendens_through": "2026-10-05",
   "auction_items": 531,
   "auctions_pulled": "2026-10-19T08:03",
-  "open_preforeclosures": 879,
+  "open_preforeclosures": 878,
   "probate": 640,
   "auctions_with_max_bid": 209,
-  "comps": 10126,
+  "comps": 9997,
   "commercial_list": 4344,
   "commercial_live_tax": 4162,
   "tax": 3,

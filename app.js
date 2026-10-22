@@ -1551,6 +1551,9 @@ const IDEAS=[
   ['🧩 Assemblages', ()=>({...BLANK(), asm:true, sort:'asm_d'})],
   ['Assemblages with combined-site upside', ()=>({...BLANK(), asm:true, asmUp:true, sort:'asm_d'})],
   ['Houses on lots under zone minimum', ()=>({...BLANK(), types:['sf'], lotz:['below'], sort:'lp_d'})],
+  /* Miami-Dade-only (equity layer): kept inside the Miami-Dade block so its presets stay a contiguous prefix */
+  ['💰 High-equity owners (50%+, est.)', ()=>({...BLANK(), eqMin:50, sort:'ds_d'})],
+  ['Free & clear owners (est.)', ()=>({...BLANK(), eqFC:true, sort:'ds_d'})],
   ['Buildable lots', ()=>({...BLANK(), types:['vacant'], mr:{rate:['G','Y']}, sort:'bld_a'})],
   ['Buildable lots, green only', ()=>({...BLANK(), types:['vacant'], mr:{rate:['G']}, sort:'bld_a'})],
   ['ROGO allocation awarded', ()=>({...BLANK(), mr:{sig:['rogo_award']}, sort:'bld_a'})],
@@ -1559,10 +1562,7 @@ const IDEAS=[
   ['Foreclosure auctions scheduled', ()=>({...BLANK(), mr:{sig:['fc_open']}, sort:'bld_a'})],
   ['Tax-deed sales scheduled', ()=>({...BLANK(), mr:{sig:['taxdeed']}, sort:'bld_a'})],
   ['Tax delinquent 2+ years', ()=>({...BLANK(), mr:{tax:['y2']}, sort:'tx_d'})],
-  ['Tax deed auction upcoming', ()=>({...BLANK(), mr:{tax:['deed']}, sort:'td_a'})],
-  /* appended last so existing preset indexes (saved state / links) never shift */
-  ['💰 High-equity owners (50%+, est.)', ()=>({...BLANK(), eqMin:50, sort:'ds_d'})],
-  ['Free & clear owners (est.)', ()=>({...BLANK(), eqFC:true, sort:'ds_d'})]
+  ['Tax deed auction upcoming', ()=>({...BLANK(), mr:{tax:['deed']}, sort:'td_a'})]
 ];
 const LOT_CHIPS=[[0,'Any'],[5000,'5,000+ sf'],[7500,'7,500+ sf'],[10000,'10,000+ sf'],[21780,'½ acre+'],[43560,'1 acre+'],[217800,'5 acres+']];
 

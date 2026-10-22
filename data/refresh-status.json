@@ -152,8 +152,7 @@
   "data": "ok",
   "zoning_rules": "ok",
   "assemblages": "ok",
-  "broward_data": "ok",
-  "monroe_data": "ok"
+  "broward_data": "ok"
  },
  "counts": {
   "parcels": 922797,

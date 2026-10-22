@@ -76,11 +76,6 @@
         <label class="check" title="Open lis pendens matched to the parcel: no later cancellation, dismissal or certificate of title in the Clerk files we hold, no foreclosure sale held for the case and no transfer since. Hover a card's tag for the case and CFN."><input type="checkbox" id="pfOnly"> Pre-foreclosure (open lis pendens) <span class="n" id="pfCount"></span></label>
         <label class="dsmin" title="Clerk probate filings (death certificate of estate, probate &amp; administration, order of distribution, probate case) matched to the parcel by folio, legal description, address or decedent name vs owner.">Probate filed <select id="pbSel" aria-label="Probate filed"><option value="">Any or none</option><option value="hm">Filed (high + medium match)</option><option value="h">Filed (high match only)</option></select> <span class="n" id="pbCount"></span></label>
       </div>
-      <div class="sigrow eqrow" data-need="equity">
-        <label class="dsmin" title="ESTIMATE: Property Appraiser just value minus estimated balances of recorded mortgages with no recorded satisfaction (Clerk Official Records, current owner). Only owners already checked are matched; priority leads are checked first.">Est. equity <select id="eqMin" aria-label="Minimum estimated equity"><option value="0">Any</option><option value="30">30%+</option><option value="50">50%+ (high)</option><option value="70">70%+</option><option value="90">90%+</option></select></label>
-        <label class="check" title="ESTIMATE: no open recorded mortgage found for the current owner"><input type="checkbox" id="eqFC"> Free &amp; clear (est.)</label> <span class="n" id="eqCount"></span>
-        <div class="hint" id="eqSrc"></div>
-      </div>
       <div class="sigrow cmrow">
         <label class="dsmin" title="Commercial Data list for Miami-Dade: score from delinquent / live tax, code liens, recertification, unsafe structures, closed gas station, owner entity status and bankruptcy">Commercial distress <select id="cmMin" aria-label="Commercial distress score"><option value="0">Any</option><option value="1">On the list</option><option value="20">20+</option><option value="35">35+</option><option value="50">50+</option></select> <span class="n" id="cmCount"></span></label>
         <label class="check" title="FDEP storage-tank facility closed or abandoned at the parcel, with no open station nearby"><input type="checkbox" id="cgasOnly"> Closed gas station</label>
@@ -174,6 +169,11 @@
       </div>
       <span class="note" id="ogSrc"></span>
       <div class="areachip" id="ogRow" hidden><span id="ogLabel"></span><button class="clr" type="button" id="clrOg">Remove</button></div>
+      <div class="ogrow eqrow" data-need="equity">
+        <label class="dsmin" title="ESTIMATE: Property Appraiser just value minus estimated balances of recorded mortgages with no recorded satisfaction (Clerk Official Records, current owner). Only owners already checked are matched; priority leads are checked first.">Est. equity <select id="eqMin" aria-label="Minimum estimated equity"><option value="0">Any</option><option value="30">30%+</option><option value="50">50%+ (high)</option><option value="70">70%+</option><option value="90">90%+</option></select></label>
+        <label class="check" title="ESTIMATE: no open recorded mortgage found for the current owner"><input type="checkbox" id="eqFC"> Free &amp; clear (est.)</label> <span class="n" id="eqCount"></span>
+        <div class="hint" id="eqSrc"></div>
+      </div>
     </div>
 
     <div class="row2">

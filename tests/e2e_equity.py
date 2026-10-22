@@ -66,7 +66,7 @@ with sync_playwright() as pw:
     # 5. presets + Ask
     boot(BASE + Q.rstrip('&?') + '#gov=1')
     labs = pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent)')
-    ok(any('High equity' in l for l in labs) and any('Free & clear' in l for l in labs), 'High equity + Free & clear presets offered')
+    ok(any('High-equity' in l for l in labs) and any('Free & clear' in l for l in labs), 'High equity + Free & clear presets offered')
     pg.fill('#askQ', 'free and clear houses'); pg.press('#askQ', 'Enter'); pg.wait_for_timeout(3500)
     ok(pg.evaluate("document.getElementById('eqFC').checked") and 'fc=1' in pg.evaluate('location.hash'), 'Ask "free and clear houses" -> Free & clear filter')
     pg.fill('#askQ', 'equity over 50%'); pg.press('#askQ', 'Enter'); pg.wait_for_timeout(3500)

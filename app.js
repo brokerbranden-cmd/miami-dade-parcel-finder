@@ -1513,7 +1513,7 @@ async function openDeep(f){
 /* commercial presets by Property Appraiser DOR land use family (see CP_FAM) */
 const LUF=fam=>D.landuse.filter((v,i)=>{ const c=LU_CODE[i]; return cpCom(c)&&CP_FAM(c)===fam; });
 /* ideas that need a data layer the active county may not have (counties.js layers) */
-const IDEA_NEED=[[/High equity|Free & clear/,'equity'],[/Buildable lots|Buildable teardowns|Duplex-zoned/,'mscreen'],[/ROGO/,'rogo'],[/Foreclosure auctions scheduled|Tax-deed sales scheduled/,'broward'],[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/Strong teardowns|could be split/,'zoning'],[/Death recorded/,'distress'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm'],[/^Tax delinquent/,'mtax'],[/^Tax deed auction/,'mtdeed']];
+const IDEA_NEED=[[/High-equity|Free & clear/,'equity'],[/Buildable lots|Buildable teardowns|Duplex-zoned/,'mscreen'],[/ROGO/,'rogo'],[/Foreclosure auctions scheduled|Tax-deed sales scheduled/,'broward'],[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/Strong teardowns|could be split/,'zoning'],[/Death recorded/,'distress'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm'],[/^Tax delinquent/,'mtax'],[/^Tax deed auction/,'mtdeed']];
 const ideaOk=l=>IDEA_NEED.every(([re,ly])=>!re.test(l)||HAS(ly));
 const IDEAS=[
   ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
@@ -1526,8 +1526,6 @@ const IDEAS=[
   ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:2500, lotMax:21780, sort:'lot_a'})],
   ['Houses on multifamily land', ()=>HAS('mscreen')?({...BLANK(), types:['sf'], mr:{zt:['mf']}, sort:'lot_d'}):({...BLANK(), types:['sf'], zones:['mf'], sort:'lot_d'})],
   ['Teardowns', ()=>({...BLANK(), tier:'basic', sort:'lp_d'})],
-  ['💰 High equity (50%+, est.)', ()=>({...BLANK(), eqMin:50, sort:'ds_d'})],
-  ['Free & clear (est.)', ()=>({...BLANK(), eqFC:true, sort:'ds_d'})],
   ['Out-of-state owners, 15+ years', ()=>({...BLANK(), types:['sf','th','mf29','vacant'], hdMin:15, flags:{oos:'yes',homestead:'no'}, sort:'held_d'})],
   ['Estates and heirs', ()=>({...BLANK(), flags:{estate:'yes'}, sort:'held_d'})],
   ['Small multifamily (2–9 units)', ()=>({...BLANK(), types:['mf29'], flags:{homestead:'no'}, sort:'un_d'})],
@@ -1562,6 +1560,9 @@ const IDEAS=[
   ['Tax-deed sales scheduled', ()=>({...BLANK(), mr:{sig:['taxdeed']}, sort:'bld_a'})],
   ['Tax delinquent 2+ years', ()=>({...BLANK(), mr:{tax:['y2']}, sort:'tx_d'})],
   ['Tax deed auction upcoming', ()=>({...BLANK(), mr:{tax:['deed']}, sort:'td_a'})],
+  /* appended last so existing preset indexes (saved state / links) never shift */
+  ['💰 High-equity owners (50%+, est.)', ()=>({...BLANK(), eqMin:50, sort:'ds_d'})],
+  ['Free & clear owners (est.)', ()=>({...BLANK(), eqFC:true, sort:'ds_d'})]
 ];
 const LOT_CHIPS=[[0,'Any'],[5000,'5,000+ sf'],[7500,'7,500+ sf'],[10000,'10,000+ sf'],[21780,'½ acre+'],[43560,'1 acre+'],[217800,'5 acres+']];
 

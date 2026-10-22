@@ -9,3 +9,5 @@
 - NEXT: let fetch run, rebuild data/equity.json.gz, commit, PORT=8098 bash scripts/pre_push_regression.sh, push, live verify.
 - Data snapshot 1,991 parcels (pf 877/879, au 208/208, pb 636/640 + top distress). Fetcher continuing with 3 workers. Regression started on next commit.
 - 21:40 scenarios s16 expected exactly 11 CSV cols -> allow appended equity cols; full regression restarted (PORT=8098, log /tmp/regr.out).
+- 22:50 full regression on 372bff9: 23/24 pass; only scenarios_mobile s18 (#ogInst check timeout) failed while another executor's regression ran concurrently (load). Re-running scenarios mobile alone (/tmp/scm.log). Fetcher stopped at 4,098 parcels (resume: scripts/fetch_mortgages.py /workspace/raw --workers 3).
+- 23:05 s18 mobile also fails alone on my tree: #ogInst inside closed 'Who owns it' group (body.simple .cgrp.closed). Checking baseline c41f870 (worktree /tmp/pfbase on :8099, log /tmp/scb.log) to see if pre-existing.

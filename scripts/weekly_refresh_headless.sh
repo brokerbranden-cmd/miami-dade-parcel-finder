@@ -24,7 +24,7 @@ log(){ echo "$(now) $*" | tee -a "$W/summary.txt"; }
 if [ "${DRY:-0}" = 1 ]; then
   echo "DRY run - nothing is changed"; echo "repo $REPO  RAW $RAW  run dir $W  test url $U"
   for f in scripts/build_all.sh scripts/weekly_finish.sh; do bash -n "$f" && echo "syntax ok $f"; done
-  python3 -m py_compile scripts/top_leads.py scripts/build_zoning_rules.py scripts/counties/monroe/build_monroe.py scripts/counties/monroe/add_tax.py scripts/counties/broward/add_tax.py scripts/counties/broward/build_broward.py scripts/counties/broward/fetch_fpn_foreclosure.py scripts/counties/broward/broward_permit_lib.py scripts/counties/broward/fetch_auctions_fl.py scripts/fetch_energov.py scripts/counties/monroe/fetch_keywest_etrakit.py scripts/counties/monroe/fetch_islamorada_cityview.py scripts/counties/monroe/monroe_enrich.py && echo "py syntax ok"
+  python3 -m py_compile scripts/top_leads.py scripts/build_zoning_rules.py scripts/counties/monroe/build_monroe.py scripts/counties/monroe/add_tax.py scripts/counties/broward/add_tax.py scripts/counties/broward/build_broward.py scripts/counties/broward/fetch_fpn_foreclosure.py scripts/counties/broward/broward_permit_lib.py scripts/counties/broward/fetch_auctions_fl.py scripts/fetch_energov.py && echo "py syntax ok"
   [ -f "$W/done" ] && echo "today's run already done: $(cat "$W/done")"
   flock -n "$ST/weekly.lock" true && echo "lock free" || echo "LOCK HELD - a weekly run is in progress"
   pgrep -f 'scripts/build_all.sh' >/dev/null && echo "WARN a build_all.sh is already running"

@@ -139,20 +139,6 @@
    "label": "Broward: foreclosure + tax-deed auctions",
    "status": "fresh",
    "last_good": "2026-10-22T09:28"
-  },
-  "monroe_keywest": {
-   "label": "Monroe: Key West permits + code cases (eTRAKiT)",
-   "status": "fresh",
-   "last_good": "2026-10-21",
-   "data_through": "2026-10-21",
-   "lag_days": 1
-  },
-  "monroe_islamorada": {
-   "label": "Monroe: Islamorada permits + code cases (CityView; pull date, records carry year only)",
-   "status": "fresh",
-   "last_good": "2026-10-22",
-   "data_through": "2026-10-22",
-   "lag_days": 0
   }
  },
  "builds": {

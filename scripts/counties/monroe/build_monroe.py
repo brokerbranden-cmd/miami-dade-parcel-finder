@@ -167,11 +167,6 @@ owner_stats = {'groups': int(len(G) - 1), 'parcels_in_groups': int((og > 0).sum(
 # ---- Monroe enrichment (zoning, ROGO/tier, environment, Clerk, permits/code, buildability rating)
 _geo = ME.load_geo(list(df.FOLIO)); _kinds = list(kinds)
 ecols, estrs, mzone, zrules, estats = ME.enrich(df, _geo, uc.values, bv, lot, yb, N('TOT_LVG_AR').values, mk, _kinds, est, flood_s, absz, list(o1), addr)
-# city permits / code cases (Key West eTRAKiT, Islamorada CityView, Marathon, legacy county) add to the distress score (2026-10-22)
-_sg = ecols['sigm'].astype(np.int64); _cc = (_sg & ME.SG['code']) > 0; _co = ecols['cn_open'] > 0; _dp = (_sg & ME.SG['permit_recent']) > 0
-dhard = dhard + np.where(_co, 8, np.where(_cc, 4, 0)) + np.where(_dp, 4, 0)
-dsig = dsig | (_cc.astype(np.int64) << 7)
-dscore = np.where(govt, 0, np.minimum(100, dhard + soft)); dsig = np.where(govt, 0, dsig)
 print('enrich', json.dumps(estats)[:1500])
 zoning_s = np.where(ecols['mz'] > 0, '', [('No digital zoning map - ' + j) for j in _geo.jur.values])
 zoning_d, zoning_i = dict_index(list(zoning_s))

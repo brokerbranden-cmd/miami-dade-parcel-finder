@@ -222,41 +222,6 @@ def score_parcel(P):
     rating = 'R' if 'R' in sev else 'Y' if 'Y' in sev else 'G'
     return rating, R
 
-DPERM_M = re.compile(r'DEMOLI|UNSAFE|ROOF|DAMAGE|REPAIR|RECERT|STRUCTURAL', re.I)
-def load_city_records():
-    """Key West eTRAKiT (permits by issue date, code cases with detail) + Islamorada CityView (permits, code cases), keyed by RE number."""
-    perm = collections.defaultdict(list); code = collections.defaultdict(list); st = {}
-    def mdy(s):
-        try: return dt.datetime.strptime(str(s)[:10], '%m/%d/%Y').date()
-        except Exception:
-            try: return dt.datetime.strptime(str(s)[:10], '%Y-%m-%d').date()
-            except Exception: return None
-    p = os.path.join(RAW, 'keywest', 'permits.json')
-    if os.path.exists(p):
-        D = json.load(open(p)).get('days', {}); n = 0; newest = None
-        for day, rows in D.items():
-            for r in rows:
-                if len(r) < 6 or not re.match(r'^\d{8}-\d{6}$', str(r[5])): continue
-                d = mdy(r[1]); n += 1; newest = max(newest or d, d) if d else newest
-                perm[r[5]].append(dict(no=r[0], date=d, type=f'{r[2]} {r[3]}'.strip(), status=r[4], src='Key West'))
-        st['keywest_permits'] = dict(rows=n, days=len(D), oldest=min(D) if D else None, newest=str(newest) if newest else None)
-    p = os.path.join(RAW, 'keywest', 'cases.json')
-    if os.path.exists(p):
-        C = json.load(open(p)).get('cases', {}); n = 0; newest = None
-        for no, c in C.items():
-            rr = str(c.get('re') or '').strip()
-            if not re.match(r'^\d{8}-\d{6}$', rr): continue
-            d = mdy(c.get('opened')); n += 1; newest = max(newest or d, d) if d else newest
-            code[rr].append(dict(no=no, date=d, type=' '.join(x for x in (c.get('type'), c.get('subtype')) if x), status=c.get('status') or '', open=not c.get('closed') and not re.search(r'CLOS|COMPL|DISMISS|COMPLI|VOID', str(c.get('status')), re.I), src='Key West'))
-        st['keywest_cases'] = dict(rows=len(C), with_re=n, newest=str(newest) if newest else None)
-    p = os.path.join(RAW, 'islamorada.json')
-    if os.path.exists(p):
-        I = json.load(open(p)); st['islamorada'] = dict(permits=len(I.get('permits', [])), code=len(I.get('code', [])), pulled=I.get('pulled'))
-        for r in I.get('permits', []):
-            if r.get('re'): perm[r['re']].append(dict(no=r['no'], date=dt.date(int(r['year']), 1, 1) if r.get('year') else None, type=r.get('Permit Type', ''), status=r.get('Status', ''), src='Islamorada', yearonly=True))
-        for r in I.get('code', []):
-            if r.get('re'): code[r['re']].append(dict(no=r['no'], date=dt.date(int(r['year']), 1, 1) if r.get('year') else None, type=r.get('Type', ''), status=r.get('Status', ''), open=not re.search(r'CLOS|COMPL|DISMISS|VOID|REMED', str(r.get('Status')), re.I), src='Islamorada', yearonly=True))
-    return perm, code, st
 def enrich(df, g, uc, bv, lot, yb, sqft, mk, kinds, est, flood_s, absent, owners_s, addr):
     n = len(df); folios = list(df.FOLIO); st = {}
     mzi, mzone, rules, zgrp, zlabel = zoning_tables(g, None); st['zoning_assigned'] = int((mzi > 0).sum()); st['zoning_by_jur'] = {j: int(((mzi > 0) & (g.jur.values == j)).sum()) for j in g.jur.unique()}
@@ -295,37 +260,21 @@ def enrich(df, g, uc, bv, lot, yb, sqft, mk, kinds, est, flood_s, absent, owners
         s = str(s or '')[:10]
         try: return dt.datetime.strptime(s, '%Y-%m-%d').date()
         except Exception: return None
-    cperm, ccode, cst = load_city_records(); st['city_records'] = cst; y2 = today - dt.timedelta(days=730)
     for k in range(n):
         r = res[k]; sg = 0
-        cp = cperm.get(r, []); cc = ccode.get(r, [])
-        if cp:
-            cp.sort(key=lambda x: x['date'] or DAY0, reverse=True)
-            fd = lambda x: (str(x['date'].year) if x.get('yearonly') else x['date'].strftime('%m/%d/%Y')) if x['date'] else ''
-            if cp[0]['date'] and not cp[0].get('yearonly'): lperm[k] = max(lperm[k], min(65535, dd(cp[0]['date'])))
-            pn5[k] += sum(1 for x in cp if x['date'] and x['date'].year >= y5)
-            sg |= SG['permit_recent'] if any(x['date'] and x['date'] >= y2 and DPERM_M.search(x['type']) for x in cp) else 0
-            sg |= SG['permit_open'] if any(re.search(r'ISSUED|ACTIVE|OPEN|IN REVIEW|PICKUP', str(x['status']), re.I) for x in cp) else 0
-            psum[k] = (psum[k] + ' | ' if psum[k] else '') + f"{len(cp)} {cp[0]['src']} city permits (recent pull); latest " + '; '.join(f"{x['no']} {x['type']} {fd(x)} {x['status']}" for x in cp[:3])
-        if cc:
-            cc.sort(key=lambda x: x['date'] or DAY0, reverse=True)
-            cn5[k] += sum(1 for x in cc if x['date'] and x['date'].year >= y5); cn_open[k] = min(255, cn_open[k] + sum(1 for x in cc if x['open']))
-            if cc[0]['date'] and not cc[0].get('yearonly'): clast[k] = max(clast[k], min(65535, dd(cc[0]['date'])))
-            sg |= SG['code']
-            csum[k] = (csum[k] + ' | ' if csum[k] else '') + f"{len(cc)} {cc[0]['src']} code cases: " + '; '.join(f"{x['no']} {x['type']} {x['status']}" for x in cc[:3])
         pl = mce['permits'].get(r, []); cl = mce['code'].get(r, [])
         if pl:
             ds = sorted([(parse_date(x.get('apply_date')), x) for x in pl if parse_date(x.get('apply_date'))], key=lambda t: t[0], reverse=True)
-            if ds: lperm[k] = max(lperm[k], min(65535, dd(ds[0][0]))); pn5[k] += sum(1 for d, _ in ds if d.year >= y5)
-            psum[k] = (psum[k] + ' | ' if psum[k] else '') + f'{len(pl)} county permits (legacy system, through 9/2022); latest ' + '; '.join(f"{x.get('permit_no')} {x.get('permit_desc') or x.get('permit_type')} {str(x.get('apply_date'))[:10]} {x.get('status')}" for _, x in ds[:3])
+            if ds: lperm[k] = min(65535, dd(ds[0][0])); pn5[k] = sum(1 for d, _ in ds if d.year >= y5)
+            psum[k] = f'{len(pl)} county permits (legacy system, through 9/2022); latest ' + '; '.join(f"{x.get('permit_no')} {x.get('permit_desc') or x.get('permit_type')} {str(x.get('apply_date'))[:10]} {x.get('status')}" for _, x in ds[:3])
         mrows = mc.get(r, [])
         if cl or mrows:
-            cn5[k] += sum(1 for x in cl if (parse_date(x.get('open_date') or x.get('date')) or dt.date(1900, 1, 1)).year >= y5) + len(mrows)
-            cn_open[k] += sum(1 for x in cl if str(x.get('status', '')).upper().startswith(('OPEN', 'ACTIVE'))) 
+            cn5[k] = sum(1 for x in cl if (parse_date(x.get('open_date') or x.get('date')) or dt.date(1900, 1, 1)).year >= y5) + len(mrows)
+            cn_open[k] = sum(1 for x in cl if str(x.get('status', '')).upper().startswith(('OPEN', 'ACTIVE'))) 
             bits = []
             if cl: bits.append(f'{len(cl)} county code cases (through 2023)')
             if mrows: bits.append('Marathon magistrate: ' + '; '.join(f"{x['case']} {x['date']} {x['violation'][:90]}" for x in mrows[:2]))
-            csum[k] = (csum[k] + ' | ' if csum[k] else '') + ' | '.join(bits)
+            csum[k] = ' | '.join(bits)
             sg |= SG['code']
         fcl, fcn, fco = fcs[k]; prl, prn, pro = prs[k]
         if fcn: sg |= SG['fc_any'] | (SG['fc_open'] if fco else 0)

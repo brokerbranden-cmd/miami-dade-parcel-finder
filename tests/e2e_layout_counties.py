@@ -27,9 +27,6 @@ with sync_playwright() as pw:
         na = pg.eval_on_selector_all('#ideas .chip[data-na]', 'n=>n.map(x=>[x.disabled, /not available for this county yet/.test(x.textContent)])')
         check(all(d and t for d, t in na), f'{c}: {len(na)} unavailable ideas are disabled and say "not available for this county yet"')
         if c != 'miami-dade': check(len(na) > 0, f'{c}: ideas needing Miami-Dade-only data are listed as unavailable, not hidden')
-        if c == 'monroe':   # Key West / Islamorada city permits + code cases (2026-10-22)
-            mr = pg.evaluate("(()=>{const t=document.getElementById('mrSig'); return t?t.textContent:''})()")
-            check('Open permit (Key West / Islamorada)' in mr and 'Distress permit (Key West / Islamorada' in mr and 'Code case' in mr, 'monroe: city permit + code case filters present')
         ph = pg.get_attribute('#askQ', 'placeholder') or ''
         check(c == 'miami-dade' or 'Hialeah' not in ph, f'{c}: Ask placeholder is the county example ({ph})')
         if not MOB:   # scrolled down, then an idea: results top comes back into view

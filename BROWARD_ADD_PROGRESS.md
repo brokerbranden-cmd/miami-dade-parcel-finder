@@ -18,3 +18,4 @@
 - 11:28 scroll reset (run() when hash changes + idea click), phone compaction (Ask examples hidden, src line 1 line, overflow fix 405->390px), tests/e2e_layout_counties.py PASS desktop+mobile locally; added to pre_push + weekly. Islamorada fetch DONE (2072 permits, 695 code). origin/main now has 8eb99ae (LP Oct 16) -> push gate met
 - 11:42 Monroe city permits/code wired (monroe_enrich.load_city_records, score +8 open code/+4 code/+4 distress permit, MR_SIG dperm/permit_open). Monroe build PID 833883 log /tmp/monroe_build.log (KW cases partial: 99 so far)
 - 11:54 rebased onto origin/main 7b7c3c3 (LP Oct 16) cleanly (COVERAGE conflicts merged by hand); commits 62f0968 d1dd541 49e8a75 1a16c10. pre_push_regression PID 846645 log /workspace/pf-fx-regr.log for HEAD 1a16c10
+- 12:02 Monroe KW/Islamorada moved to /workspace/pf-monroe: stripped from this push (files restored to origin). Killed regression 846645 (its commit changed). New regression below.

@@ -75,6 +75,11 @@ if ls raw/lp_downloads/clp_*.csv raw/lp_downloads/cot_*.csv >/dev/null 2>&1; the
 elif [ "${CLP_SCRAPE:-0}" = 1 ]; then RETRIES=1 fetch clerk_clp "clerk" timeout 900 python3 scripts/fetch_clerk.py "$RAW" --days 120 --types CLP
 else done_ clerk_clp || [ -f "$ST/clerk_clp.stale" ] || { mark clerk_clp stale; note "Clerk CLP scrape skipped (Turnstile-blocked; CLP_SCRAPE=1 to try) - marked stale"; }; fi
 build signals python3 scripts/build_signals.py data        # -> data/signals.json.gz
+# --- estimated owner equity (Miami-Dade): per-owner Clerk Official Records name search (public, no login) for mortgages /
+# satisfactions, priority order = open pre-foreclosure, auctions, probate, then distress score. Resumable cache RAW/clerk_owner/;
+# time-boxed (MTG_MINUTES, default 240) so each weekly run refreshes the oldest / newest leads first. Non-fatal.
+build clerk_mtg python3 scripts/fetch_mortgages.py "$RAW" --workers "${MTG_WORKERS:-6}" --max-age "${MTG_MAX_AGE:-28}" --minutes "${MTG_MINUTES:-240}"
+build equity  python3 scripts/build_equity.py data           # -> data/equity.json.gz
 build comps   python3 scripts/build_comps.py data          # -> data/comps.json.gz
 build commercial bash scripts/commercial/run_commercial.sh   # -> data/commercial.json.gz (Miami-Dade commercial distress score, live tax payoff, owner entity, closed gas; non-fatal)
 build data    python3 scripts/build_data.py data           # -> data/meta.json + data/*.bin.gz

@@ -46,7 +46,7 @@ def priority(raw, extra):
         f = str(f).zfill(13)
         if f in pa.index and f not in seen: seen.add(f); order.append(f)
     for f in extra: add(f)
-    sig = os.environ.get('SIGNALS', '/workspace/pf-fx/data/signals.json.gz')
+    sig = os.environ.get('SIGNALS', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'signals.json.gz'))
     if os.path.exists(sig):
         s = json.load(gzip.open(sig))
         for k in ('pf', 'au', 'pb'):

@@ -7,3 +7,13 @@
 - 10:39 EnerGov done (all 7 pulls complete); building data/broward
 - 10:50 data/broward rebuilt; signals tests pass desktop+mobile, e2e_broward desktop pass; docs filled. Next: commit, wait for other job's push, rebase, regression
 - 11:02 watcher PID 778313 (/workspace/pf-fx-watch.sh, log /workspace/pf-fx-watch.log): waits for other job push, rebases, patches status, commits, runs regression on PORT 8098 (log /workspace/pf-fx-regr.log)
+- 11:07 watcher stopped (new requirement: ideas section in all counties)
+- 11:09 new reqs: ideas in all counties; Monroe Key West/Islamorada permits+code (MONROE_GAP_PLAN.md)
+- idea probe log /tmp/idea_probe.log
+- 11:10 Key West eTRAKiT fetch PID 794453 log /workspace/raw/monroe/keywest/fetch.log (permits 180 days, cases 2026 then 2025, 170-min box)
+- 11:10 Islamorada CityView fetch PID 794971 log /workspace/raw/monroe/islamorada.log
+- 11:11 new req: first card visible on load (all counties, 1280x800 + 390x844), before/after shots to /workspace/parcel-finder/shots/
+- before-shots job PID 796805 log /tmp/firstcard_before.log
+- 11:18 root cause desktop: askbar in grid col 2 pushed stickybar below 20-row panel (cards at y=1264); fixed in ui.css. phone: auto Drive mode on <=600px (documented) hides cards; with drive=0 first card at y=708/844. before-shots PID 803518 /tmp/firstcard_before.log
+- 11:28 scroll reset (run() when hash changes + idea click), phone compaction (Ask examples hidden, src line 1 line, overflow fix 405->390px), tests/e2e_layout_counties.py PASS desktop+mobile locally; added to pre_push + weekly. Islamorada fetch DONE (2072 permits, 695 code). origin/main now has 8eb99ae (LP Oct 16) -> push gate met
+- 11:42 Monroe city permits/code wired (monroe_enrich.load_city_records, score +8 open code/+4 code/+4 distress permit, MR_SIG dperm/permit_open). Monroe build PID 833883 log /tmp/monroe_build.log (KW cases partial: 99 so far)

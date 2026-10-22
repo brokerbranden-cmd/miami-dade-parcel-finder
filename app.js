@@ -510,7 +510,10 @@ function textMatcher(st){
 function allowLU(){ if(!S.types.size && !S.exL.size) return null; const a=new Uint8Array(D.landuse.length); for(let i=0;i<a.length;i++) a[i]=(!S.types.size||S.types.has(LU_T[i])) && (!S.exL.size||S.exL.has(i)) ? 1:0; return a; }
 function allowZ(){ if(!S.zones.size && !S.exZ.size) return null; const a=new Uint8Array(D.zoning.length); for(let i=0;i<a.length;i++) a[i]=(!S.zones.size||S.zones.has(Z_G[i])) && (!S.exZ.size||S.exZ.has(i)) ? 1:0; return a; }
 
-function run(){
+/* filters changed: if the page is scrolled past the top of the results, bring the results' top back into view (2026-10-22) */
+function scrollResultsTop(){ const r=$('results'); if(!r||r.hidden||document.body.classList.contains('driving')||document.body.classList.contains('sheet-open')) return; const sb=$('stickybar'), off=(sb?sb.offsetHeight:0)+8, y=r.getBoundingClientRect().top+scrollY-off; if(scrollY>y+4) window.scrollTo({top:Math.max(0,y)}); }
+let RUN_H=null;
+function run(){ const h0=RUN_H; requestAnimationFrame(()=>{ const h=location.hash; if(h0!==null && h!==h0) scrollResultsTop(); RUN_H=h; });   // only when the filters (URL hash) changed, not on save / mark actions
   const st=readState(); save();
   const zipSet=new Set(st.zips.split(/[\s,;]+/).map(z=>z.trim().slice(0,5)).filter(Boolean).map(z=>D.zip.indexOf(z)));
   const cityI=st.city?D.city.indexOf(st.city):-1, craI=st.cra?D.cra.indexOf(st.cra):-1;
@@ -1250,7 +1253,7 @@ const MR_RATE=[['G','Green','Likely buildable','No blockers found'],['Y','Yellow
 const MR_TIER=[[1,'Tier I'],[2,'Tier II'],[3,'Tier III'],[4,'Tier III-A'],[0,'City / none']];
 const MR_ROGO=[[1,'ROGO awarded'],[2,'Applied, not awarded'],[3,'Dedicated (retired)'],[4,'Dedication record'],[0,'No record']];
 const MR_SIG=[['rogo_award','ROGO awarded',4096],['vacant','Vacant lot',512],['teardown','Teardown',16384],['dup','Duplex / multifamily zoning',2048],['absentee','Owner mails outside '+(PFC.cfg.area||'the area'),256],['fc_open',PFC.id==='broward'?'Foreclosure auction scheduled':'Foreclosure case open',1],['pr_open','Probate case open',4],['taxdeed',PFC.id==='broward'?'Tax-deed sale scheduled':'Tax-deed notice',16],['code',PFC.id==='broward'?'Code case (5 yrs)':'Code case',32]].filter(x=>!(PFC.id==='broward'&&['rogo_award','pr_open'].includes(x[0])))
-  .concat(PFC.id==='broward'?[['fc_notice','Foreclosure notice (published)',2],['code_open','Open code case',128],['dperm','Distress permit (demolition / unsafe / roof, 24 mo)',64]]:[]);   // Broward sigm bits from build_broward.py: 2 published notice, 32 code case 5y, 64 distress permit, 128 open code case
+  .concat(PFC.id==='broward'?[['fc_notice','Foreclosure notice (published)',2],['code_open','Open code case',128],['dperm','Distress permit (demolition / unsafe / roof, 24 mo)',64]]:PFC.id==='monroe'?[['dperm','Distress permit (Key West / Islamorada, 24 mo)',64],['permit_open','Open permit (Key West / Islamorada)',128]]:[]);   // Monroe sigm (monroe_enrich.SG): 64 permit_recent (distress type), 128 permit_open   // Broward sigm bits from build_broward.py: 2 published notice, 32 code case 5y, 64 distress permit, 128 open code case
 const MR_AVOID=(PFC.id==='broward'?x=>x.filter(y=>y[0]==='ve'):x=>x)([['wet','Wetland / mangrove / water',4|8|16|16384],['fnai','Conservation land',1],['ff','Florida Forever',2],['upland','Hammock / pineland',32],['cbrs','CBRS',64],['species','Protected species',128|256],['ve','Flood VE',-1]]);
 const MR_ZT=[['sf','Single-family'],['duplex','Duplex'],['mf','Multifamily'],['mixed','Mixed use'],['com','Commercial'],['ind','Industrial / marine'],['civic','Public'],['other','Conservation / other'],['none','No digital map']];
 const MT_CHIPS=[['any','Tax delinquent'],['y2','2+ years unpaid'],['y3','3+ years unpaid'],['cert','Investor holds a certificate'],['county','County-held certificate']].concat(HAS('mtdeed')?[['deed','Tax deed auction upcoming'],['applied','Tax deed applied for']]:[]);
@@ -1780,12 +1783,14 @@ function wire(){
     $(f+'Find').addEventListener('input',()=>renderFacet(f));
     $(f+'List').addEventListener('change',e=>{ const t=e.target; if(!t.dataset.f) return; const set=f==='zoning'?S.exZ:S.exL, i=+t.dataset.i; t.checked?set.add(i):set.delete(i); schedule(100); });
   });
-  $('ideas').innerHTML=IDEAS.map(([l],i)=>ideaOk(l)?`<button type="button" class="chip" data-i="${i}">${l}</button>`:'').join('');
+  // every county gets the same idea list: ideas whose data this county lacks stay visible but disabled (ui.js groups them under "Not available for this county yet")
+  $('ideas').innerHTML=IDEAS.map(([l],i)=>ideaOk(l)?`<button type="button" class="chip" data-i="${i}">${l}</button>`:`<button type="button" class="chip ideana" data-na="${i}" disabled aria-disabled="true" title="Not available for ${esc(PFC.cfg.name)} yet: this idea needs data the county does not publish in bulk">${l}<small class="nanote"> · not available for this county yet</small></button>`).join('');
   /* Ask: plain-English request -> the same filters (ask.js parses, no AI service); chips show what was understood */
   const ASK_RECENT='pf.ask.recent.v1', ASK_PENDING='pf.ask.pending';
   const ASK_EX={'miami-dade':['Hialeah teardowns under 500k owned 20+ years by individuals','recert overdue in Little Havana','vacant lots over 10,000 sqft','lis pendens in Miami Gardens','properties owned by John Smith'],
     monroe:['vacant lots in Key West','tax delinquent 2+ years','Marathon houses under 900k owned 20+ years','ROGO'],
     broward:['tax delinquent 2+ years in Pembroke Pines','Fort Lauderdale houses under 400k owned 20+ years','foreclosure in Hollywood','vacant lots over 10,000 sqft']}[PFC.id]||[];
+  if(ASK_EX[0]) $('askQ').placeholder='Ask: '+ASK_EX[0];   // the static placeholder names a Miami-Dade city
   let ASKP=null;
   const askRecent=()=>{ try{ return (JSON.parse(localStorage.getItem(ASK_RECENT)||'[]')||[]).filter(x=>typeof x==='string').slice(0,6); }catch(e){ return []; } };
   function askRenderHelp(){ $('askEx').innerHTML=ASK_EX.map(t=>`<button type="button" class="chip askx" data-ask="${esc(t)}">${esc(t)}</button>`).join('');
@@ -1815,7 +1820,7 @@ function wire(){
   askRenderHelp(); window.PFAskRun=askRun;
   const askPend=()=>{ let t=''; try{ t=sessionStorage.getItem(ASK_PENDING)||''; sessionStorage.removeItem(ASK_PENDING); }catch(e){} if(t) setTimeout(()=>askRun(t),300); };
   if(window.PF_READY) askPend(); else document.addEventListener('pf:ready',askPend,{once:true});
-  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); clearIdea(); b.classList.add('on'); });
+  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); requestAnimationFrame(scrollResultsTop); clearIdea(); b.classList.add('on'); });
   $('toResults').onclick=()=>{ const r=$('results'); const y=r.getBoundingClientRect().top+window.scrollY-($('stickybar').offsetHeight+16); window.scrollTo({top:y,behavior:'smooth'}); };
   if(HAS('mscreen')) mrWire();
   $('resetBtn').onclick=()=>{ applyState({...BLANK(), view:S.view}); clearIdea(); run(); };

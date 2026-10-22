@@ -2,9 +2,9 @@
 /* 1. results first: filters in a sticky sidebar on wide screens */
 @media (min-width:1100px){
   body.simple .wrap{grid-template-columns:340px minmax(0,1fr);column-gap:22px;max-width:1640px;align-items:start}
-  body.simple .wrap>header.top,body.simple .wrap>.stickybar{grid-column:1/-1}
-  body.simple .wrap>#panel{grid-column:1;grid-row:3/span 20;position:sticky;top:86px;max-height:calc(100vh - 98px);overflow:auto;overscroll-behavior:contain;padding:12px 14px;gap:0;scrollbar-width:thin}
-  body.simple .wrap>*:not(header):not(.stickybar):not(#panel){grid-column:2;min-width:0}
+  body.simple .wrap>header.top,body.simple .wrap>.askbar,body.simple .wrap>.stickybar{grid-column:1/-1}   /* askbar full width too: in column 2 it pushed the full-width stickybar below the 20-row panel, so the cards started ~1,260 px down (fixed 2026-10-22) */
+  body.simple .wrap>#panel{grid-column:1;grid-row:4/span 20;position:sticky;top:86px;max-height:calc(100vh - 98px);overflow:auto;overscroll-behavior:contain;padding:12px 14px;gap:0;scrollbar-width:thin}
+  body.simple .wrap>*:not(header):not(.stickybar):not(.askbar):not(#panel){grid-column:2;min-width:0}
   body.simple #toResults{display:none}
   body.simple .cards{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
   /* search box stacked in the narrow sidebar (was 3 columns) */
@@ -239,3 +239,10 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .stl.stemb{font-weight:500}
 
 .stem.bad{opacity:.55}.stem.bad s{text-decoration:line-through}.badem{font-size:11px;font-weight:700;color:#8a5a00;border:1px solid #c9a35a;border-radius:4px;padding:0 5px;margin:0 4px}.stbad{font-size:11px;margin-left:4px}
+
+/* ideas a county lacks the data for: shown, disabled (2026-10-22) */
+.ideas .chip.ideana,.ideas .chip.ideana:hover{opacity:.55;cursor:not-allowed;background:var(--sunk);border-style:dashed;border-color:var(--line)}
+.ideas .chip.ideana .nanote{font-size:11px;opacity:.85}
+/* phone: keep the first card above the fold (2026-10-22): Ask examples hidden (the placeholder shows one), source line clamped to one line */
+@media (max-width:600px){ #askHelp{display:none} #srcLine{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:calc(100vw - 32px)} }
+@media (max-width:600px){ header.top,#askBar,#stickybar,#results,#results .resbar,#summary{min-width:0;max-width:100%} #summary{overflow-wrap:anywhere} }

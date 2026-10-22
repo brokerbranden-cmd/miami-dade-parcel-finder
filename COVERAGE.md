@@ -59,8 +59,8 @@ Miami-Dade sources in the weekly run: `permits` (City of Miami + County Building
 |---|---|---|---|---|---|
 | Unincorporated Monroe | Monroe | legacy permits applied before 2022-10-01 | code cases opened before 2024-01-01 | MCeSearch (mcesearch.monroecounty-fl.gov); newer records only in Oracle OPAL (no bulk export) | Historical one-time pull in pack; newer: NO PUBLIC BULK DATA |
 | Marathon | Monroe | - | Special Magistrate hearing agendas (parcel IDs) | ci.marathon.fl.us PDFs | WIRED into weekly (`monroe_marathon_code`) 2026-10-21 |
-| Key West | Monroe | eTRAKiT portal (per-record search) | - | etrakit.cityofkeywest-fl.gov | NOT WIRED - interactive portal only, no bulk/API |
-| Islamorada | Monroe | CityView portal | complaint intake only | islamorada.fl.us/CityView | NOT WIRED - interactive portal only |
+| Key West | Monroe | eTRAKiT permits searched by ISSUED date (one day per query) | eTRAKiT code cases by case-number prefix (CC<year>-0NN) + detail view for type, status, opened/closed, RE | secure.cityofkeywest-fl.gov eTRAKiT (public, no login; 20-page cap per query, so narrow slices) | WIRED 2026-10-22 (`monroe_keywest`): pull 2026-10-22: 1,561 permits issued 2026-04-26..2026-10-21 (180 days, newest 2026-10-21); code cases 2026 partial (first pull timeboxed, continues weekly; closed cases cached) |
+| Islamorada | Monroe | CityView permit locator (record year) | CityView public code-case locator (record year; status) | islamorada CityView portal LocatorResults (public, no login) | WIRED 2026-10-22 (`monroe_islamorada`): pull 2026-10-22: 2,072 permits (2025: 1,194, 2026: 878) and 695 code cases (2025: 324, 2026: 371); rows carry the record-number year only, no exact dates |
 | Key Colony Beach | Monroe | Citizenserve portal | Citizenserve portal | citizenserve installation 326 | NOT WIRED - interactive portal only |
 | Layton | Monroe | none found | none found | - | NO PUBLIC DATA found |
 

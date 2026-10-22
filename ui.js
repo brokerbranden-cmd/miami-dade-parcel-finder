@@ -50,10 +50,14 @@
     const more=document.createElement('div'); more.className='ideas-more'; more.id='ideasMore';
     const cats=CATS.map(([l])=>{ const d=document.createElement('div'); d.className='icat'; d.innerHTML=`<div class="icat-h"></div><div class="chips"></div>`; d.querySelector('.icat-h').textContent=l; return d; });
     rest.forEach(c=>{ const t=c.textContent.trim(); let j=CATS.findIndex(([,r])=>r.test(t)); if(j<0) j=0; cats[j].querySelector('.chips').appendChild(c); });
+    // counties whose data does not match the Miami-Dade-tuned TOP list: fill the first row with the first available ideas (up to 8)
+    while(top.length<8 && rest.length){ const c=rest.shift(); top.push(c); }
     cats.forEach(d=>{ if(d.querySelector('.chip')) more.appendChild(d); });
+    const na=[...ideas.querySelectorAll('.chip[data-na]')];
+    if(na.length){ const d=document.createElement('div'); d.className='icat icat-na'; d.innerHTML='<div class="icat-h">Not available for this county yet</div><div class="chips"></div>'; na.forEach(c=>d.querySelector('.chips').appendChild(c)); more.appendChild(d); }
     top.forEach(c=>ideas.appendChild(c));
     const b=document.createElement('button'); b.type='button'; b.className='chip morechip'; b.id='moreIdeas'; ideas.appendChild(b); ideas.appendChild(more);
-    const upd=()=>{ const o=!!P.more||!!P.legacy; more.hidden=!o; b.setAttribute('aria-expanded',String(o)); b.textContent=o?'Fewer ideas ▴':`More ideas (${rest.length}) ▾`; };
+    const upd=()=>{ const o=!!P.more||!!P.legacy; more.hidden=!o; b.setAttribute('aria-expanded',String(o)); b.textContent=o?'Fewer ideas ▴':`More ideas (${rest.length}${na.length?' + '+na.length+' n/a':''}) ▾`; };
     b.addEventListener('click',e=>{ e.stopPropagation(); P.more=!P.more; saveP(); upd(); }); upd();
   }
 

@@ -74,6 +74,11 @@ with sync_playwright() as pw:
             from urllib.parse import quote
             p_ = hsearch('#owner=person&q=' + quote(q)); c_ = hsearch('#owner=corp&q=' + quote(q))
             ok(p_['n'] == 0 and c_['n'] > 0, f"{county} '{q}': individuals={p_['n']} companies&orgs={c_['n']}")
-        fx = pg.evaluate('PF.okFix()'); print(county, 'reclassified', fx); ok(fx[0]['fixed'] > 0, f'{county}: app reclassified some owner names')
+        fx = pg.evaluate('PF.okFix()'); print(county, 'reclassified', fx); 
+        twin = pg.evaluate(f"fetch('data/{county}/meta.json').then(r=>r.json()).then(m=>!!m.ownerKind)")
+        if twin:   # pack classified at build time by owner_kind.py: the app's orgName must find nothing left to fix (build and app agree)
+            ok(fx[0]['fixed'] == 0, f"{county}: pack built with the Python twin, app reclassified {fx[0]["fixed"]} names (must be 0: build twin and app agree)")
+        else:      # older pack built before the twin: the app-side reclassification must kick in
+            ok(fx[0]['fixed'] > 0, f'{county}: app reclassified some owner names')
     b.close()
 print('ERRORS:', errs if errs else 'none'); sys.exit(1 if errs else 0)

@@ -230,7 +230,7 @@ meta = {'ver': ver, 'county': 'monroe', 'total': int(n), 'built': dt.datetime.no
         'rollYear': int(pd.to_numeric(df.ASMNT_YR, errors='coerce').max()), 'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%Y'),
         'geoOrigin': list(GEO0), 'stats': stats, 'packs': packs, 'distress': None, 'owners': owner_stats,
         'vacancy': {'ge40': int((vscore >= 40).sum()), 'ge60': int((vscore >= 60).sum())}, 'permitCov': None, 'ownersFile': 'owners.json.gz', 'distressFile': None,
-        'flood': fstats, 'fetch': fst, 'absentee': absentee_stats, 'enrich': estats, 'screening': 'Buildability is a screening tool built from public map layers (zoning, ROGO/Tier, FNAI, NWI, habitat, CBRS, FEMA flood). It is not a determination - confirm with Monroe County / city planning.',
+        'flood': fstats, 'fetch': fst, 'absentee': absentee_stats, 'enrich': estats, 'ownerKind': 'owner_kind.py (Python twin of app orgName)', 'screening': 'Buildability is a screening tool built from public map layers (zoning, ROGO/Tier, FNAI, NWI, habitat, CBRS, FEMA flood). It is not a determination - confirm with Monroe County / city planning.',
         'dicts': {'city': city, 'zip': zips, 'cra': flood, 'landuse': landuse, 'zoning': zoning_d, 'mzone': mzone},
         'sources': {'roll': 'https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0 (CO_NO=54)',
                     'flood': 'https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28 (DFIRM_ID 12087)'}}

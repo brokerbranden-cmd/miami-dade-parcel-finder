@@ -317,7 +317,7 @@ cmeta = {'built': dt.date.today().isoformat(), 'cutoff': cut, 'months': MONTHS, 
 with gzip.open(os.path.join(OUT, 'comps.json.gz'), 'wt') as fh: json.dump({'meta': cmeta, 'rows': crow}, fh, separators=(',', ':'))
 print('comps', len(crow))
 last_sale = int(max(sd1.max(), 0))
-meta = {'ver': ver, 'county': 'broward', 'total': int(n), 'built': dt.datetime.now().strftime('%m/%d/%Y'), 'rollYear': int(pd.to_numeric(df.ASMNT_YR, errors='coerce').max()), 'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%Y'),
+meta = {'ver': ver, 'county': 'broward', 'ownerKind': 'owner_kind.py (Python twin of app orgName)', 'total': int(n), 'built': dt.datetime.now().strftime('%m/%d/%Y'), 'rollYear': int(pd.to_numeric(df.ASMNT_YR, errors='coerce').max()), 'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%Y'),
         'geoOrigin': list(GEO0), 'stats': stats, 'packs': packs, 'distress': None, 'owners': owner_stats, 'vacancy': {'ge40': int((vscore >= 40).sum()), 'ge60': int((vscore >= 60).sum())}, 'permitCov': None, 'ownersFile': 'owners.json.gz', 'distressFile': None,
         'flood': fstats, 'absentee': absentee_stats, 'auctions': auc_stats,
         'enrich': {'zoning_by_jur': cnt_z, 'zoning_city_or_bmsd': int((zsrc == 1).sum()), 'land_use_plan_only': int((zsrc == 2).sum()), 'no_layer': int((zsrc == 0).sum()), 'bld_green': int((bld == 1).sum()), 'bld_yellow': int((bld == 2).sum()), 'bld_red': int((bld == 3).sum()),

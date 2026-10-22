@@ -8,7 +8,9 @@ SOURCES = {  # step -> label
     'clerk': 'Clerk lis pendens', 'clerk_clp': 'Clerk CLP (open check)', 'auctions': 'Foreclosure/tax auctions',
     'tax': 'Tax delinquency', 'viol': 'Code violations', 'permits': 'City of Miami permits',
     'county_permits': 'County permits', 'energov': 'EnerGov city permits', 'parcels': 'Parcel polygons',
-    'probate': 'Clerk probate (PAD/PRO/DCE)'}
+    'probate': 'Clerk probate (PAD/PRO/DCE)',
+    'monroe_clerk': 'Monroe Clerk foreclosure+probate cases', 'monroe_marathon_code': 'Monroe: Marathon code hearings',
+    'broward_permits': 'Broward: Fort Lauderdale permits', 'broward_lp': 'Broward lis pendens (County Records FTP)'}
 MAX_LAG_DAYS = int(os.environ.get('MAX_LAG_DAYS', '3'))
 import re
 def through(globs):
@@ -23,7 +25,14 @@ DATA_THROUGH = {  # source -> newest filing date held (stale when older than MAX
     'clerk': lambda: through(['raw/lp_downloads/lp_*.csv', os.path.join(RAW, 'clerk/LIS/*.json')]),
     'clerk_clp': lambda: through(['raw/lp_downloads/clp_*.csv', 'raw/lp_downloads/cot_*.csv', 'raw/lp_downloads/dis_*.csv', os.path.join(RAW, 'clerk/CLP/*.json')]),
     'probate': lambda: through(['raw/probate_downloads/probate_*.csv', 'raw/probate_cases/ocs_*.txt']),
+    'monroe_clerk': lambda: jmax(os.path.join(RAW, 'monroe/clerk_cases.json'), lambda d: max((c.get('filed') or '' for c in d.get('cases', [])), default='')),
+    'broward_lp': lambda: through([os.path.join(RAW, 'broward/official_records/*doc*.txt')]),
 }
+LAG = {'monroe_clerk': 7, 'broward_lp': 4}
+def jmax(p, f):
+    try: v = f(json.load(open(p))).replace('-', '')
+    except Exception: return None
+    return v or None
 BUILDS = ['load_raw', 'spatial', 'merge_permits', 'distress', 'signals', 'comps', 'commercial', 'data', 'zoning_rules', 'assemblages']
 def state(s):
     for k in ('ok', 'stale', 'fail'):
@@ -67,7 +76,7 @@ for s, label in SOURCES.items():
         d = DATA_THROUGH[s]()
         if d:
             iso = f"{d[:4]}-{d[4:6]}-{d[6:]}"; lag = (datetime.date.today() - datetime.date.fromisoformat(iso)).days
-            hist[s] = iso; k = 'ok' if lag <= MAX_LAG_DAYS else 'stale'
+            hist[s] = iso; k = 'ok' if lag <= LAG.get(s, MAX_LAG_DAYS) else 'stale'
             res['sources'][s] = {'label': label, 'status': 'fresh' if k == 'ok' else 'stale', 'last_good': iso, 'data_through': iso, 'lag_days': lag}
         else:
             res['sources'][s] = {'label': label, 'status': 'stale', 'last_good': None, 'data_through': None}

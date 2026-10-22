@@ -90,8 +90,13 @@ build assemblages python3 scripts/build_assemblages.py data    # -> data/asm.jso
 # SKIP_COUNTIES="monroe" skips one. Monroe: FL statewide cadastral (CO_NO=54) + FEMA NFHL flood zones, ~3-5 min, no login.
 case " ${SKIP_COUNTIES:-} " in *" monroe "*) note "skip monroe (SKIP_COUNTIES)";; *)
   fetch monroe_fetch "monroe" python3 scripts/counties/monroe/fetch_monroe.py
+  # Monroe Clerk court cases (foreclosure = lis pendens proxy, probate; public, no captcha) + Marathon code hearings -> used by monroe_enrich
+  RETRIES=2 fetch monroe_clerk "monroe/clerk_cases.json" timeout 2400 python3 scripts/counties/monroe/fetch_clerk_monroe.py 36
+  RETRIES=2 fetch monroe_marathon_code "monroe/marathon_code.json" timeout 1800 python3 scripts/counties/monroe/fetch_marathon_code.py
   build monroe_data  python3 scripts/counties/monroe/build_monroe.py data/monroe ;;
 esac
+# Broward city permits (public ArcGIS; Broward-only raw files, not mixed with Miami-Dade)
+RETRIES=2 fetch broward_permits "broward/permits" timeout 1800 python3 scripts/counties/broward/fetch_broward_permits.py
 python3 scripts/refresh_status.py "$ST" data/refresh-status.json > "$ST/status.txt" || echo "WARN: status file failed"
 cat "$ST/status.txt" 2>/dev/null
 now > "$ST/run_finished"

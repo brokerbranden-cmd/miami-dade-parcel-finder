@@ -7,3 +7,7 @@
 - [21:45] refresh_status.py: clerk / clerk_clp / probate last_good = newest filing date held, stale if > 3 days. LP through 2026-10-05, probate 2026-10-08 -> stale.
 - weekly_launch.sh: detached launcher returning immediately.
 - Clerk: logged-in Official Records account avoids Turnstile ("Registered Access"); only paid API ($0.20/req, CFN/folio lookup only - no doc-type/date search) or $110/mo FTP otherwise. Needs browser export step.
+- [21:50] permits FIXED: fresh pull 53,215 city / 65,655 county folios (was 27,999), county data through 2026-10-19, 2m14s. Installed in RAW, permits.ok.
+- [21:45] Monroe clerk cases (foreclosure+probate) wired into weekly; fresh pull 1,560 cases, filings through 2026-10-21. Marathon code wired.
+- [21:47] Broward: Fort Lauderdale permits ArcGIS fetcher wired (31,194 parcels; source only updated to 2026-03-16). Broward OR (lis pendens) free SFTP script written; box egress blocks port 22 -> needs other runner. COVERAGE.md written (Broward cities other than FTL + 4 Monroe cities not yet probed).
+- EnerGov full pull still running (Miami Beach big).

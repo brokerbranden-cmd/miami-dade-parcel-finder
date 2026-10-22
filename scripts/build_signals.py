@@ -35,6 +35,8 @@ for code in ('CLP', 'COT'):
             ck = case_key(m.get('casE_NUM') or (m.get('misC_REF') or '').split(' ')[0])
             if ck: closed_case[ck] = max(closed_case.get(ck, 0), d)
             n_close[code.lower()] += 1
+# certificates of title matched to parcels by build_distress.py (CTI exports carry no case number): folio -> [date, cfn, how]
+COT = {f: [day(v[0]), v[1], v[2]] for f, v in (json.load(open(f'{RAW}/cot_matches.json')).items() if os.path.exists(f'{RAW}/cot_matches.json') else [])}
 # ---- auctions ----
 AU = json.load(open(f'{RAW}/auctions.json'))
 sold_case = {}
@@ -62,6 +64,7 @@ for folio, recs in DIST['recs'].items():
         bp = re.search(r'OR (\d+)/(\d+)', extra)
         if ck and closed_case.get(ck, 0) >= d: why_out['cancelled / dismissed / certificate of title'] += 1; continue
         if bp and (int(bp[1]), int(bp[2])) in closed_bp: why_out['cancelled (book/page)'] += 1; continue
+        if COT.get(folio, [0])[0] >= d: why_out['certificate of title (parcel)'] += 1; continue
         if ck and sold_case.get(ck, 0) >= d: why_out['foreclosure sale held'] += 1; continue
         if lastsale.get(folio, 0) > d: why_out['parcel transferred after the lis pendens'] += 1; continue
         kind = 'H' if 'HOA' in title else 'M' if 'Mortgage' in title else 'O'
@@ -85,9 +88,13 @@ for folio, recs in DIST['recs'].items():
     if best: pb.append(best)
 # ---- auctions with max bid ----
 money = lambda s: round(float(re.sub(r'[^\d.]', '', s)), 2) if s and re.search(r'\d', s) else 0
-au = []
+au, au_out = [], []
 for it in AU['items']:
     if it.get('status') != 'scheduled' or not it.get('folio'): continue
+    adate = day(dt.datetime.strptime(it['date'], '%m/%d/%Y').strftime('%Y%m%d')); ct = COT.get(it['folio'].zfill(13))
+    # sale already ended in a certificate of title: CTI recorded on/after the sale date, or within 180 days before it (stale listing)
+    if ct and it['type'].upper().startswith('FORE') and ct[0] >= int((dt.datetime.strptime(str(adate), '%Y%m%d') - dt.timedelta(days=180)).strftime('%Y%m%d')):
+        au_out.append([it['folio'].zfill(13), adate, it['case'], ct[0], ct[1]]); continue
     mb = it.get('max_bid', None)
     au.append([it['folio'].zfill(13), day(dt.datetime.strptime(it['date'], '%m/%d/%Y').strftime('%Y%m%d')), 'F' if it['type'].upper().startswith('FORE') else 'T',
                it['case'], money(it.get('judgment')), money(it.get('opening_bid')), money(mb) if mb else 0, 1 if (mb or '').strip().lower() == 'hidden' else (-1 if mb is None else 0)])
@@ -96,6 +103,7 @@ meta = {'built': dt.datetime.now().strftime('%Y-%m-%d %H:%M ET'), 'distressBuilt
         'pf': {'n': len(pf), 'from': lp_days[0] if lp_days else 0, 'to': lp_days[-1] if lp_days else 0, 'excluded': dict(why_out), 'closing_docs': dict(n_close),
                'rule': 'Lis pendens matched to the parcel with no later cancellation, dismissal or certificate of title in the Clerk files we hold, no foreclosure sale held for the case, and no recorded transfer of the parcel since'},
         'pb': {'n': len(pb), 'high': sum(r[4] == 'H' for r in pb), 'medium': sum(r[4] == 'M' for r in pb)},
+        'ct': {'n': len(COT), 'auctions_removed': len(au_out), 'rule': 'Clerk CERTIFICATE OF TITLE - CTI matched to the parcel (plat/lot/block, condo book/page + unit or address): closes lis pendens recorded on or before it and scheduled foreclosure sales within 180 days after it'},
         'au': {'n': len(au), 'maxBidShown': sum(r[6] > 0 for r in au), 'hidden': sum(r[7] == 1 for r in au)}}
-json.dump({'meta': meta, 'pf': pf, 'pb': pb, 'au': au}, gzip.open(os.path.join(OUT, 'signals.json.gz'), 'wt'), separators=(',', ':'))
+json.dump({'meta': meta, 'pf': pf, 'pb': pb, 'au': au, 'ct': sorted([f, v[0], v[1]] for f, v in COT.items()), 'auOut': au_out}, gzip.open(os.path.join(OUT, 'signals.json.gz'), 'wt'), separators=(',', ':'))
 print(json.dumps(meta, indent=1))

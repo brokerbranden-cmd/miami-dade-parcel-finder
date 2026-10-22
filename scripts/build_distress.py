@@ -123,13 +123,13 @@ if True:
             a, _, b = r['Party Name'].partition(' / '); a, b = a.strip(), b.strip()
             if a and b: G[a].add(b); G[b].add(a)
         side, plfs, defs = {}, set(), set()   # pairings are plaintiff x defendant -> 2-colour each component, plaintiff side = more lender/HOA names
-        for n0 in G:
+        for n0 in sorted(G):   # sorted: set/dict order is hash-seeded, which made the plaintiff/defendant split (and some matches) vary run to run
             if n0 in side: continue
             comp, st = [], [(n0, 0)]
             while st:
                 n, c = st.pop()
                 if n in side: continue
-                side[n] = c; comp.append(n); st += [(x, 1 - c) for x in G[n]]
+                side[n] = c; comp.append(n); st += [(x, 1 - c) for x in sorted(G[n])]
             score = [sum(1 for n in comp if side[n] == k and PLF_RX.search(n)) - sum(1 for n in comp if side[n] == k and not PLF_RX.search(n)) * .01 for k in (0, 1)]
             k = 0 if score[0] >= score[1] else 1
             for n in comp: (plfs if side[n] == k else defs).add(n)
@@ -224,6 +224,41 @@ for cfn, ms in lp_docs.items():
 lp_range = sorted(pdate(v[0].get('reC_DATE')) for v in lp_docs.values() if pdate(v[0].get('reC_DATE')))
 STATS['lis_pendens'] = {'documents': n_lp, 'matched': n_lp_m, 'how': dict(how), 'kind': dict(LPKIND), 'csv_rows': n_csv_rows, 'csv_duplicate_rows_dropped': n_csv_dups, 'csv_files': len(glob.glob(f'{LPDIR}/*.csv')), 'recorded_from': d2s(lp_range[0]) if lp_range else '', 'recorded_to': d2s(lp_range[-1]) if lp_range else '',
                         'source': 'https://onlineservices.miamidadeclerk.gov/officialrecords/ (LIS PENDENS - LIS)'}
+
+# ---------- 1b. certificates of title (Clerk CERTIFICATE OF TITLE - CTI exports raw/lp_downloads/cot_*.csv) ----------
+# A CTI is the end of a foreclosure (title issued after the sale). The exports carry no case number, so each document is matched to a
+# parcel by plat book/page + lot/block, condo declaration book/page ("OFF REC bk-pg") + unit, or the address; only a unique hit counts.
+# Output RAW/cot_matches.json {folio: [rec date, cfn, how]} (newest per folio) -> build_signals.py closes open lis pendens / sales.
+OFFREC = collections.defaultdict(list)
+for f, l in LEGALS.items():
+    m = re.search(r'\bOFF REC\s+(\d+)-(\d+)', l); u = re.search(r'\bUNIT\s+(?:NO\s+)?([\w-]+)', l)
+    if m and u: OFFREC[(int(m.group(1)), int(m.group(2)), u.group(1))].append(f)
+cot, cot_how, n_cot = {}, collections.Counter(), 0
+for cfn, rs in by.items():
+    r0 = rs[0]
+    if not cfn or not r0['Document Type'].upper().startswith('CERTIFICATE OF TITLE'): continue
+    n_cot += 1; rd = pdate(r0['Rec Date']); leg = (r0['Legal'] or '').upper()
+    try: pb, pg = [int(x or 0) for x in (r0['Plat Book/Page'] + '/0').split('/')[:2]]
+    except ValueError: pb = pg = 0
+    c, how_ = [], ''
+    lot = re.search(r'\bLOTS?\s+(\d+[A-Z]?)', leg); unit = re.search(r'\bUNIT\s+(?:NO\s+)?([\w-]+)', leg)
+    if pb and lot:
+        blk = (r0['Block Number'] or '').strip().upper()
+        for pgv in {pg, pg // 10 if pg % 10 == 0 else pg}:
+            c += LEG.get((pb, pgv, lot.group(1), blk), []) or (LEG.get((pb, pgv, lot.group(1), ''), []) if blk else [])
+        how_ = 'plat book/page + lot/block'
+    elif pb and unit:
+        c = OFFREC.get((pb, pg, unit.group(1)), []); how_ = 'condo declaration book/page + unit'
+    c = sorted(set(c))
+    if len(c) != 1 and r0['Address'].strip():
+        a = addr_to_folio(r0['Address'].strip()); c = [a] if a else []; how_ = 'address'
+    if len(c) != 1: cot_how['unmatched' if not c else 'ambiguous (skipped)'] += 1; continue
+    cot_how[how_] += 1
+    if c[0] not in cot or d2s(rd) > cot[c[0]][0]: cot[c[0]] = [d2s(rd), cfn, how_]
+json.dump(cot, open(f'{RAW}/cot_matches.json', 'w'))
+cot_dates = sorted(v[0] for v in cot.values())
+STATS['certificate_of_title'] = {'documents': n_cot, 'parcels': len(cot), 'how': dict(cot_how), 'recorded_to': max((d2s(pdate(v[0]['Rec Date'])) for k, v in by.items() if v[0]['Document Type'].upper().startswith('CERTIFICATE OF TITLE')), default=''),
+                                 'source': 'https://onlineservices.miamidadeclerk.gov/officialrecords/ (CERTIFICATE OF TITLE - CTI)'}
 
 # ---------- 2. foreclosure + tax-deed sales (RealAuction) ----------
 if os.path.exists(f'{RAW}/auctions.json'):

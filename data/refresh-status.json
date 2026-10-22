@@ -1,5 +1,5 @@
 {
- "built": "2026-10-22T09:16:46-04:00",
+ "built": "2026-10-22T11:32:28-04:00",
  "run_started": "2026-10-21T21:50:34-0400",
  "sources": {
   "pagis": {
@@ -19,17 +19,25 @@
   },
   "clerk": {
    "label": "Clerk lis pendens",
-   "status": "stale",
+   "status": "fresh",
    "last_good": "2026-10-16",
    "data_through": "2026-10-16",
-   "lag_days": 6
+   "lag_days": 6,
+   "clerk_index_through": "2026-10-16",
+   "clerk_index_checked": "live",
+   "behind_clerk_days": 0,
+   "note": "through Oct 16 (Clerk's latest)"
   },
   "clerk_clp": {
    "label": "Clerk CLP (open check)",
-   "status": "stale",
+   "status": "fresh",
    "last_good": "2026-10-16",
    "data_through": "2026-10-16",
-   "lag_days": 6
+   "lag_days": 6,
+   "clerk_index_through": "2026-10-16",
+   "clerk_index_checked": "live",
+   "behind_clerk_days": 0,
+   "note": "through Oct 16 (Clerk's latest)"
   },
   "auctions": {
    "label": "Foreclosure/tax auctions",
@@ -68,10 +76,25 @@
   },
   "probate": {
    "label": "Clerk probate (PAD/PRO/DCE)",
-   "status": "stale",
+   "status": "fresh",
    "last_good": "2026-10-16",
    "data_through": "2026-10-16",
-   "lag_days": 6
+   "lag_days": 6,
+   "clerk_index_through": "2026-10-16",
+   "clerk_index_checked": "live",
+   "behind_clerk_days": 0,
+   "note": "through Oct 16 (Clerk's latest)"
+  },
+  "cot": {
+   "label": "Clerk certificates of title (CTI)",
+   "status": "fresh",
+   "last_good": "2026-10-16",
+   "data_through": "2026-10-16",
+   "lag_days": 6,
+   "clerk_index_through": "2026-10-16",
+   "clerk_index_checked": "live",
+   "behind_clerk_days": 0,
+   "note": "through Oct 16 (Clerk's latest)"
   },
   "monroe_clerk": {
    "label": "Monroe Clerk foreclosure+probate cases",
@@ -113,13 +136,13 @@
   "parcels": 922797,
   "salesThrough": "09/22/2026",
   "rollYear": 2026,
-  "lis_pendens_matched": 1045,
+  "lis_pendens_matched": 1041,
   "lis_pendens_through": "2026-10-16",
   "auction_items": 531,
   "auctions_pulled": "2026-10-19T08:03",
-  "open_preforeclosures": 1011,
+  "open_preforeclosures": 1007,
   "probate": 739,
-  "auctions_with_max_bid": 209,
+  "auctions_with_max_bid": 207,
   "comps": 9997,
   "commercial_list": 4344,
   "commercial_live_tax": 4162,

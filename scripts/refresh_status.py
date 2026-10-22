@@ -8,7 +8,7 @@ SOURCES = {  # step -> label
     'clerk': 'Clerk lis pendens', 'clerk_clp': 'Clerk CLP (open check)', 'auctions': 'Foreclosure/tax auctions',
     'tax': 'Tax delinquency', 'viol': 'Code violations', 'permits': 'City of Miami permits',
     'county_permits': 'County permits', 'energov': 'EnerGov city permits', 'parcels': 'Parcel polygons',
-    'probate': 'Clerk probate (PAD/PRO/DCE)',
+    'probate': 'Clerk probate (PAD/PRO/DCE)', 'cot': 'Clerk certificates of title (CTI)',
     'monroe_clerk': 'Monroe Clerk foreclosure+probate cases', 'monroe_marathon_code': 'Monroe: Marathon code hearings',
     'broward_permits': 'Broward: Fort Lauderdale permits', 'broward_lp': 'Broward lis pendens (County Records FTP)'}
 MAX_LAG_DAYS = int(os.environ.get('MAX_LAG_DAYS', '3'))
@@ -24,10 +24,25 @@ def through(globs):
 DATA_THROUGH = {  # source -> newest filing date held (stale when older than MAX_LAG_DAYS, whatever the step said)
     'clerk': lambda: through(['raw/lp_downloads/lp_*.csv', os.path.join(RAW, 'clerk/LIS/*.json')]),
     'clerk_clp': lambda: through(['raw/lp_downloads/clp_*.csv', 'raw/lp_downloads/cot_*.csv', 'raw/lp_downloads/dis_*.csv', os.path.join(RAW, 'clerk/CLP/*.json')]),
+    'cot': lambda: through(['raw/lp_downloads/cot_*.csv', os.path.join(RAW, 'clerk/COT/*.json')]),
     'probate': lambda: through(['raw/probate_downloads/probate_*.csv', 'raw/probate_cases/ocs_*.txt']),
     'monroe_clerk': lambda: jmax(os.path.join(RAW, 'monroe/clerk_cases.json'), lambda d: max((c.get('filed') or '' for c in d.get('cases', [])), default='')),
     'broward_lp': lambda: through([os.path.join(RAW, 'broward/official_records/*doc*.txt')]),
 }
+# Clerk Official Records sources can never be newer than the Clerk's own index ("This database contains official records recorded
+# through: <date>", public GET api/home/GetDate that the search page itself calls). Holding everything through that date = fresh.
+CLERK_INDEXED = {'clerk', 'clerk_clp', 'cot', 'probate'}
+def clerk_index():
+    cache = os.path.join(RAW, 'clerk_index_through.json')
+    try:
+        import urllib.request
+        rq = urllib.request.Request('https://onlineservices.miamidadeclerk.gov/officialrecords/api/home/GetDate', headers={'User-Agent': 'Mozilla/5.0'})
+        v = json.load(urllib.request.urlopen(rq, timeout=20))[:10]; datetime.date.fromisoformat(v)
+        json.dump({'through': v, 'checked': datetime.datetime.now().astimezone().isoformat(timespec='seconds')}, open(cache, 'w')); return v, 'live'
+    except Exception:
+        try: return json.load(open(cache))['through'], 'cached'
+        except Exception: return None, None
+CLERK_IDX, CLERK_IDX_HOW = clerk_index()
 LAG = {'monroe_clerk': 7, 'broward_lp': 4}
 def jmax(p, f):
     try: v = f(json.load(open(p))).replace('-', '')
@@ -78,6 +93,11 @@ for s, label in SOURCES.items():
             iso = f"{d[:4]}-{d[4:6]}-{d[6:]}"; lag = (datetime.date.today() - datetime.date.fromisoformat(iso)).days
             hist[s] = iso; k = 'ok' if lag <= LAG.get(s, MAX_LAG_DAYS) else 'stale'
             res['sources'][s] = {'label': label, 'status': 'fresh' if k == 'ok' else 'stale', 'last_good': iso, 'data_through': iso, 'lag_days': lag}
+            if s in CLERK_INDEXED and CLERK_IDX:
+                cur = iso >= CLERK_IDX; dd = datetime.date.fromisoformat(min(iso, CLERK_IDX) if cur else iso)
+                res['sources'][s].update({'clerk_index_through': CLERK_IDX, 'clerk_index_checked': CLERK_IDX_HOW, 'behind_clerk_days': 0 if cur else (datetime.date.fromisoformat(CLERK_IDX) - dd).days,
+                                          'note': f"through {dd.strftime('%b')} {dd.day} (Clerk's latest)" if cur else f"through {dd.strftime('%b')} {dd.day}; Clerk has records through {CLERK_IDX}"})
+                if cur: res['sources'][s]['status'] = 'fresh'
         else:
             res['sources'][s] = {'label': label, 'status': 'stale', 'last_good': None, 'data_through': None}
         continue

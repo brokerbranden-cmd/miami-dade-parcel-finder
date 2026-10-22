@@ -7,3 +7,4 @@
 - [ ] tests/e2e_equity.py, regression, push, live verify
 - e2e_equity desktop+mobile ALL PASS on local 8098 (server in /workspace/pf-fx). Fetcher restarted with 8 workers (~60-100/min).
 - NEXT: let fetch run, rebuild data/equity.json.gz, commit, PORT=8098 bash scripts/pre_push_regression.sh, push, live verify.
+- Data snapshot 1,991 parcels (pf 877/879, au 208/208, pb 636/640 + top distress). Fetcher continuing with 3 workers. Regression started on next commit.

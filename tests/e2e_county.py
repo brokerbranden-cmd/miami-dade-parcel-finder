@@ -21,7 +21,7 @@ with sync_playwright() as pw:
     for sel in ('#mrGrp', '.grp[data-need="mzoning"]'):
         check(pg.is_visible(sel), f'{sel} visible for Monroe (zoning + buildability layers now exist)')
     check(pg.evaluate("PFCounty.has('monroe') && PFCounty.has('mzoning') && !PFCounty.has('zoning') && !PFCounty.has('distress')"), 'Monroe layer list')
-    ideas = pg.eval_on_selector_all('#ideas .chip', 'n=>n.map(x=>x.textContent)')
+    ideas = pg.eval_on_selector_all('#ideas .chip:not([data-na])', 'n=>n.map(x=>x.textContent)')
     check(not any('Hottest' in t or 'Assemblage' in t or 'Commercial distress' in t for t in ideas), f'ideas without missing layers ({len(ideas)})')
     check(pg.inner_text('label[for="cra"]') == 'FEMA flood zone', 'flood zone filter label')
     opts = pg.eval_on_selector_all('#cra option', 'n=>n.map(x=>x.value)')
@@ -51,7 +51,7 @@ with sync_playwright() as pw:
     check(pg.is_visible('.grp.distress'), 'Miami-Dade shows distress filters')
     check(not pg.is_visible('#mrGrp') and pg.evaluate("!PFCounty.has('monroe')"), 'Miami-Dade hides the Monroe-only buildability group')
     check(pg.query_selector('#cards .card .mrb') is None, 'no Monroe buildability badges on Miami-Dade cards')
-    check(not any('Buildable' in t or 'ROGO' in t for t in pg.eval_on_selector_all('#ideas .chip', 'n=>n.map(x=>x.textContent)')), 'no Monroe presets on Miami-Dade')
+    check(not any('Buildable' in t or 'ROGO' in t for t in pg.eval_on_selector_all('#ideas .chip:not([data-na])', 'n=>n.map(x=>x.textContent)')), 'no Monroe presets on Miami-Dade')
     check(pg.evaluate("localStorage.getItem('pf.county')") == 'miami-dade', 'choice remembered')
     b.close()
 check(not errs, 'no page errors ' + '; '.join(errs[:3]))

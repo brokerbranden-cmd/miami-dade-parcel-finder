@@ -85,6 +85,6 @@ with sync_playwright() as pw:
         if MOB and pg.query_selector('#drive:not([hidden])'): pg.click('#dExit')
         pg.wait_for_function('window.PF_READY', timeout=240000)
         ok(pg.evaluate("(()=>{const e=document.querySelector('.eqrow'); return !e||e.hidden||!e.offsetParent})()"), f'{cty}: equity filter hidden (no Clerk mortgage data)')
-        ok(not any('equity' in l.lower() for l in pg.eval_on_selector_all('#ideas .chip', 'e=>e.map(x=>x.textContent)')), f'{cty}: no equity presets')
+        ok(not any('equity' in l.lower() for l in pg.eval_on_selector_all('#ideas .chip:not([data-na])', 'e=>e.map(x=>x.textContent)')), f'{cty}: no enabled equity presets (unavailable ones disabled)')
     b.close()
 print(f'{len(errs)} failures: {errs}' if errs else 'ALL PASS'); sys.exit(1 if errs else 0)

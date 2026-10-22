@@ -19,3 +19,4 @@
 - 11:42 Monroe city permits/code wired (monroe_enrich.load_city_records, score +8 open code/+4 code/+4 distress permit, MR_SIG dperm/permit_open). Monroe build PID 833883 log /tmp/monroe_build.log (KW cases partial: 99 so far)
 - 11:54 rebased onto origin/main 7b7c3c3 (LP Oct 16) cleanly (COVERAGE conflicts merged by hand); commits 62f0968 d1dd541 49e8a75 1a16c10. pre_push_regression PID 846645 log /workspace/pf-fx-regr.log for HEAD 1a16c10
 - 12:02 Monroe KW/Islamorada moved to /workspace/pf-monroe: stripped from this push (files restored to origin). Killed regression 846645 (its commit changed). New regression below.
+- 12:53 regression 855231 FAILED equity_desktop (test counted disabled n/a idea chips); fixed e2e_equity + e2e_county selectors (:not([data-na])), both pass; killed 855231; new regression below

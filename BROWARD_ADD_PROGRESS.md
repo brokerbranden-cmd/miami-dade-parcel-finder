@@ -6,3 +6,4 @@
 - 10:11 resumed after interrupt; energov still running (Miramar at 2014, ~150k left); other job regression PID 703744 running, origin/main still fa5f716
 - 10:39 EnerGov done (all 7 pulls complete); building data/broward
 - 10:50 data/broward rebuilt; signals tests pass desktop+mobile, e2e_broward desktop pass; docs filled. Next: commit, wait for other job's push, rebase, regression
+- 11:02 watcher PID 778313 (/workspace/pf-fx-watch.sh, log /workspace/pf-fx-watch.log): waits for other job push, rebases, patches status, commits, runs regression on PORT 8098 (log /workspace/pf-fx-regr.log)

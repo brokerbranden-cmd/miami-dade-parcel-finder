@@ -14,3 +14,5 @@
 - s18 mobile root cause: 2 new presets landed in More-ideas 'Distress' row; chip reflow during Playwright click shifted Who-owns-it rows. Fix: presets renamed 'High-equity owners'/'Free & clear owners' (Owners category), appended at END of IDEAS (indexes stable); equity filter moved into Who-owns-it group below #ogInst. Subset s10-s18 mobile 10/10, e2e_equity desk+mob pass.
 - data rebuilt: 4,098 parcels
 - s01 desktop failed: scenarios require Miami-Dade presets to be a contiguous index prefix; moved equity presets to end of the Miami-Dade block (before 'Buildable lots'). s01 desktop + s01,s10-s18 mobile pass.
+- 01:55 regression 24/24 green on 058250e, pushed e280b14..058250e. Live verify running (/tmp/live_d.log, /tmp/live_m.log). Fetcher restarted detached (log /workspace/raw/fetch_mortgages.log).
+- Live verify desktop+mobile ALL PASS. Done.

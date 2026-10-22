@@ -110,14 +110,49 @@
   },
   "broward_permits": {
    "label": "Broward: Fort Lauderdale permits",
-   "status": "fresh",
-   "last_good": "2026-10-21T21:40:18-0400"
+   "status": "stale",
+   "last_good": "2026-03-16",
+   "data_through": "2026-03-16",
+   "lag_days": 220
   },
   "broward_lp": {
    "label": "Broward lis pendens (County Records FTP)",
    "status": "stale",
    "last_good": null,
    "data_through": null
+  },
+  "broward_energov": {
+   "label": "Broward: EnerGov permits + code cases (Pembroke Pines, Sunrise, Oakland Park; Miramar permits)",
+   "status": "fresh",
+   "last_good": "2026-10-21",
+   "data_through": "2026-10-21",
+   "lag_days": 1
+  },
+  "broward_fc_notices": {
+   "label": "Broward: foreclosure notices (published, floridapublicnotices.com)",
+   "status": "fresh",
+   "last_good": "2026-10-22",
+   "data_through": "2026-10-22",
+   "lag_days": 0
+  },
+  "broward_auctions": {
+   "label": "Broward: foreclosure + tax-deed auctions",
+   "status": "fresh",
+   "last_good": "2026-10-22T09:28"
+  },
+  "monroe_keywest": {
+   "label": "Monroe: Key West permits + code cases (eTRAKiT)",
+   "status": "fresh",
+   "last_good": "2026-10-21",
+   "data_through": "2026-10-21",
+   "lag_days": 1
+  },
+  "monroe_islamorada": {
+   "label": "Monroe: Islamorada permits + code cases (CityView; pull date, records carry year only)",
+   "status": "fresh",
+   "last_good": "2026-10-22",
+   "data_through": "2026-10-22",
+   "lag_days": 0
   }
  },
  "builds": {
@@ -130,7 +165,9 @@
   "commercial": "ok",
   "data": "ok",
   "zoning_rules": "ok",
-  "assemblages": "ok"
+  "assemblages": "ok",
+  "broward_data": "ok",
+  "monroe_data": "ok"
  },
  "counts": {
   "parcels": 922797,

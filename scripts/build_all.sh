@@ -93,6 +93,10 @@ case " ${SKIP_COUNTIES:-} " in *" monroe "*) note "skip monroe (SKIP_COUNTIES)";
   # Monroe Clerk court cases (foreclosure = lis pendens proxy, probate; public, no captcha) + Marathon code hearings -> used by monroe_enrich
   RETRIES=2 fetch monroe_clerk "monroe/clerk_cases.json" timeout 2400 python3 scripts/counties/monroe/fetch_clerk_monroe.py 36
   RETRIES=2 fetch monroe_marathon_code "monroe/marathon_code.json" timeout 1800 python3 scripts/counties/monroe/fetch_marathon_code.py
+  # Key West eTRAKiT + Islamorada CityView permits / code cases (public portals, no login/captcha; one request at a time, ~1.5 s apart).
+  # Incremental + resumable: each run re-pulls recent permit days / open cases and new records; MAX_MINUTES bounds a run, the rest continues next week.
+  RETRIES=2 fetch monroe_keywest "monroe/kw_permits.json monroe/kw_cases.json" timeout 10800 env MAX_MINUTES=150 python3 scripts/counties/monroe/fetch_keywest_etrakit.py
+  RETRIES=2 fetch monroe_islamorada "monroe/isl_cityview.json" timeout 7200 env MAX_MINUTES=100 ISL_MAX_DETAIL=600 python3 scripts/counties/monroe/fetch_islamorada_cityview.py
   build monroe_data  python3 scripts/counties/monroe/build_monroe.py data/monroe ;;
 esac
 # Broward city permits (public ArcGIS; Broward-only raw files, not mixed with Miami-Dade)

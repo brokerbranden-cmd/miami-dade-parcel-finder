@@ -2,6 +2,7 @@
 tax-deed notices, and the per-parcel Buildability rating (screening tool - NOT a determination). Used by build_monroe.py; inputs are numpy arrays aligned to the built parcel rows."""
 import os, re, json, collections, datetime as dt, numpy as np, pandas as pd
 import monroe_zoning as MZ
+import monroe_city_permits as MCP
 RAW = os.path.join(os.environ.get('RAW', '/workspace/raw'), 'monroe')
 TIER = {'': 0, 'I': 1, 'II': 2, 'III': 3, 'III-A': 4, 'Military': 5}
 TIER_LABEL = ['', 'Tier I (Natural Area)', 'Tier II (Big Pine Key / No Name Key)', 'Tier III (infill)', 'Tier III-A (Special Protection Area)', 'Military']
@@ -12,7 +13,7 @@ ENV_LABEL = {'fnai': 'State / federal conservation land (FNAI)', 'ff': 'Florida 
              'upland': 'Hammock / pineland habitat (clearing limits)', 'cbrs': 'Coastal Barrier Resources System unit', 'species': 'Protected-species focus area', 'deer': 'Key deer focus area', 'historic': 'Historic district',
              'subdmg': 'Substantial-damage record', 'repl': 'FEMA repetitive-loss area', 'kwsewer': 'Key West sewer main nearby', 'beach': 'Beach berm / buttonwood', 'water': 'Open water / submerged'}
 # signal bits (sigm column; filters)
-SG = dict(fc_open=1, fc_any=2, pr_open=4, pr_any=8, taxdeed=16, code=32, permit_recent=64, permit_open=128, absentee=256, vacant=512, estate=1024, dup=2048, rogo_award=4096, rogo_applied=8192, teardown=16384, rogo_ded=32768)
+SG = dict(fc_open=1, fc_any=2, pr_open=4, pr_any=8, taxdeed=16, code=32, permit_recent=64, permit_open=128, absentee=256, vacant=512, estate=1024, dup=2048, rogo_award=4096, rogo_applied=8192, teardown=16384, rogo_ded=32768, code_open=65536)   # sigm is uint32 (code_open added with the Key West / Islamorada city data)
 RES_GROUPS = {'sf', 'low', 'mf', 'mh', 'mx', 'rs'}
 VACANT_UC = {0, 10, 40, 70, 80, 99}
 def tcase_sentence(s): return s[:1].upper() + s[1:]
@@ -247,12 +248,17 @@ def enrich(df, g, uc, bv, lot, yb, sqft, mk, kinds, est, flood_s, absent, owners
     p = os.path.join(RAW, 'marathon_code.json')
     if os.path.exists(p):
         for r in json.load(open(p)): mc[r['re']].append(r)
+    # Key West eTRAKiT + Islamorada CityView permits / code cases (joined by RE number)
+    city, cst, cnew = MCP.load(RAW); st['city_permits'] = cst; st['city_newest'] = cnew
+    st['city_matched'] = {'kw_permit_parcels': 0, 'kw_code_parcels': 0, 'isl_permit_parcels': 0, 'isl_code_parcels': 0, 'kw_permits_matched': 0, 'kw_cases_matched': 0, 'isl_permits_matched': 0, 'isl_cases_matched': 0}
+    pcs = np.zeros(n, np.uint16); vadd = np.zeros(n, np.uint16)   # PCS bits (app.js PCS order) and vacancy-hint bits (vacancy_lib VSIG order)
+    cut24 = (dt.date.today() - dt.timedelta(days=730)).isoformat()
     # MCE
     mce = load_mce(res); st['mce_permit_parcels'] = len(mce['permits']); st['mce_code_parcels'] = len(mce['code'])
     td = {x['re'] for x in json.load(open(f'{RAW}/tax_deed_apps.json'))} if os.path.exists(f'{RAW}/tax_deed_apps.json') else set()
     today = dt.date.today(); y5 = today.year - 5
     lperm = np.zeros(n, np.uint16); pn5 = np.zeros(n, np.uint16); cn_open = np.zeros(n, np.uint8); cn5 = np.zeros(n, np.uint16); clast = np.zeros(n, np.uint16)
-    psum = [''] * n; csum = [''] * n; sigm = np.zeros(n, np.uint16); bld = np.zeros(n, np.uint8); reasons = [''] * n; rtxt_out = [''] * n; zinfo = [''] * n
+    psum = [''] * n; csum = [''] * n; sigm = np.zeros(n, np.uint32); bld = np.zeros(n, np.uint8); reasons = [''] * n; rtxt_out = [''] * n; zinfo = [''] * n
     DAY0 = dt.date(1900, 1, 1); dd = lambda d: (d - DAY0).days
     gc_ = lambda c: g[c].values if c in g.columns else None
     KW = dict(F=gc_('kw_Front_Setb'), S=gc_('kw_Side_Setba'), R=gc_('kw_Rear_Setba'), C=gc_('kw_Bldg_Cover'), I=gc_('kw_ISR'))
@@ -267,15 +273,51 @@ def enrich(df, g, uc, bv, lot, yb, sqft, mk, kinds, est, flood_s, absent, owners
             ds = sorted([(parse_date(x.get('apply_date')), x) for x in pl if parse_date(x.get('apply_date'))], key=lambda t: t[0], reverse=True)
             if ds: lperm[k] = min(65535, dd(ds[0][0])); pn5[k] = sum(1 for d, _ in ds if d.year >= y5)
             psum[k] = f'{len(pl)} county permits (legacy system, through 9/2022); latest ' + '; '.join(f"{x.get('permit_no')} {x.get('permit_desc') or x.get('permit_type')} {str(x.get('apply_date'))[:10]} {x.get('status')}" for _, x in ds[:3])
+        cp = city.get(r) if r in city else None
+        cpl = cp['permits'] if cp else []; ccl = cp['cases'] if cp else []
+        if cpl:
+            src = cpl[0]['src']; cm = st['city_matched']; key = 'kw' if src == 'Key West' else 'isl'
+            cm[key + '_permit_parcels'] += 1; cm[key + '_permits_matched'] += len(cpl)
+            pd_ = sorted(cpl, key=lambda x: (x['date'] or str(x['year'] or '')), reverse=True)
+            dated = [x for x in pd_ if x['date']]
+            if dated:
+                d0 = dt.date.fromisoformat(dated[0]['date']); lperm[k] = max(int(lperm[k]), min(65535, dd(d0)))
+            pn5[k] += sum(1 for x in cpl if (x['year'] or 0) >= y5)
+            po = [x for x in cpl if x['open']]; recent = [x for x in dated if x['date'] >= cut24]
+            if po: sg |= SG['permit_open']; pcs[k] |= 1
+            if recent: sg |= SG['permit_recent']; vadd[k] |= 1 << 11
+            if any((x['year'] or 0) >= y5 for x in cpl): pcs[k] |= 4
+            if any(x['expired'] for x in cpl) and not po and not recent: pcs[k] |= 2; vadd[k] |= 1 << 4
+            txt = f"{len(cpl)} {src} permits ({len(po)} open); latest " + '; '.join(f"{x['no']} {x['type'][:40]} {x['date'] or x['year']} {x['status']}" + (f" - {x['desc'][:70]}" if x['desc'] else '') for x in pd_[:3])
+            psum[k] = (psum[k] + ' | ' if psum[k] else '') + txt
+        if cp: pcs[k] |= 128
+        if ccl:
+            src = ccl[0]['src']; cm = st['city_matched']; key = 'kw' if src == 'Key West' else 'isl'
+            cm[key + '_code_parcels'] += 1; cm[key + '_cases_matched'] += len(ccl)
+            co = [x for x in ccl if x['open']]
+            cn_open[k] = min(255, int(cn_open[k]) + len(co)); cn5[k] += sum(1 for x in ccl if (x['year'] or 0) >= y5)
+            dated = sorted((x['date'] for x in ccl if x['date']), reverse=True)
+            if dated: clast[k] = max(int(clast[k]), min(65535, dd(dt.date.fromisoformat(dated[0]))))
+            sg |= SG['code']
+            if co:
+                sg |= SG['code_open']; pcs[k] |= 16
+                if any(x['kind'] == 'US' for x in co): vadd[k] |= 1 << 1
+                elif any(x['kind'] == 'NG' for x in co): vadd[k] |= 1 << 2
+                else: vadd[k] |= 1 << 10
+            if any((x['year'] or 0) >= y5 for x in ccl): pcs[k] |= 32
+            cs_ = sorted(ccl, key=lambda x: (x['date'] or str(x['year'] or ''), x['no']), reverse=True)
+            ctxt = f"{len(ccl)} {src} code cases ({len(co)} open): " + '; '.join(f"{x['no']} {x['type'][:40]} {'opened ' + x['date'] if x['date'] else str(x['year'] or '')} {x['status']}" + (f" ({x['viol'][:60]})" if x.get('viol') else '') for x in cs_[:3])
+            csum[k] = ctxt
         mrows = mc.get(r, [])
         if cl or mrows:
-            cn5[k] = sum(1 for x in cl if (parse_date(x.get('open_date') or x.get('date')) or dt.date(1900, 1, 1)).year >= y5) + len(mrows)
-            cn_open[k] = sum(1 for x in cl if str(x.get('status', '')).upper().startswith(('OPEN', 'ACTIVE'))) 
+            cn5[k] += sum(1 for x in cl if (parse_date(x.get('open_date') or x.get('date')) or dt.date(1900, 1, 1)).year >= y5) + len(mrows)
+            cn_open[k] = min(255, int(cn_open[k]) + sum(1 for x in cl if str(x.get('status', '')).upper().startswith(('OPEN', 'ACTIVE'))))
             bits = []
             if cl: bits.append(f'{len(cl)} county code cases (through 2023)')
             if mrows: bits.append('Marathon magistrate: ' + '; '.join(f"{x['case']} {x['date']} {x['violation'][:90]}" for x in mrows[:2]))
-            csum[k] = ' | '.join(bits)
+            csum[k] = ' | '.join(([csum[k]] if csum[k] else []) + bits)
             sg |= SG['code']
+            if cn_open[k]: sg |= SG['code_open']
         fcl, fcn, fco = fcs[k]; prl, prn, pro = prs[k]
         if fcn: sg |= SG['fc_any'] | (SG['fc_open'] if fco else 0)
         if prn: sg |= SG['pr_any'] | (SG['pr_open'] if pro else 0)
@@ -309,6 +351,6 @@ def enrich(df, g, uc, bv, lot, yb, sqft, mk, kinds, est, flood_s, absent, owners
     st['buildability'] = {k: int((bld == v).sum()) for k, v in RATE.items() if k}
     st['signals'] = {k: int(((sigm & v) > 0).sum()) for k, v in SG.items()}
     st['rogo'] = {ROGO_ST[i]: int((rst == i).sum()) for i in range(1, 5)}
-    cols = dict(mz=mzi, tier=tier, rogo=rst, env=env, sigm=sigm, bld=bld, lperm=lperm, pn5=pn5, cn_open=cn_open, cn5=cn5, clast=clast)
+    cols = dict(mz=mzi, tier=tier, rogo=rst, env=env, sigm=sigm, bld=bld, lperm=lperm, pn5=pn5, cn_open=cn_open, cn5=cn5, clast=clast, pcs=pcs, vadd=vadd)
     strs = dict(reasons=reasons, rogo_txt=rtxt_out, zinfo=zinfo, psum=psum, csum=csum)
     return cols, strs, mzone, rules, st

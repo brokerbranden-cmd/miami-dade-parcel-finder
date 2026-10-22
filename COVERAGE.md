@@ -59,10 +59,10 @@ Miami-Dade sources in the weekly run: `permits` (City of Miami + County Building
 |---|---|---|---|---|---|
 | Unincorporated Monroe | Monroe | legacy permits applied before 2022-10-01 | code cases opened before 2024-01-01 | MCeSearch (mcesearch.monroecounty-fl.gov); newer records only in Oracle OPAL (no bulk export) | Historical one-time pull in pack; newer: NO PUBLIC BULK DATA |
 | Marathon | Monroe | - | Special Magistrate hearing agendas (parcel IDs) | ci.marathon.fl.us PDFs | WIRED into weekly (`monroe_marathon_code`) 2026-10-21 |
-| Key West | Monroe | eTRAKiT portal (per-record search) | - | etrakit.cityofkeywest-fl.gov | NOT WIRED - interactive portal only, no bulk/API |
-| Islamorada | Monroe | CityView portal | complaint intake only | islamorada.fl.us/CityView | NOT WIRED - interactive portal only |
-| Key Colony Beach | Monroe | Citizenserve portal | Citizenserve portal | citizenserve installation 326 | NOT WIRED - interactive portal only |
-| Layton | Monroe | none found | none found | - | NO PUBLIC DATA found |
+| Key West | Monroe | since 2023-01 (eTRAKiT, by issue date) | since 2023-01 (CC cases via detail panel: status, opened/closed) | etrakit.cityofkeywest-fl.gov (CentralSquare eTRAKiT, public, no login/captcha) | WIRED into weekly (`monroe_keywest`) 2026-10-22; joined by RE number |
+| Islamorada | Monroe | since 2023 (CityView permit locator + permit detail dates) | since 2023 (public CityView code-case locator: type, status, RE#; year opened only, no case detail page) | cvportal.us/CityViewPortal (Harris CityView, public, no login/captcha) | WIRED into weekly (`monroe_islamorada`) 2026-10-22; joined by RE number |
+| Key Colony Beach | Monroe | - | - | Citizenserve (installation 326) | NOT WIRED - search requires reCAPTCHA v3 (not bypassed); Ch. 119 request drafted in MONROE_GAP_PLAN.md |
+| Layton | Monroe | - | - | none published | NO PUBLIC DATA; Ch. 119 request drafted in MONROE_GAP_PLAN.md |
 
 ## Broward (31 municipalities + unincorporated)
 

@@ -10,6 +10,7 @@ SOURCES = {  # step -> label
     'county_permits': 'County permits', 'energov': 'EnerGov city permits', 'parcels': 'Parcel polygons',
     'probate': 'Clerk probate (PAD/PRO/DCE)', 'cot': 'Clerk certificates of title (CTI)',
     'monroe_clerk': 'Monroe Clerk foreclosure+probate cases', 'monroe_marathon_code': 'Monroe: Marathon code hearings',
+    'monroe_keywest': 'Monroe: Key West permits + code cases (eTRAKiT)', 'monroe_islamorada': 'Monroe: Islamorada permits + code cases (CityView)',
     'broward_permits': 'Broward: Fort Lauderdale permits', 'broward_lp': 'Broward lis pendens (County Records FTP)',
     'broward_energov': 'Broward: EnerGov permits + code cases (Pembroke Pines, Sunrise, Oakland Park; Miramar permits)',
     'broward_fc_notices': 'Broward: foreclosure notices (published, floridapublicnotices.com)', 'broward_auctions': 'Broward: foreclosure + tax-deed auctions'}
@@ -33,10 +34,15 @@ DATA_THROUGH = {  # source -> newest filing date held (stale when older than MAX
     # newest record actually held (not the pull time): FTL's own layer stopped updating 2026-03-16, so it reports stale honestly
     'broward_permits': lambda: jmax(os.path.join(RAW, 'broward/permits/fort_lauderdale.json'), lambda d: d.get('data_through') or ''),
     'broward_energov': lambda: jmax(os.path.join(RAW, 'broward/permits/energov/summary.json'), lambda d: min((v.get('newest') or v['max_date'] for v in d['portals'].values() if v.get('rows')), default='')),   # the OLDEST of the per-portal newest dates
+    # Key West: the older of the newest permit issue date and the newest code-case open date (both must be current to count as fresh)
+    'monroe_keywest': lambda: min_d(jmax(os.path.join(RAW, 'monroe/kw_permits.json'), lambda d: d.get('newest') or ''), jmax(os.path.join(RAW, 'monroe/kw_cases.json'), lambda d: d.get('newest') or '')),
+    # Islamorada: newest permit application / issue date read from the permit detail pages (code cases carry only a year, so they cannot date the feed)
+    'monroe_islamorada': lambda: jmax(os.path.join(RAW, 'monroe/isl_cityview.json'), lambda d: (d.get('newest') or {}).get('permit_date') or ''),
     'broward_fc_notices': lambda: jmax(os.path.join(RAW, 'broward/fpn_foreclosure.json'), lambda d: d.get('newest') or ''),
 }
 # Clerk Official Records sources can never be newer than the Clerk's own index ("This database contains official records recorded
 # through: <date>", public GET api/home/GetDate that the search page itself calls). Holding everything through that date = fresh.
+def min_d(*a): return min(a) if all(a) else None
 CLERK_INDEXED = {'clerk', 'clerk_clp', 'cot', 'probate'}
 def clerk_index():
     cache = os.path.join(RAW, 'clerk_index_through.json')
@@ -49,7 +55,7 @@ def clerk_index():
         try: return json.load(open(cache))['through'], 'cached'
         except Exception: return None, None
 CLERK_IDX, CLERK_IDX_HOW = clerk_index()
-LAG = {'monroe_clerk': 7, 'broward_lp': 4, 'broward_permits': 10, 'broward_energov': 4, 'broward_fc_notices': 4}
+LAG = {'monroe_clerk': 7, 'broward_lp': 4, 'broward_permits': 10, 'broward_energov': 4, 'broward_fc_notices': 4, 'monroe_keywest': 7, 'monroe_islamorada': 7}
 def jmax(p, f):
     try: v = f(json.load(open(p))).replace('-', '')
     except Exception: return None

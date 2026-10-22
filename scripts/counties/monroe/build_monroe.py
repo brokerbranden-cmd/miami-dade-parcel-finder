@@ -168,12 +168,19 @@ owner_stats = {'groups': int(len(G) - 1), 'parcels_in_groups': int((og > 0).sum(
 _geo = ME.load_geo(list(df.FOLIO)); _kinds = list(kinds)
 ecols, estrs, mzone, zrules, estats = ME.enrich(df, _geo, uc.values, bv, lot, yb, N('TOT_LVG_AR').values, mk, _kinds, est, flood_s, absz, list(o1), addr)
 print('enrich', json.dumps(estats)[:1500])
+# Key West / Islamorada permits + code cases feed the vacancy hint the same way vacancy_lib does for Miami-Dade:
+# US open unsafe-structure case +25, NG open neglect-type case +15, XP expired permit (no newer one) +8, OV other open case +4, RP permit in the last 24 months -15
+VPTS = {1: 25, 2: 15, 4: 8, 10: 4, 11: -15}
+va = ecols['vadd'].astype(np.int64) * (bv > 0) * ~govt
+vsig = vsig | va
+vraw = na * 15 + (yrs >= 20) * 5 + tear * 8 + est * 8 + sum(((va >> b) & 1) * p for b, p in VPTS.items())
+vscore = np.clip(vraw, 0, 100) * ~govt
 zoning_s = np.where(ecols['mz'] > 0, '', [('No digital zoning map - ' + j) for j in _geo.jur.values])
 zoning_d, zoning_i = dict_index(list(zoning_s))
 cols_main = {'city': u8(city_i), 'zip': u16(zip_i), 'cra': u8(flood_i), 'landuse': u16(landuse_i), 'zoning': u16(zoning_i), 'mz': ecols['mz'], 'tier': ecols['tier'], 'rogo': ecols['rogo'], 'env': ecols['env'], 'sigm': ecols['sigm'], 'bld': ecols['bld'],
     'lot': u32(lot), 'mkt': u32(mk), 'land': u32(landv), 'bldg': u32(bv), 'sqft': u32(N('TOT_LVG_AR')), 'yb': u16(yb), 'units': u16(N('NO_RES_UNT')),
     'beds': z(np.uint8), 'baths': z(np.uint8), 'stories': z(np.uint8), 'sd1': u16(sd1), 'sale1': u32(N('SALE_PRC1')), 'sq1': u8(qf('QUAL_CD1')), 'flags': flags,
-    'prv': z(np.uint32), 'dscore': u8(dscore), 'dsig': u16(dsig), 'og': og.astype(np.uint32), 'vscore': u8(vscore), 'vsig': u16(vsig), 'pcs': z(np.uint16)}
+    'prv': z(np.uint32), 'dscore': u8(dscore), 'dsig': u16(dsig), 'og': og.astype(np.uint32), 'vscore': u8(vscore), 'vsig': u16(vsig), 'pcs': ecols['pcs']}
 legal = [re.sub(r'\s+', ' ', s).strip() for s in S('S_LEGAL')]
 book = [f'{b}-{p}' if b.strip('0 ') else '' for b, p in zip(S('OR_BOOK1'), S('OR_PAGE1'))]
 str_main = {'folio': list(df.FOLIO), 'addr': addr, 'owner': [re.sub(r'\s+', ' ', o).strip() for o in o1]}

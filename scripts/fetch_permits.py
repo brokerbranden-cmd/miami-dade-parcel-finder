@@ -16,24 +16,32 @@ CNTY = 'https://services.arcgis.com/8Pc9XBTAsYuxx9Ny/arcgis/rest/services/miamid
 UA = {'User-Agent': 'parcel-finder weekly refresh (python-requests)'}
 
 def agg(url, where, datef, page):
-    out, off = [], 0
+    """groupBy FolioNumber with keyset paging (FolioNumber > last) instead of resultOffset: deep offsets on the
+    county service time out server-side and come back as HTTP 400 'Unable to perform query' (Oct 2026).
+    On error: exponential backoff (5s..160s) and the page is halved (down to 100)."""
+    out, last = [], None
     stats = json.dumps([{'statisticType': 'max', 'onStatisticField': datef, 'outStatisticFieldName': 'mx'},
                         {'statisticType': 'count', 'onStatisticField': 'ObjectId', 'outStatisticFieldName': 'n'}])
     while True:
-        for i in range(4):
+        w = where if last is None else f"({where}) AND FolioNumber > {last}"
+        for i in range(8):
             try:
-                j = requests.get(url + '/query', params={'where': where, 'groupByFieldsForStatistics': 'FolioNumber', 'outStatistics': stats,
-                                 'orderByFields': 'FolioNumber', 'resultOffset': off, 'resultRecordCount': page, 'f': 'json'}, headers=UA, timeout=120).json()
+                j = requests.get(url + '/query', params={'where': w, 'groupByFieldsForStatistics': 'FolioNumber', 'outStatistics': stats,
+                                 'orderByFields': 'FolioNumber', 'resultRecordCount': page, 'f': 'json'}, headers=UA, timeout=180).json()
                 if 'error' in j: raise RuntimeError(j['error'])
                 break
             except Exception as e:
-                print('  retry', e, flush=True); time.sleep(5)
+                print('  retry', i, 'page', page, e, flush=True); time.sleep(5 * 2 ** min(i, 5)); page = max(100, page // 2)
         else:
             raise SystemExit('failed ' + url)
-        f = [x['attributes'] for x in j.get('features', [])]
-        out += f; off += len(f)
-        if not f or (not j.get('exceededTransferLimit') and len(f) < page): break
-        time.sleep(0.3)
+        f = [x['attributes'] for x in j.get('features', []) if x['attributes'].get('FolioNumber') not in (None, '')]
+        raw = j.get('features', [])
+        out += f
+        if not raw or len(raw) < page and not j.get('exceededTransferLimit'): break
+        v = raw[-1]['attributes']['FolioNumber']
+        nl = repr(v) if isinstance(v, (int, float)) else "'" + str(v).replace("'", "''") + "'"
+        if nl == last: break
+        last = nl; time.sleep(0.3)
     return out
 
 def rows(url, where, fields):

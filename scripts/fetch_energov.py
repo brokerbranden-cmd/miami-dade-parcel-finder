@@ -25,6 +25,7 @@ ONLY = set((opt('--only') or '').split(',')) - {''}
 KINDS = (opt('--kinds') or 'permit,code').split(',')
 SINCE = int(opt('--since', '1990'))
 OUT = f'{RAW}/permits/energov'
+RECENT_DAYS = int(opt('--recent-days', '120'))
 TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energov_template.json')   # the portal's own search request body (all criteria blocks, nulls)
 SORT = {'permit': 'PermitNumber.keyword', 'code': 'CaseNumber.keyword'}
 
@@ -47,11 +48,11 @@ class Portal:
         self.slug = slug; self.city, self.muni, self.base = PORTALS[slug]
         self.s = requests.Session()   # NB: these WAFs 403 a custom User-Agent; the stock python-requests one is accepted
         self.last = 0
-        for i in range(4):
+        for i in range(7):   # tylerhost WAF throttles a burst of GetTenants calls (Oct 2026: 6-12 portals failed with 4x5s) -> backoff 10s..320s
             try:
-                t = self.s.get(self.base + '/api/Home/GetTenants', headers={'Tyler-Tenant-Culture': 'en-US'}, timeout=60).json()['Result'][0]; break
+                t = self.s.get(self.base + '/api/Home/GetTenants', headers={'Tyler-Tenant-Culture': 'en-US'}, timeout=90).json()['Result'][0]; break
             except Exception as e:
-                time.sleep(5)
+                print(f'  [{slug}] tenants retry {i}: {e!r}'[:200], flush=True); time.sleep(10 * 2 ** min(i, 5))
         else: raise SystemExit(f'{slug}: cannot read tenants')
         self.s.headers.update({'tenantid': str(t['TenantID']), 'tenantname': t['TenantName'], 'Tyler-TenantUrl': t['TenantUrl'], 'Tyler-Tenant-Culture': 'en-US',
                                'Content-Type': 'application/json', 'Accept': 'application/json'})
@@ -65,7 +66,7 @@ class Portal:
         body = copy.deepcopy(json.load(open(TEMPLATE)))
         body.update({"Keyword": "", "ExactMatch": False, "SearchModule": module, "FilterModule": module, "PageNumber": page, "PageSize": size, "SortBy": SORT[kind], "SortAscending": True})
         body[ck].update(c)
-        for i in range(5):
+        for i in range(7):
             wait = 1.0 - (time.time() - self.last)
             if wait > 0: time.sleep(wait)
             try:
@@ -75,7 +76,7 @@ class Portal:
                 err = (r.status_code, str(j)[:120])
             except Exception as e:
                 self.last = time.time(); err = repr(e)[:120]
-            print(f'  [{self.slug}] retry {i}: {err}', flush=True); time.sleep(5 + 5 * i)
+            print(f'  [{self.slug}] retry {i}: {err}', flush=True); time.sleep(min(300, 10 * 2 ** i))
         return None
 
 def d10(v): return (v or '')[:10]
@@ -101,11 +102,15 @@ def split(w):
 
 def run(slug, kind):
     p = Portal(slug); fn = f'{OUT}/{slug}_{kind}.jsonl'
-    done = {}
-    if os.path.exists(fn):
+    done = {}; keep = []
+    recent = (dt.date.today() - dt.timedelta(days=RECENT_DAYS)).isoformat()
+    if os.path.exists(fn):   # cached windows are reused, except those reaching into the last RECENT_DAYS (re-pulled so new/updated records land)
         for ln in open(fn):
-            try: j = json.loads(ln); done[tuple(j['w'])] = j['total']
-            except Exception: pass
+            try: j = json.loads(ln)
+            except Exception: continue
+            if j['w'][1] < recent: done[tuple(j['w'])] = j['total']; keep.append(ln if ln.endswith('\n') else ln + '\n')
+        with open(fn + '.tmp', 'w') as f: f.writelines(keep)
+        os.replace(fn + '.tmp', fn)
     out = open(fn, 'a'); t0 = time.time(); stack = list(reversed(windows(SINCE))); n = 0
     while stack:
         w = stack.pop()
@@ -151,6 +156,17 @@ if __name__ == '__main__':
             except BaseException as e:
                 errs.append((slug, kind, repr(e))); print(f'[{slug}/{kind}] ERROR {e!r}', flush=True)
     th = [threading.Thread(target=work, args=(s,)) for s in todo]     # one thread per portal host => ~1 req/s per host
-    [t.start() for t in th]; [t.join() for t in th]
-    for k, v in summarize().items(): print(k, v)
-    if errs: print('errors:', errs); sys.exit(1)
+    for t in th: t.start(); time.sleep(3)                            # stagger: a simultaneous burst trips the shared tylerhost WAF
+    [t.join() for t in th]
+    # second pass: portals that failed are retried one at a time (their finished windows are cached in the .jsonl)
+    if errs:
+        again = sorted({(a, b) for a, b, _ in errs}); errs.clear(); print('retrying sequentially:', again, flush=True); time.sleep(60)
+        for slug, kind in again:
+            try: run(slug, kind)
+            except BaseException as e: errs.append((slug, kind, repr(e))); print(f'[{slug}/{kind}] ERROR again {e!r}', flush=True)
+    S = summarize()
+    for k, v in S.items(): print(k, v)
+    sm = json.load(open(f'{OUT}/summary.json')); sm['errors'] = [list(e) for e in errs]; json.dump(sm, open(f'{OUT}/summary.json', 'w'), indent=1)
+    # exit 1 only if more than a quarter of the portal/kind pulls still failed; partial failures are reported in summary.json
+    if errs: print('errors:', errs)
+    sys.exit(1 if len(errs) > len(todo) * len(KINDS) / 4 else 0)

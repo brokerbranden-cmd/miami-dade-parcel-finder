@@ -61,10 +61,10 @@ done
 fetch auctions "auctions.json" python3 scripts/fetch_auctions.py "$RAW"
 fetch tax      "tax"           python3 scripts/fetch_tax.py "$RAW"
 fetch viol     "viol"          python3 scripts/fetch_violations.py "$RAW"
-RETRIES=1 fetch permits  "permits.json"  python3 scripts/fetch_permits.py "$RAW"
+RETRIES=2 fetch permits  "permits.json"  python3 scripts/fetch_permits.py "$RAW"
 # --- permit history + municipal code cases ---
 fetch county_permits "permits" python3 scripts/fetch_county_permits.py "$RAW"
-RETRIES=1 fetch energov        "permits" python3 scripts/fetch_energov.py "$RAW"   # ~20-40 min, ~1 req/s
+RETRIES=2 fetch energov        "permits" python3 scripts/fetch_energov.py "$RAW"   # ~20-40 min, ~1 req/s
 build merge_permits python3 scripts/merge_permits.py "$RAW"
 build distress python3 scripts/build_distress.py data                     # -> raw/distress.parquet + data/distress.json.gz
 # Pre-foreclosure "open" check: Clerk CLP / dismissal / certificate-of-title exports in raw/lp_downloads/{clp,dis,cot}_*.csv,

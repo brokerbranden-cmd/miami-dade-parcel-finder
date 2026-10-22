@@ -2,7 +2,7 @@
 # Weekly Parcel Finder refresh, run detached from the agent session so an interrupted session cannot kill it.
 #
 # Launch (returns at once; safe to call twice - a second copy exits on the lock / an already-finished run):
-#   cd /workspace/parcel-finder && setsid nohup bash scripts/weekly_refresh_headless.sh > /workspace/raw/.build_state/weekly.out 2>&1 < /dev/null &
+#   bash scripts/weekly_launch.sh     (detaches via setsid nohup and returns in <1s with exit 0)
 # Finished when $RAW/.build_state/weekly/latest/done exists (first word PASS or FAIL). Then: bash scripts/weekly_finish.sh
 #
 # Steps: lock -> back up repo raw/ -> build_all.sh (up to BUILD_TRIES=3, resumes; exit 3 = finished with stale sources) ->

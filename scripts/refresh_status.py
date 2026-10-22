@@ -7,7 +7,23 @@ SOURCES = {  # step -> label
     'pagis': 'Property Appraiser roll', 'layers': 'Zoning/CRA layers', 'zone_desc': 'Zoning descriptions',
     'clerk': 'Clerk lis pendens', 'clerk_clp': 'Clerk CLP (open check)', 'auctions': 'Foreclosure/tax auctions',
     'tax': 'Tax delinquency', 'viol': 'Code violations', 'permits': 'City of Miami permits',
-    'county_permits': 'County permits', 'energov': 'EnerGov city permits', 'parcels': 'Parcel polygons'}
+    'county_permits': 'County permits', 'energov': 'EnerGov city permits', 'parcels': 'Parcel polygons',
+    'probate': 'Clerk probate (PAD/PRO/DCE)'}
+MAX_LAG_DAYS = int(os.environ.get('MAX_LAG_DAYS', '3'))
+import re
+def through(globs):
+    """Newest filing date actually held: max end date in *_YYYYMMDD_YYYYMMDD.csv / ocs_YYYYMMDD.txt / RAW/clerk cache names."""
+    ds = []
+    for g in globs:
+        for f in glob.glob(g):
+            m = re.findall(r'(\d{8})', os.path.basename(f))
+            if m: ds.append(m[-1])
+    return max(ds) if ds else None
+DATA_THROUGH = {  # source -> newest filing date held (stale when older than MAX_LAG_DAYS, whatever the step said)
+    'clerk': lambda: through(['raw/lp_downloads/lp_*.csv', os.path.join(RAW, 'clerk/LIS/*.json')]),
+    'clerk_clp': lambda: through(['raw/lp_downloads/clp_*.csv', 'raw/lp_downloads/cot_*.csv', 'raw/lp_downloads/dis_*.csv', os.path.join(RAW, 'clerk/CLP/*.json')]),
+    'probate': lambda: through(['raw/probate_downloads/probate_*.csv', 'raw/probate_cases/ocs_*.txt']),
+}
 BUILDS = ['load_raw', 'spatial', 'merge_permits', 'distress', 'signals', 'comps', 'commercial', 'data', 'zoning_rules', 'assemblages']
 def state(s):
     for k in ('ok', 'stale', 'fail'):
@@ -47,6 +63,15 @@ res = {'built': datetime.datetime.now().astimezone().isoformat(timespec='seconds
        'sources': {}, 'builds': {}, 'counts': counts}
 for s, label in SOURCES.items():
     k, t = state(s)
+    if s in DATA_THROUGH:
+        d = DATA_THROUGH[s]()
+        if d:
+            iso = f"{d[:4]}-{d[4:6]}-{d[6:]}"; lag = (datetime.date.today() - datetime.date.fromisoformat(iso)).days
+            hist[s] = iso; k = 'ok' if lag <= MAX_LAG_DAYS else 'stale'
+            res['sources'][s] = {'label': label, 'status': 'fresh' if k == 'ok' else 'stale', 'last_good': iso, 'data_through': iso, 'lag_days': lag}
+        else:
+            res['sources'][s] = {'label': label, 'status': 'stale', 'last_good': None, 'data_through': None}
+        continue
     if k == 'ok': hist[s] = t
     res['sources'][s] = {'label': label, 'status': {'ok': 'fresh', 'stale': 'stale', 'fail': 'stale'}.get(k, k), 'last_good': hist.get(s)}
 for b in BUILDS:

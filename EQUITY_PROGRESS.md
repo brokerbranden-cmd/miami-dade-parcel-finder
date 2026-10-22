@@ -12,3 +12,4 @@
 - 22:50 full regression on 372bff9: 23/24 pass; only scenarios_mobile s18 (#ogInst check timeout) failed while another executor's regression ran concurrently (load). Re-running scenarios mobile alone (/tmp/scm.log). Fetcher stopped at 4,098 parcels (resume: scripts/fetch_mortgages.py /workspace/raw --workers 3).
 - 23:05 s18 mobile also fails alone on my tree: #ogInst inside closed 'Who owns it' group (body.simple .cgrp.closed). Checking baseline c41f870 (worktree /tmp/pfbase on :8099, log /tmp/scb.log) to see if pre-existing.
 - s18 mobile root cause: 2 new presets landed in More-ideas 'Distress' row; chip reflow during Playwright click shifted Who-owns-it rows. Fix: presets renamed 'High-equity owners'/'Free & clear owners' (Owners category), appended at END of IDEAS (indexes stable); equity filter moved into Who-owns-it group below #ogInst. Subset s10-s18 mobile 10/10, e2e_equity desk+mob pass.
+- data rebuilt: 4,098 parcels

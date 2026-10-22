@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
 MOB = len(sys.argv) > 2 and sys.argv[2] == 'mobile'; TAG = 'mobile' if MOB else 'desktop'
 BASE = URL.split('#')[0].split('?')[0]; Q = '?drive=0' if MOB else ''
-HDR = ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio']; FD = re.compile(r'\d\d-\d{4}-\d{3}-\d{4}'); ZIP = re.compile(r'\d{5}(-\d{4})?')
+HDR = ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio']; EQH = ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked']; FD = re.compile(r'\d\d-\d{4}-\d{3}-\d{4}'); ZIP = re.compile(r'\d{5}(-\d{4})?')
 BLANKS = ['3021250180770', '3040110180060', '0421320130350']
 errs = []
 def ok(c, m):
@@ -26,9 +26,9 @@ with sync_playwright() as pw:
         with pg.expect_download(timeout=240000) as dl: pg.evaluate(f"document.querySelector('{sel}').click()")
         t = open(dl.value.path(), encoding='utf-8').read(); return list(csv.reader(io.StringIO(t)))
     def check(rows, what):
-        ok(rows and rows[0] == HDR, f'{what}: header is exactly the 11 contact columns')
+        ok(rows and rows[0][:11] == HDR and rows[0][11:] in ([], EQH), f'{what}: header is the 11 contact columns in order (+ estimated-equity columns appended at the end only)')
         body = rows[1:]; bad_a = [r for r in body if not r[1].strip()]; bad_f = [r for r in body if not FD.fullmatch(r[10])]
-        ok(body and not bad_a and not bad_f and all(len(r) == 11 and r[5] == 'Miami-Dade' and r[3] == 'FL' for r in body), f'{what}: {len(body)} rows, blank Address {len(bad_a)}, non-dashed Folio {len(bad_f)}')
+        ok(body and not bad_a and not bad_f and all(len(r) == len(rows[0]) and r[5] == 'Miami-Dade' and r[3] == 'FL' for r in body), f'{what}: {len(body)} rows, blank Address {len(bad_a)}, non-dashed Folio {len(bad_f)}')
         bad_z = [r[4] for r in body if r[4] and not ZIP.fullmatch(r[4])]; ok(not bad_z and sum(1 for r in body if r[4]) >= 0.95 * len(body), f'{what}: Property Zip is 5-digit text ({sum(1 for r in body if r[4])}/{len(body)} filled, bad {bad_z[:3]})')
         mp = [r for r in body if r[7]]; bad_m = [r for r in mp if not (re.fullmatch(r'[A-Z]{2}', r[8]) and ZIP.fullmatch(r[9]) and ', ' + r[7] + ',' not in ', ' + r[6] + ',')]
         ok(not bad_m and all(not (r[8] or r[9]) for r in body if not r[7]), f'{what}: mailing city/state/zip split ({len(mp)}/{len(body)} parsed, bad {[r[6:10] for r in bad_m[:2]]})')

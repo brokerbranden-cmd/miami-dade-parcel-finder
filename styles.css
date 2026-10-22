@@ -544,3 +544,9 @@ body.lending .wrap{display:none}
 input[aria-invalid="true"]{border-color:var(--danger)!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--danger) 25%,transparent)}
 
 .copyr{margin:28px 0 18px;padding-top:14px;border-top:1px solid var(--line);text-align:center;font-size:12px;color:var(--muted)}
+/* estimated equity (equity.js) */
+.ob .eqfc,.eqsum .eqfc{background:color-mix(in srgb,#1a9e5a 14%,transparent);border:1px solid color-mix(in srgb,#1a9e5a 45%,transparent);color:#147a46;border-radius:999px;padding:2px 8px;font-size:11.5px}
+.ob .eqhi{background:color-mix(in srgb,#1a9e5a 8%,transparent);border-color:color-mix(in srgb,#1a9e5a 35%,transparent);color:#147a46}
+[data-theme="dark"] .ob .eqfc,[data-theme="dark"] .ob .eqhi,[data-theme="dark"] .eqsum .eqfc{color:#5fd39a}
+.eqline .v{font-size:12.5px}.eqh{margin:14px 0 4px}.eqh small{font-weight:400;color:var(--muted)}.eqsum{margin:4px 0 6px}
+.eqrow{flex-wrap:wrap;gap:6px 14px}.eqrow .hint{flex-basis:100%;font-size:12px;color:var(--muted)}

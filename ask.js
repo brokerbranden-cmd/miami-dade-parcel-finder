@@ -61,13 +61,23 @@
       for (const [k, list] of Object.entries(CITY_OF)) { if (k === county) continue; for (const c of list) { const lc = c.toLowerCase(); if (!mine.includes(lc) && !mine.some(m => m.includes(lc)) && new RegExp('\\b' + lc + '\\b').test(w)) return k; } } return null; })();
     if (cmc) { out.county = cmc; add('county', COUNTIES[cmc] + ' County', {}, { county: cmc }); }
     if (cm) { const c = /broward/.test(cm[1]) ? 'broward' : /monroe|keys/.test(cm[1]) ? 'monroe' : 'miami-dade'; out.county = c; if (c !== county) add('county', COUNTIES[c] + ' County', {}, { county: c }); }
-    const cc = out.county, hasC = l => cc === county ? has(l) : ({ 'miami-dade': ['distress', 'zoning', 'vacancy', 'commercial', 'asm', 'owners', 'teardown'], monroe: ['mscreen', 'rogo', 'mtax', 'teardown', 'owners'], broward: ['mscreen', 'broward', 'mtax', 'mtdeed', 'teardown', 'owners'] }[cc] || []).includes(l);
+    const cc = out.county, hasC = l => cc === county ? has(l) : ({ 'miami-dade': ['distress', 'zoning', 'vacancy', 'commercial', 'asm', 'owners', 'teardown', 'equity'], monroe: ['mscreen', 'rogo', 'mtax', 'teardown', 'owners'], broward: ['mscreen', 'broward', 'mtax', 'mtdeed', 'teardown', 'owners'] }[cc] || []).includes(l);
 
     /* 3. presets (whole phrases) */
     for (const [re, lab] of PRESETS) { const m = eat(re); if (!m) continue; const label = cc === county ? ideas.find(l => l.replace(/^[^\w]+/, '').startsWith(lab)) : lab;
       if (label || cc !== county) add('preset', (label || lab).replace(/^[^\w]+/, ''), {}, { preset: lab }); else out.hints.push(`“${m[0].trim()}” is a preset that isn't available in ${COUNTIES[cc]}.`); }
 
     /* homestead phrases before cities (Homestead is also a city) */
+    /* estimated equity (Miami-Dade): "free and clear", "no mortgage", "equity over 50%", "50%+ equity", "high equity" */
+    { const fc = eat(/\bfree (?:and|&|n) clear\b|\bno (?:open )?mortgages?\b|\bwithout (?:a )?mortgage\b|\bpaid[- ]off (?:homes?|houses?|propert(?:y|ies))\b|\bowned outright\b/);
+      const eq = eat(/\b(?:est(?:imated|\.)? )?equity (?:of )?(?:over|above|at least|more than|greater than|>=?|\+)\s*(\d{1,3})\s*(?:%|percent)|\b(\d{1,3})\s*(?:%|percent)\s*(?:\+|plus|or more)?\s*(?:est(?:imated)?\.? )?equity\b/);
+      const hi = !eq && eat(/\b(?:high|lots of|big|large|significant|strong)[- ]equity\b|\bequity[- ]rich\b/);
+      if ((fc || eq || hi) && !hasC('equity')) out.hints.push(`Equity estimates are only in Miami-Dade so far.`);
+      else {
+        if (fc) add('equity', 'Free & clear (est.)', { eqFC: true });
+        if (eq) { const n = +(eq[1] || eq[2]), k = [90, 70, 50, 30].find(x => n >= x) || 30; add('equity', `Est. equity ${k}%+`, { eqMin: k }); if (k !== n) out.hints.push(`Equity filter steps are 30/50/70/90%; using ${k}%+ for “${n}%”.`); }
+        else if (hi) add('equity', 'High equity 50%+ (est.)', { eqMin: 50 });
+      } }
     if (eat(/\bno homestead(?: exemption)?\b|\bnon[- ]?homestead(?:ed)?\b|\bwithout (?:a )?homestead(?: exemption)?\b|\bnot homesteaded\b|\bnon[- ]owner[- ]occupied\b|\bnot owner[- ]occupied\b/)) add('flag', 'No homestead', { flags: { homestead: 'no' } });
     else if (eat(/\bowner[- ]occupied\b|\bhomesteaded\b|\bhomestead exemption\b|\bowners? lives? there\b/)) add('flag', 'Owner lives there (homestead)', { flags: { homestead: 'yes' } });
     /* 4. owner name: "owned by john smith", "owner john smith", "properties of john smith" */

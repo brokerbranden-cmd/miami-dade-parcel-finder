@@ -79,7 +79,7 @@ with sync_playwright() as pw:
     pg.screenshot(path=SHOTS + 'saved_04_table.png')
     with pg.expect_download(timeout=180000) as dl: pg.click('#exportBtn')
     rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read()))); hdr = rows[0]
-    ok(len(rows) - 1 == 5 and hdr == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], f'Export CSV in Saved view: {len(rows)-1} rows, 11 contact columns')
+    ok(len(rows) - 1 == 5 and hdr[:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], f'Export CSV in Saved view: {len(rows)-1} rows, 11 contact columns')
     st = {dict(zip(hdr, r))['Folio'].replace('-', '') for r in rows[1:]}; ok(f1 in st, 'CSV includes saved card 1')
     # map: filter to one property, click it -> popup with star
     pg.click('#svStatus .chip[data-st="Called"]'); pg.click('#vMap'); pg.wait_for_function("document.getElementById('mapHint').textContent.includes('on the map')", timeout=180000); pg.wait_for_timeout(1500)

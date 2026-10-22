@@ -7,7 +7,7 @@
 (function(){
   "use strict";
   // layers: which data the county has. The UI hides filter groups / ideas that need a missing layer.
-  const ALL = ['distress','signals','permits','vacancy','zoning','asm','teardown','commercial','comps','owners','construction','cra','flood','mzoning'];
+  const ALL = ['distress','signals','permits','vacancy','zoning','asm','teardown','commercial','comps','owners','construction','cra','flood','mzoning','equity'];
   const COUNTIES = {
     'miami-dade': { id:'miami-dade', name:'Miami-Dade', state:'FL', dataDir:'data/', storeSuffix:'',
       nameOrder:'first-last',   // owner names on the roll read FIRST MIDDLE LAST (used by the skip trace export / import)

@@ -115,7 +115,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { mr:{rate:new Set(),tier:new Set(),rogo:new Set(),sig:new Set(),avoid:new Set(),zt:new Set()}, cont:false, hideSent:false, hasPhone:false, traced:'', cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, fx:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { mr:{rate:new Set(),tier:new Set(),rogo:new Set(),sig:new Set(),avoid:new Set(),zt:new Set()}, cont:false, hideSent:false, hasPhone:false, traced:'', cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', eqMin:0, eqFC:false, asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, fx:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 S.mt={tax:new Set(),min:0};   // Monroe unpaid-tax filter (chips + minimum balance)
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
@@ -470,14 +470,14 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.cont=S.cont; st.hideSent=S.hideSent; st.hasPhone=S.hasPhone; st.traced=S.traced; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.fx={...S.fx}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; st.mr=mrRead(); return st;
+  st.cont=S.cont; st.hideSent=S.hideSent; st.hasPhone=S.hasPhone; st.traced=S.traced; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.fx={...S.fx}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; st.eqMin=S.eqMin; st.eqFC=S.eqFC; st.mr=mrRead(); return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem(PFC.key('mdpf.v2'),JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
   NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':(MONEY_IDS.has(id)?fmtAmt(st[id]):st[id]));
   $('mvMin').value=st.mvMin?fmtAmt(st.mvMin):''; $('mvMax').value=st.mvMax?fmtAmt(st.mvMax):'';
   S.cont=!!st.cont; S.hideSent=!!st.hideSent; S.hasPhone=!!st.hasPhone; S.traced=['y','n'].includes(st.traced)?st.traced:''; S.cm=[1,20,35,50].includes(+st.cm)?+st.cm:0; S.cgas=!!st.cgas; S.cent=['in','dis'].includes(st.cent)?st.cent:'';
-  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.due=!!st.due; S.stage=SV.STAGES.includes(st.stage)?st.stage:''; S.pf=!!st.pf; S.pb=['hm','h'].includes(st.pb)?st.pb:''; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.asm=!!st.asm; S.asmUp=!!st.asmUp; S.asmGroup=+st.asmGroup||0; S.mzSel=new Set(st.mzSel||[]); renderRules();
+  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.due=!!st.due; S.stage=SV.STAGES.includes(st.stage)?st.stage:''; S.pf=!!st.pf; S.eqMin=[30,50,70,90].includes(+st.eqMin)?+st.eqMin:0; S.eqFC=!!st.eqFC; S.pb=['hm','h'].includes(st.pb)?st.pb:''; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.asm=!!st.asm; S.asmUp=!!st.asmUp; S.asmGroup=+st.asmGroup||0; S.mzSel=new Set(st.mzSel||[]); renderRules();
   $('mzq').value=st.mzq||''; $('q').value=st.q||''; $('qScope').value=st.qScope||'ao'; $('city').value=st.city||''; $('zips').value=st.zips||''; $('cra').value=st.cra||'';
   $('hideGov').checked=st.hideGov!==false; $('noBldg').checked=!!st.noBldg; $('qualOnly').checked=!!st.qualOnly;
   S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]); S.dsig=new Set((st.dsig||[]).filter(k=>k in DBIT)); $('dsMin').value=DS_STEPS.some(x=>x[0]===+st.dsMin)?String(+st.dsMin):'0';
@@ -533,14 +533,14 @@ function run(){
   const mine=st.vsMine?new Set([...savedIdx()].filter(([f])=>{ const x=SV.get(f); return x&&x.vacant; }).map(([,id])=>id)):null;
   const bb=S.bbox; if(bb && PACKS.some(p=>p&&!p.geo)){ ensureGeo().then(()=>schedule(0)); }
   const tierW=S.tier==='strong'?2:S.tier==='basic'?1:0, tcn=new Uint32Array(3), lzSel=S.lotz, lzc={split:0,minok:0,below:0}, cnSel=S.cons, cnc=new Uint32Array(6);
-  const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0; const outSet=outFolios(), phoneSet=S.hasPhone?SKS.phoneSet():null, trSet=S.traced?SKS.tracedSet():null, cSet=S.cont||S.hideSent?contSet():null, sentAny=S.hideSent?new Set(Object.keys(SEND.sent).filter(wasSent)):null; const cmMin=S.cm, cgOn=S.cgas, ceMask=S.cent==='dis'?4:S.cent?6:0, pfOn=S.pf, pbMask=S.pb==='h'?2:S.pb?6:0; let pfN=0, pbN=0;
+  const sendSet=S.send.size?new Set(Object.keys(SEND.tags).filter(f=>[...S.send].some(k=>SEND.tags[f][k]))):null, apOnly=S.ap; let apN=0; const outSet=outFolios(), phoneSet=S.hasPhone?SKS.phoneSet():null, trSet=S.traced?SKS.tracedSet():null, cSet=S.cont||S.hideSent?contSet():null, sentAny=S.hideSent?new Set(Object.keys(SEND.sent).filter(wasSent)):null; const cmMin=S.cm, cgOn=S.cgas, ceMask=S.cent==='dis'?4:S.cent?6:0, pfOn=S.pf, pbMask=S.pb==='h'?2:S.pb?6:0; let pfN=0, pbN=0; const eqMin=HAS('equity')?S.eqMin||0:0, eqFC=HAS('equity')&&!!S.eqFC, eqOn=(eqMin||eqFC)&&!!PFEQ.data; if((eqMin||eqFC)&&!PFEQ.data) ensureEq().then(()=>{ if(PFEQ.data) run(); });
   const asmOn=S.asm&&!!ASM, asmUp=S.asmUp, asmJ=S.asmGroup&&ASM?ASM.byId.get(S.asmGroup):undefined, asmSeen=asmOn?new Set():null;
   const MRs=HAS('mscreen')?mrPrep():null;
   const fxF=S.fx, wantRel=fxF.fam!=='any'||fxF.famoos!=='any', wantLife=fxF.life!=='any', wantDeath=fxF.death!=='any'&&HAS('distress'), fxOn=wantRel||wantLife||wantDeath, DCB=1<<DBIT.DC;
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
-    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), SGa=(sigIndexPack(p),p.sg||new Uint8Array(p.n)), CMa=(cmIndexPack(p),p.cm||new Uint8Array(p.n)), CXa=p.cx||new Uint8Array(p.n), FO=sendSet||outSet||cSet||phoneSet||trSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null;
+    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), SGa=(sigIndexPack(p),p.sg||new Uint8Array(p.n)), EQa=eqOn?(PFEQ.index(p),p.eq||new Uint8Array(p.n)):null, CMa=(cmIndexPack(p),p.cm||new Uint8Array(p.n)), CXa=p.cx||new Uint8Array(p.n), FO=sendSet||outSet||cSet||phoneSet||trSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null;
     let REL=null, LIF=null; if(wantRel){ REL=fxRel(p); if(!REL) continue; } if(wantLife) LIF=fxLife(p);
     const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n), PG=c.pcs||new Uint16Array(n);
     if(bb && !gl) continue;
@@ -554,7 +554,7 @@ function run(){
       if(phoneSet && !phoneSet.has(FO[i])) continue; if(trSet && (S.traced==='y')!==trSet.has(FO[i])) continue;
       if(apOnly && !APa[i]) continue;
       if(cmMin && CMa[i]<cmMin) continue; if(cgOn && !(CXa[i]&1)) continue; if(ceMask && !(CXa[i]&ceMask)) continue;
-      if(pfOn && !(SGa[i]&1)) continue; if(pbMask && !(SGa[i]&pbMask)) continue;
+      if(pfOn && !(SGa[i]&1)) continue; if(eqOn && !PFEQ.pass(EQa[i],eqMin,eqFC)) continue; if(pbMask && !(SGa[i]&pbMask)) continue;
       if(asmOn){ const gx=AGa?AGa[i]:-1; if(gx<0) continue; if(asmJ!==undefined && gx!==asmJ) continue; if(asmUp && !ASM.groups[gx].upside) continue; }
       if(vsMin && VS[i]<vsMin) continue;
       if(MRs && !mrPass(MRs,c,i)) continue;
@@ -654,7 +654,7 @@ function renderChips(){
   $('tierSeg').querySelectorAll('button').forEach(b=>{ const on=b.dataset.tier===S.tier; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); });
   const lzc=facet.lzc||{}; $('lotz').innerHTML=LOTZ.map(([k,l])=>{ const on=S.lotz.has(k), n=lzc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-lz="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join('');
   const cnc=facet.cnc||[]; $('cnChips').innerHTML=EX?CN_CATS.map(([k,l])=>{ const on=S.cons.has(k), n=cnc[k]||0; return `<button type="button" class="chip ${on?'on':''} ${!n&&!on?'zero':''}" data-cn="${k}" aria-pressed="${on}">${l}<span class="n">${short(n)}</span></button>`; }).join(''):'<span class="note">Construction data did not load.</span>';
-  $('apCount').textContent=EX?'('+fmt.format(facet.apN||0)+')':''; $('apOnly').checked=S.ap; $('pfCount').textContent=SIG?'('+fmt.format(facet.pfN||0)+')':''; $('pbCount').textContent=SIG?'('+fmt.format(facet.pbN||0)+')':''; $('pfOnly').checked=S.pf; $('contOnly').checked=S.cont; $('hideSent').checked=S.hideSent; $('contCount').textContent='('+fmt.format(contSet().size)+')'; $('stHasPhone').checked=S.hasPhone; $('stTraced').checked=S.traced==='y'; $('stNotTraced').checked=S.traced==='n'; $('stPhoneCount').textContent='('+fmt.format(SKS.phoneCount())+')'; $('stTracedCount').textContent='('+fmt.format(SKS.count())+')'; $('cmMin').value=String(S.cm); $('cgasOnly').checked=S.cgas; $('centSel').value=S.cent; $('cmCount').textContent=CM?'('+fmt.format(CM.meta.n)+' on the list)':''; $('dueOnly').checked=S.due; $('stageSel').value=S.stage; $('dueCount').textContent='('+fmt.format(dueCount())+')'; $('pbSel').value=S.pb;
+  $('apCount').textContent=EX?'('+fmt.format(facet.apN||0)+')':''; $('apOnly').checked=S.ap; $('pfCount').textContent=SIG?'('+fmt.format(facet.pfN||0)+')':''; $('pbCount').textContent=SIG?'('+fmt.format(facet.pbN||0)+')':''; $('pfOnly').checked=S.pf; $('eqMin').value=String(S.eqMin||0); $('eqFC').checked=!!S.eqFC; $('eqCount').textContent=PFEQ.data?'('+fmt.format(PFEQ.data.rows.length)+' checked)':''; $('contOnly').checked=S.cont; $('hideSent').checked=S.hideSent; $('contCount').textContent='('+fmt.format(contSet().size)+')'; $('stHasPhone').checked=S.hasPhone; $('stTraced').checked=S.traced==='y'; $('stNotTraced').checked=S.traced==='n'; $('stPhoneCount').textContent='('+fmt.format(SKS.phoneCount())+')'; $('stTracedCount').textContent='('+fmt.format(SKS.count())+')'; $('cmMin').value=String(S.cm); $('cgasOnly').checked=S.cgas; $('centSel').value=S.cent; $('cmCount').textContent=CM?'('+fmt.format(CM.meta.n)+' on the list)':''; $('dueOnly').checked=S.due; $('stageSel').value=S.stage; $('dueCount').textContent='('+fmt.format(dueCount())+')'; $('pbSel').value=S.pb;
   renderSend();
   $('asmOn').classList.toggle('on',S.asm); $('asmOn').setAttribute('aria-pressed',S.asm); $('asmUp').checked=S.asmUp;
   $('asmN').textContent=S.asm&&ASM?fmt.format(facet.asmGroups||0)+' groups':ASM?fmt.format(ASM.meta.groups)+' groups':'';
@@ -692,7 +692,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.hasPhone?1:0)+(st.traced?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+mrCount()+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.pf?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
+  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.hasPhone?1:0)+(st.traced?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+mrCount()+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.pf?1:0)+(S.eqMin||S.eqFC?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
   let badBox=0; HASH_NUM.forEach(id=>{ const el=$(id), v=el.value.trim(), bad=!!v && parseAmt(v)==null; if(bad) badBox++; if(bad) { el.setAttribute('aria-invalid','true'); el.title='Not a number. Try 500k, 1.2m or 750000'; } else if(el.hasAttribute('aria-invalid')){ el.removeAttribute('aria-invalid'); el.title=''; } });
   const tot=k+main; $('onCount').hidden=!tot; $('resetBtn').disabled=!tot&&!badBox; $('onCount').textContent=tot+(tot===1?' filter on':' filters on');
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
@@ -740,9 +740,9 @@ function cardHTML(id){
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
     ${HAS('mscreen')?mrCardLine(c,i):''}${HAS('mtax')?mtCardLine(c,i):''}${upLine(p,i)}
-    ${compsLine(id)}${cmLine(folio)}${auLine(folio)}${outLine(folio)}${folderLine(folio)}${SKU.cardLine(folio)}
+    ${compsLine(id)}${cmLine(folio)}${auLine(folio)}${PFEQ.line(folio)}${outLine(folio)}${folderLine(folio)}${SKU.cardLine(folio)}
     <div class="sendline">${sendBtns(folio)}${sentBadges(folio)}${p.ap&&p.ap[i]?'<span class="hot apb" title="Adverse possession claim noted in the Property Appraiser legal description">Adverse possession</span>':''}</div>
-    <div class="ob">${dueBadge(folio)}${clerkBadges(folio)}${cmBadges(folio)}${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
+    <div class="ob">${dueBadge(folio)}${clerkBadges(folio)}${PFEQ.badge(folio)}${cmBadges(folio)}${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
 }
 function tdTag(p,i){ const t=p.td?p.td.tier[i]:0; return t===2?'<span class="tt tds" title="Strong teardown under your rule">Strong teardown</span>':t===1?'<span class="tt tdb" title="Teardown (basic) under your rule">Teardown</span>':''; }
@@ -770,7 +770,7 @@ function renderResults(reset){
 const COLS=[
   {h:'<span class="sr">Saved</span>★',cls:'stc'},{h:'Address',s:'addr_a'},{h:'Score',num:true,s:'ds_d'},{h:'Signals'},{h:'Vacancy',num:true,s:'vs_d'},{h:'Permits & cases'},{h:'Property'},{h:'City zoning'},{h:'Zoning type'},{h:'Lot sq ft',num:true,s:'lot_d'},{h:'Acres',num:true,s:'lot_d'},
   {h:'Building sq ft',num:true},{h:'Units',num:true,s:'un_d'},{h:'Built',num:true,s:'yb_a'},{h:'Value',num:true,s:'mv_d'},
-  {h:'Land %',num:true,s:'lp_d'},{h:'Last sale',num:true,s:'sold_d'},{h:'Sale price',num:true},{h:'Owner'},{h:'Phones / email',cls:'stcol'}];
+  {h:'Land %',num:true,s:'lp_d'},{h:'Last sale',num:true,s:'sold_d'},{h:'Sale price',num:true},{h:'Owner'},{h:'Phones / email',cls:'stcol'},...(HAS('equity')?[{h:'Est. equity',num:true,cls:'eqcol'},{h:'Est. loans',num:true,cls:'eqcol'}]:[])];
 function renderHead(){ $('thead').innerHTML=COLS.map(c=>`<th data-s="${c.s||''}" class="${c.num?'num':''} ${c.cls||''} ${c.s&&S.sort===c.s?'sorted':''}" scope="col">${c.h}</th>`).join(''); }
 const sigCodes=sg=>{ const a=[]; for(let b=0;b<12;b++) if(sg&(1<<b)) a.push(DSIG[b][0]); return a.join(' '); };
 const sigText=sg=>{ const a=[]; for(let b=0;b<12;b++) if(sg&(1<<b)) a.push(DSIG[b][1]); for(const [b,l] of DSOFT) if(sg&(1<<b)) a.push(l); return a.join(', '); };
@@ -783,7 +783,7 @@ function rowHTML(id){
   <td class="num">${c.lot[i]?fmt.format(c.lot[i]):'–'}</td><td class="num">${c.lot[i]?(c.lot[i]/SQFT_AC).toFixed(2):'–'}</td>
   <td class="num">${c.sqft[i]?fmt.format(c.sqft[i]):'–'}</td><td class="num">${c.units[i]||'–'}</td><td class="num">${c.yb[i]||'–'}</td>
   <td class="num">${mv?dollars(mv):'–'}</td><td class="num">${mv?Math.round(c.land[i]/mv*100)+'%':'–'}</td>
-  <td class="num">${dateStr(c.sd1[i])||'–'}</td><td class="num">${c.sale1[i]?dollars(c.sale1[i]):'–'}</td><td>${esc(getStr(p,'owner',i))}</td><td class="stcell">${SKU.cellHTML(folio)}</td></tr>`;
+  <td class="num">${dateStr(c.sd1[i])||'–'}</td><td class="num">${c.sale1[i]?dollars(c.sale1[i]):'–'}</td><td>${esc(getStr(p,'owner',i))}</td><td class="stcell">${SKU.cellHTML(folio)}</td>${HAS('equity')?PFEQ.cells(folio).map(v=>`<td class="num eqcol" title="Estimate">${esc(v)}</td>`).join(''):''}</tr>`;
 }
 const ROWH=40; let lastRange='';
 function renderTable(reset){
@@ -996,7 +996,7 @@ async function openDrawer(id,opts){
     ${SKU.drawerHTML(folio)}
     ${outreachHTML(id,folio)}
     <div id="finBox">${finHTML(folio)}</div>
-    ${distressHTML(p,i,folio)}${clerkHTML(folio)}${cmHTML(folio)}
+    ${distressHTML(p,i,folio)}${clerkHTML(folio)}${PFEQ.html(folio)}${cmHTML(folio)}
     ${vacancyHTML(p,i,folio)}
     ${HAS('mscreen')?(PFC.id==='broward'?bwPermitsHTML(p,i):mrPermitsHTML(p,i)):permitsHTML(p,i,folio)}
     ${HAS('mtax')?mtHTML(p,i):''}${HAS('mscreen')?mrHTML(p,i):''}${asmHTML(p,i)}${teardownHTML(p,i)}
@@ -1050,7 +1050,7 @@ async function ownerIds(g){
 const exportName=(kind,n)=>{ const d=new Date(); return `miami-dade-${kind}-${n}-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`; };
 async function exportIds(ids,kind,btn){
   const lab=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
-  try{ await ensureDetail(); await ensureGeo(); await loadDistress(); await loadAsm().catch(()=>{}); await new Promise(r=>setTimeout(r,30));
+  try{ await ensureDetail(); await ensureGeo(); await loadDistress(); await loadAsm().catch(()=>{}); await ensureEq(); await new Promise(r=>setTimeout(r,30));
     const url=URL.createObjectURL(buildCSV(ids)), a=document.createElement('a'); a.href=url; a.download=exportName(kind,ids.length); document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),60000); toast(fmt.format(ids.length)+' properties exported');
     const fl=[], im=new Map(); for(let j=0;j<ids.length;j++){ const f=getStr(P(ids[j]),'folio',I(ids[j])); fl.push(f); im.set(f,ids[j]); } EXP_PENDING={folios:fl,ids:im,day:dayStr(new Date())}; renderExpBar(); }
@@ -1160,12 +1160,14 @@ const propZip=z=>{ z=String(z||'').trim(); return /^\d{5}(-\d{4})?$/.test(z)?z:'
 function contactRow(owner,addr,city,zip,mail,folio){ return [csvq(owner),csvq(addr),csvq(city),'FL',propZip(zip),csvq(PFC.cfg.name),...splitMail(mail).map(csvq),folio].join(','); }
 function exportRow(p,i){ const c=p.c; return contactRow(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; '),exportAddr(p,i),D.city[c.city[i]]||'',D.zip[c.zip[i]]||'',getStr(p,'mail',i),folio13(getStr(p,'folio',i))); }
 const EXP_HEAD='Owner Name,Property Address,Property City,Property State,Property Zip,Property County,Mailing Address,Mailing City,Mailing State,Mailing Zip,Folio\n';
-function buildCSV(ids=results){
-  // export = contact list only (main export and Send to lists): see EXP_HEAD
-  const parts=[EXP_HEAD]; let buf=''; for(const k in EXPSTAT) EXPSTAT[k]=0;
+function buildCSV(ids=results,opts){
+  // export = contact list (main export and Send to lists): see EXP_HEAD. Main export (not Send to lists) appends the
+  // estimated-equity columns AFTER the fixed contact columns (Miami-Dade only).
+  const eqc=!(opts&&opts.team)&&HAS('equity')&&!!PFEQ.data;
+  const parts=[eqc?EXP_HEAD.trim()+PFEQ.CSV_HEAD+'\n':EXP_HEAD]; let buf=''; for(const k in EXPSTAT) EXPSTAT[k]=0;
   for(let j=0;j<ids.length;j++){
     const id=ids[j], p=P(id), i=I(id);
-    buf+=exportRow(p,i)+'\n';
+    buf+=exportRow(p,i)+(eqc?PFEQ.csv(getStr(p,'folio',i)):'')+'\n';
     if(buf.length>1e6){ parts.push(buf); buf=''; }
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
@@ -1210,7 +1212,7 @@ function writeHash(st){
     if(st.ogf) h.set('ogf',st.ogf); if(st.ogMin) h.set('ogn',st.ogMin); if(st.ogDist) h.set('ogd','1'); if(st.ogInst) h.set('ogi','1');
     if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';')); if(st.asm) h.set('asm','1'); if(st.asmUp) h.set('asmup','1'); if(st.asmGroup) h.set('asmg',st.asmGroup);
     if(st.rules&&!RULE_KEYS.every(k=>st.rules[k]===TD.DEFAULT_RULES[k])) h.set('tdr',RULE_KEYS.map(k=>k==='enforce_min_lot'?(st.rules[k]?1:0):st.rules[k]).join(','));
-    if(st.due) h.set('due','1'); if(st.stage) h.set('stage',st.stage); if(st.pf) h.set('pf','1'); if(st.cm) h.set('cm',String(st.cm)); if(st.cont) h.set('cont','1'); if(st.hideSent) h.set('hs','1'); if(st.hasPhone) h.set('ph','1'); if(st.traced) h.set('trc',st.traced); if(st.cgas) h.set('cgas','1'); if(st.cent) h.set('cent',st.cent); if(st.pb) h.set('pb',st.pb); if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
+    if(st.due) h.set('due','1'); if(st.stage) h.set('stage',st.stage); if(st.pf) h.set('pf','1'); if(st.eqMin) h.set('eq',String(st.eqMin)); if(st.eqFC) h.set('fc','1'); if(st.cm) h.set('cm',String(st.cm)); if(st.cont) h.set('cont','1'); if(st.hideSent) h.set('hs','1'); if(st.hasPhone) h.set('ph','1'); if(st.traced) h.set('trc',st.traced); if(st.cgas) h.set('cgas','1'); if(st.cent) h.set('cent',st.cent); if(st.pb) h.set('pb',st.pb); if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
     const str=h.toString(), want=str?'#'+str:'';
     // a new history entry once the search has been still for a moment (so Back undoes a filter step, not each keystroke)
     if(location.hash!==want){ const now=Date.now(), push=!HIST.restoring && now-HIST.last>1200; HIST.last=now;
@@ -1234,7 +1236,7 @@ function parseHash(){
   st.sort=h.get('sort')||'lot_d'; st.view=h.get('view')||'cards';
   st.ogf=(h.get('ogf')||'').replace(/\D/g,''); st.ogMin=+h.get('ogn')||0; st.ogDist=h.get('ogd')==='1'; st.ogInst=h.get('ogi')==='1';
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
-  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.due=h.get('due')==='1'; st.stage=h.get('stage')||''; st.pf=h.get('pf')==='1'; st.cm=+h.get('cm')||0; st.cont=h.get('cont')==='1'; st.hideSent=h.get('hs')==='1'; st.hasPhone=h.get('ph')==='1'; st.traced=['y','n'].includes(h.get('trc'))?h.get('trc'):''; st.cgas=h.get('cgas')==='1'; st.cent=h.get('cent')||''; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
+  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.due=h.get('due')==='1'; st.stage=h.get('stage')||''; st.pf=h.get('pf')==='1'; st.eqMin=+h.get('eq')||0; st.eqFC=h.get('fc')==='1'; st.cm=+h.get('cm')||0; st.cont=h.get('cont')==='1'; st.hideSent=h.get('hs')==='1'; st.hasPhone=h.get('ph')==='1'; st.traced=['y','n'].includes(h.get('trc'))?h.get('trc'):''; st.cgas=h.get('cgas')==='1'; st.cent=h.get('cent')||''; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
   const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length||tr.length===RULE_KEYS.length-1){ st.rules={}; RULE_KEYS.forEach((k,j)=>{ if(j>=tr.length) st.rules[k]=TD.DEFAULT_RULES[k]; else st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]; }); }
   const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null; mrHashRead(h,st,list);
   return st;
@@ -1511,7 +1513,7 @@ async function openDeep(f){
 /* commercial presets by Property Appraiser DOR land use family (see CP_FAM) */
 const LUF=fam=>D.landuse.filter((v,i)=>{ const c=LU_CODE[i]; return cpCom(c)&&CP_FAM(c)===fam; });
 /* ideas that need a data layer the active county may not have (counties.js layers) */
-const IDEA_NEED=[[/Buildable lots|Buildable teardowns|Duplex-zoned/,'mscreen'],[/ROGO/,'rogo'],[/Foreclosure auctions scheduled|Tax-deed sales scheduled/,'broward'],[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/Strong teardowns|could be split/,'zoning'],[/Death recorded/,'distress'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm'],[/^Tax delinquent/,'mtax'],[/^Tax deed auction/,'mtdeed']];
+const IDEA_NEED=[[/High equity|Free & clear/,'equity'],[/Buildable lots|Buildable teardowns|Duplex-zoned/,'mscreen'],[/ROGO/,'rogo'],[/Foreclosure auctions scheduled|Tax-deed sales scheduled/,'broward'],[/Hottest|Pre-foreclosure|Tax deeds|Unsafe|motivated owners/,'distress'],[/vacant \/ neglected/,'vacancy'],[/Strong teardowns|could be split/,'zoning'],[/Death recorded/,'distress'],[/Commercial distress|Closed gas/,'commercial'],[/Assemblages/,'asm'],[/^Tax delinquent/,'mtax'],[/^Tax deed auction/,'mtdeed']];
 const ideaOk=l=>IDEA_NEED.every(([re,ly])=>!re.test(l)||HAS(ly));
 const IDEAS=[
   ['🔥 Hottest leads', ()=>({...BLANK(), dsMin:50, sort:'ds_d'})],
@@ -1524,6 +1526,8 @@ const IDEAS=[
   ['Vacant infill lots', ()=>({...BLANK(), types:['vacant'], lotMin:2500, lotMax:21780, sort:'lot_a'})],
   ['Houses on multifamily land', ()=>HAS('mscreen')?({...BLANK(), types:['sf'], mr:{zt:['mf']}, sort:'lot_d'}):({...BLANK(), types:['sf'], zones:['mf'], sort:'lot_d'})],
   ['Teardowns', ()=>({...BLANK(), tier:'basic', sort:'lp_d'})],
+  ['💰 High equity (50%+, est.)', ()=>({...BLANK(), eqMin:50, sort:'ds_d'})],
+  ['Free & clear (est.)', ()=>({...BLANK(), eqFC:true, sort:'ds_d'})],
   ['Out-of-state owners, 15+ years', ()=>({...BLANK(), types:['sf','th','mf29','vacant'], hdMin:15, flags:{oos:'yes',homestead:'no'}, sort:'held_d'})],
   ['Estates and heirs', ()=>({...BLANK(), flags:{estate:'yes'}, sort:'held_d'})],
   ['Small multifamily (2–9 units)', ()=>({...BLANK(), types:['mf29'], flags:{homestead:'no'}, sort:'un_d'})],
@@ -1587,10 +1591,10 @@ function download(name,blob){ const url=URL.createObjectURL(blob), a=document.cr
 const stamp=()=>{ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); };
 function savedListCSV(fid){
   // same contact-only columns as every property export (EXP_HEAD); fid = one folder only
-  const ids=savedIdx(); for(const k in EXPSTAT) EXPSTAT[k]=0; const rows=SV.list().filter(x=>!fid||x.folders.includes(fid)).map(x=>{ const id=ids.get(x.folio);
-    if(id!=null) return exportRow(P(id),I(id)); EXPSTAT.real++;
-    return contactRow(x.owner||'',x.addr||'No site address',x.city||'',x.zip||'',x.mail||'',folio13(x.folio)); });
-  return new Blob([EXP_HEAD+rows.join('\n')+(rows.length?'\n':'')],{type:'text/csv'});
+  const ids=savedIdx(), eqc=HAS('equity')&&!!PFEQ.data; for(const k in EXPSTAT) EXPSTAT[k]=0; const rows=SV.list().filter(x=>!fid||x.folders.includes(fid)).map(x=>{ const id=ids.get(x.folio);
+    const eq=eqc?PFEQ.csv(x.folio):''; if(id!=null) return exportRow(P(id),I(id))+eq; EXPSTAT.real++;
+    return contactRow(x.owner||'',x.addr||'No site address',x.city||'',x.zip||'',x.mail||'',folio13(x.folio))+eq; });
+  return new Blob([(eqc?EXP_HEAD.trim()+PFEQ.CSV_HEAD+'\n':EXP_HEAD)+rows.join('\n')+(rows.length?'\n':'')],{type:'text/csv'});
 }
 function wireSaved(){
   document.addEventListener('click',e=>{ const b=e.target.closest('[data-star]'); if(!b) return; e.preventDefault(); e.stopPropagation();
@@ -1686,6 +1690,12 @@ async function ensureOg(){
 }
 function renderOgRow(){ $('ogRow').hidden=!S.ogf; if(S.ogf) $('ogLabel').textContent=S.og>0&&OWN?`Only properties of ${OWN.name[S.og]} (${fmt.format(OWN.n[S.og])})`:'Only one owner\'s properties'; }
 async function ensureCm(){ if(CM||!HAS('commercial')) return; try{ await loadCommercial(); }catch(e){ toast('Commercial data did not load: '+e.message); } }
+async function ensureEq(){ if(PFEQ.data||!HAS('equity')) return; try{ await PFEQ.load({fetchJSON:n=>gzJSON(DP+n+'?v='+META.ver+'-e1'), folioCol:p=>strCol(p,'folio'), packs:PACKS}); renderEqSrc(); eqPatch(); }catch(e){ toast('Equity estimate data did not load: '+e.message); } }
+/* equity data arrived after cards were drawn: add the line + badge in place (no re-render / scroll jump); table rows redraw */
+function eqPatch(){ document.querySelectorAll('#cards .card[data-folio]').forEach(cd=>{ const f=cd.dataset.folio; if(cd.querySelector('.eqline')) return; const l=PFEQ.line(f), b=PFEQ.badge(f);
+  if(l){ const s=cd.querySelector('.sendline'); if(s) s.insertAdjacentHTML('beforebegin',l); } if(b){ const o=cd.querySelector('.ob'); if(o) o.insertAdjacentHTML('afterbegin',b); } });
+  if(S.view==='table'){ lastRange=''; renderTable(false); } }
+function renderEqSrc(){ const d=PFEQ.data; if(!d||!$('eqSrc')) return; const s=d.meta.stats; $('eqSrc').textContent=`Estimate. ${fmt.format(s.checked)} owners checked against Clerk mortgage records (priority leads first): ${fmt.format(s.free_clear)} free & clear, ${fmt.format(s.with_open)} with open recorded mortgages. Built ${d.meta.built}.`; }
 async function ensureSig(){ if(SIG||!HAS('signals')) return; try{ await loadSignals(); renderSigSrc(); }catch(e){ toast('Clerk signal data did not load: '+e.message); } }
 function renderSigSrc(){ if(!SIG) return; const m=SIG.meta; $('sigSrc').textContent=`${fmt.format(m.pf.n)} open pre-foreclosures (lis pendens ${ymd(m.pf.from)} – ${ymd(m.pf.to)}), ${fmt.format(m.pb.n)} probate filings (${fmt.format(m.pb.high)} high, ${fmt.format(m.pb.medium)} medium match), ${fmt.format(m.au.n)} upcoming auctions. Built ${m.built}.`; }
 /* comps: card value estimate needs the comp sales + parcel points; loaded in the background after the first results */
@@ -1740,6 +1750,8 @@ function wire(){
     saveSend(); renderSend(); renderResults(true); $('tagAllInfo').textContent=`${fmt.format(add)} newly tagged for ${t.label}`; toast(`Tagged ${fmt.format(n)} results for ${t.label} (${fmt.format(add)} new)`); };
   $('expBar').addEventListener('click',e=>{ if(e.target.id==='expMark') expMark($('expTeam').value); else if(e.target.id==='expSkip'){ EXP_PENDING=null; renderExpBar(); } });
   ['cmMin','cgasOnly','centSel'].forEach(k=>$(k).addEventListener('change',cmCh));
+  $('eqMin').addEventListener('change',async()=>{ S.eqMin=+$('eqMin').value||0; clearIdea(); await ensureEq(); run(); });
+  $('eqFC').addEventListener('change',async()=>{ S.eqFC=$('eqFC').checked; clearIdea(); await ensureEq(); run(); });
   $('pfOnly').addEventListener('change',async()=>{ S.pf=$('pfOnly').checked; clearIdea(); if(S.pf) await ensureSig(); run(); });
   $('pbSel').addEventListener('change',async()=>{ S.pb=$('pbSel').value; clearIdea(); if(S.pb) await ensureSig(); run(); });
   $('sendChips').addEventListener('click',e=>{ const b=e.target.closest('.chip[data-send]'); if(!b) return; const k=b.dataset.send; S.send.has(k)?S.send.delete(k):S.send.add(k); run(); });
@@ -1882,8 +1894,8 @@ async function boot(){
     ['results','foot'].forEach(id=>$(id).hidden=false);
     run();
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');
-    if(dlF) await openDeep(dlF);
-    setTimeout(ensureComps,300);
+    if(dlF){ await ensureEq(); await openDeep(dlF); }
+    setTimeout(ensureComps,300); setTimeout(ensureEq,1500);
     /* small internal API for drive.js / lenders.js (same page, nothing leaves the browser) */
     const skInfo=id=>{ const p=P(id), i=I(id), c=p.c; return {folio:getStr(p,'folio',i), addr:getStr(p,'addr',i).trim(), city:D.city[c.city[i]]||'', zip:D.zip[c.zip[i]]||'', owner:getStr(p,'owner',i), mail:getStr(p,'mail',i), gov:!!(c.flags[i]&FLAG.govt)}; };
     const skBridge={ results:()=>results, info:skInfo, folioOf:id=>getStr(P(id),'folio',I(id)), folioOut:folio13, ensureDetail, order:PFC.cfg.nameOrder||'first-last', contacted, sentOf, markEmailed, emailedTo, toast, download, dayStr,

@@ -13,3 +13,8 @@
 - EnerGov full pull still running (Miami Beach big).
 - [21:52] energov FIXED: full pull 0 errors in ~30 min, data through 2026-10-21. Rebuild (build_all resume) started -> /tmp/rebuild.log
 - [22:15] rebuild done (13/17 fresh; status honest). Committing packs, starting pre-push regression.
+- [01:10 Oct 22] ownerkind fixed in 7574dce (packs built with twin record meta.ownerKind; test requires 0 reclassified then). First rerun reached 12/22 PASS then was killed by the interruption; restarted on PORT=8098 (pf-fx regression uses 8097).
+- [03:58 Oct 22] Rebased onto origin 058250e (equity). Regression 24/24 green (test_runs/summary_prepush_20261022-015403.txt, tree 99227b1). PUSHED 058250e..fa5f716; live refresh-status.json verified (permits/energov/monroe fresh, clerk/probate honestly stale).
+- Clerk doc-type pull without login: Name/Document search with only a Document Type (no party name) returns isValidSearch=false for every date tried (Oct 13, 14, 20, 22) in the same headless setup where name searches work (fetch_mortgages.py). That is the site's verification gate for doc-type searches -> NOT bypassed, NOT wired. LP/probate still need the logged-in export. Site index runs through 2026-10-16.
+- Broward: Clerk case API (api.browardclerk.org) is paid + notarized agreement; probate case viewing needs a registered user. AcclaimWeb Official Records returns 403 to the box. County HCED Posse layer = 7,424 right-of-way permits only; CodeEnforcement ArcGIS folder needs a token.
+- Monroe cities: Key West eTRAKiT, Islamorada CityView, Key Colony Beach Citizenserve = interactive portals, no bulk/API; Layton: none found.

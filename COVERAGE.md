@@ -8,7 +8,7 @@ Counties are kept separate (own raw dirs, packs and status rows). Status rows li
 |---|---|---|---|---|
 | Miami-Dade | Clerk Official Records LIS (+CLP/COT) | PAD/PRO/DCE + OCS case lists | Logged-in Official Records CSV export (registered login skips Turnstile). Paid alternatives: Clerk API $0.20/request (CFN/folio lookup only, no date/doc-type search), daily FTP $110/folder/mo | WIRED (manual browser export); LP data through 2026-10-05, probate through 2026-10-08 -> **stale**, now reported stale by filing date (>3 days) |
 | Monroe | Clerk court case search: foreclosure cases (lis pendens proxy; Official Records LandmarkWeb is reCAPTCHA-gated) | Probate cases, same search | cr.monroe-clerk.com public search, no login/captcha | WIRED into weekly (`monroe_clerk`) 2026-10-21; filings through 2026-10-16 |
-| Broward | County Records (RTT) free Official Records daily index FTP (doc type LP) | Broward Clerk probate cases: no free bulk source found yet | sftp://bcftp.broward.org (published public login), only last 7-10 days kept | SCRIPT READY (`scripts/counties/broward/fetch_broward_or.sh`) but the box has no port-22 egress -> needs a runner with SFTP; status row `broward_lp` reports stale until files arrive. Not yet parsed into the Broward pack |
+| Broward | County Records (RTT) free Official Records daily index FTP (doc type LP) | Broward Clerk probate: paid Case API (api.browardclerk.org, notarized agreement); probate viewing needs registered user; AcclaimWeb returns 403 to the box | sftp://bcftp.broward.org (published public login), only last 7-10 days kept | SCRIPT READY (`scripts/counties/broward/fetch_broward_or.sh`) but the box has no port-22 egress -> needs a runner with SFTP; status row `broward_lp` reports stale until files arrive. Not yet parsed into the Broward pack |
 
 ## Miami-Dade (34 municipalities + unincorporated)
 
@@ -58,10 +58,10 @@ Miami-Dade sources in the weekly run: `permits` (City of Miami + County Building
 |---|---|---|---|---|---|
 | Unincorporated Monroe | Monroe | legacy permits applied before 2022-10-01 | code cases opened before 2024-01-01 | MCeSearch (mcesearch.monroecounty-fl.gov); newer records only in Oracle OPAL (no bulk export) | Historical one-time pull in pack; newer: NO PUBLIC BULK DATA |
 | Marathon | Monroe | - | Special Magistrate hearing agendas (parcel IDs) | ci.marathon.fl.us PDFs | WIRED into weekly (`monroe_marathon_code`) 2026-10-21 |
-| Key West | Monroe | not probed yet | not probed yet | - | TODO |
-| Islamorada | Monroe | not probed yet | not probed yet | - | TODO |
-| Key Colony Beach | Monroe | not probed yet | not probed yet | - | TODO |
-| Layton | Monroe | not probed yet | not probed yet | - | TODO |
+| Key West | Monroe | eTRAKiT portal (per-record search) | - | etrakit.cityofkeywest-fl.gov | NOT WIRED - interactive portal only, no bulk/API |
+| Islamorada | Monroe | CityView portal | complaint intake only | islamorada.fl.us/CityView | NOT WIRED - interactive portal only |
+| Key Colony Beach | Monroe | Citizenserve portal | Citizenserve portal | citizenserve installation 326 | NOT WIRED - interactive portal only |
+| Layton | Monroe | none found | none found | - | NO PUBLIC DATA found |
 
 ## Broward (31 municipalities + unincorporated)
 

@@ -29,7 +29,7 @@ with sync_playwright() as pw:
     check('Broward' not in pg.inner_text('#mrGrp') or 'Monroe' not in pg.inner_text('#mrGrp'), 'no Monroe wording in the screen group')
     check('Monroe' not in pg.inner_text('#mrGrp'), 'screen group has no Monroe text')
     sigs = pg.eval_on_selector_all('#mrSig .chip', 'n=>n.map(x=>x.textContent)')
-    check(not any('ROGO' in s or 'Probate' in s or 'Code case' in s for s in sigs), f'signal chips limited to what Broward has {sigs}')
+    check(not any('ROGO' in s or 'Probate' in s for s in sigs) and any(s.startswith('Code case') for s in sigs), f'signal chips limited to what Broward has {sigs}')
     ideas = pg.eval_on_selector_all('#ideas .chip', 'n=>n.map(x=>x.textContent)')
     check(not any(k in t for t in ideas for k in ('Hottest', 'Assemblage', 'Commercial distress', 'ROGO')), f'ideas without missing layers ({len(ideas)})')
     check(pg.inner_text('label[for="cra"]') == 'FEMA flood zone', 'flood zone filter label')
@@ -58,7 +58,7 @@ with sync_playwright() as pw:
         pg.click('#cards .card h3'); pg.wait_for_selector('.drawer', timeout=30000); txt = pg.inner_text('.drawer')
         check('buildability screen' in txt.lower() and 'not a determination' in txt.lower(), 'drawer shows the screen + disclaimer')
         check('Monroe' not in txt and 'ROGO' not in txt, 'drawer has no Monroe wording')
-        check('auctions & legal notices' in txt.lower(), 'drawer has the auctions & legal notices section')
+        check('permits, code cases & legal notices' in txt.lower(), 'drawer has the permits, code cases & legal notices section')
         check('not loaded' in pg.evaluate("document.querySelector('.drawer').textContent").lower(), 'drawer states what public data is not loaded')
         href = pg.get_attribute('.drawer a:has-text("Property Appraiser page")', 'href') or ''
         check(bool(re.search(r'bcpa\.net/RecInfo\.asp\?URL_Folio=\d{12}$', href)), 'BCPA link uses the folio: ' + href[-45:])

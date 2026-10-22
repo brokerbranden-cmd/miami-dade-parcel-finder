@@ -1,4 +1,4 @@
-# Data coverage by county / city (updated 2026-10-21)
+# Data coverage by county / city (updated 2026-10-22)
 
 Counties are kept separate (own raw dirs, packs and status rows). Status rows live in `data/refresh-status.json`.
 
@@ -9,6 +9,7 @@ Counties are kept separate (own raw dirs, packs and status rows). Status rows li
 | Miami-Dade | Clerk Official Records LIS (+CLP/COT) | PAD/PRO/DCE + OCS case lists | Logged-in Official Records CSV export (registered login skips Turnstile). Paid alternatives: Clerk API $0.20/request (CFN/folio lookup only, no date/doc-type search), daily FTP $110/folder/mo | WIRED (manual browser export); LP data through 2026-10-05, probate through 2026-10-08 -> **stale**, now reported stale by filing date (>3 days) |
 | Monroe | Clerk court case search: foreclosure cases (lis pendens proxy; Official Records LandmarkWeb is reCAPTCHA-gated) | Probate cases, same search | cr.monroe-clerk.com public search, no login/captcha | WIRED into weekly (`monroe_clerk`) 2026-10-21; filings through 2026-10-16 |
 | Broward | County Records (RTT) free Official Records daily index FTP (doc type LP) | Broward Clerk probate: paid Case API (api.browardclerk.org, notarized agreement); probate viewing needs registered user; AcclaimWeb returns 403 to the box | sftp://bcftp.broward.org (published public login), only last 7-10 days kept | SCRIPT READY (`scripts/counties/broward/fetch_broward_or.sh`) but the box has no port-22 egress -> needs a runner with SFTP; status row `broward_lp` reports stale until files arrive. Not yet parsed into the Broward pack |
+| Broward (published notices) | Foreclosure notices published in newspapers (Notice of action / Notice of sale / notice of lis pendens), labelled **Foreclosure notice (published)** in the app | - | floridapublicnotices.com search API (Florida Press Association; POST `/` with `Accept: application/hal+json`, county 6; keywords 'lis pendens', 'notice of action foreclosure', 'foreclosure'; paged, deduped by case number, ~1 request / 2 s, no captcha) | WIRED into weekly (`broward_fc_notices`) 2026-10-22. Pull 2026-10-22: 384 Broward foreclosure cases (notices 2026-09-18 to 2026-10-22), 234 with a street address, 192 matched to 190 parcels: match rate 82.1% of notices with an address, 50.0% of all cases (the rest give only a legal description, and the roll's short legal is too truncated to match on). Not the recorded LP index: only cases that get advertised, window about 5 weeks |
 
 ## Miami-Dade (34 municipalities + unincorporated)
 
@@ -67,35 +68,40 @@ Miami-Dade sources in the weekly run: `permits` (City of Miami + County Building
 
 | City | County | Permits | Code cases | Source | Status |
 |---|---|---|---|---|---|
-| Fort Lauderdale | Broward | yes (204,760 records, 31,194 parcels; source itself only updated through 2026-03-16) | no public layer found (CodeComplianceArea = zones only) | gis.fortlauderdale.gov BuildingPermits FeatureServer | FETCH WIRED (`broward_permits`) 2026-10-21; not yet joined into Broward distress score |
+| Fort Lauderdale | Broward | yes (ArcGIS, source itself updated only through 2026-03-16) | no public layer found (CodeComplianceArea = zones only) | gis.fortlauderdale.gov BuildingPermits FeatureServer | WIRED (`broward_permits`), joined into the Broward score + filters 2026-10-22 (distress-type permits: demolition, unsafe, roof, damage repair). 31,194 parcels with permits, 1,972 distress-type permits in the last 24 months (to 2026-03-16). |
 | Unincorporated Broward | Broward | BCS/POSSE permit search (per-address only) | CodeEnforcement ArcGIS folder exists but returns 404 publicly | dpepp.broward.org, bcgishub.broward.org/posse | NOT WIRED - no public bulk endpoint reachable |
-| Coconut Creek | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Cooper City | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Coral Springs | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Dania Beach | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Davie | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Deerfield Beach | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Hallandale Beach | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Hillsboro Beach | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Hollywood | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Lauderdale-By-The-Sea | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Lauderdale Lakes | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Lauderhill | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Lazy Lake | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Lighthouse Point | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Margate | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Miramar | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| North Lauderdale | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Oakland Park | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Parkland | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Pembroke Park | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Pembroke Pines | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Plantation | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Pompano Beach | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Sea Ranch Lakes | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Southwest Ranches | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Sunrise | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Tamarac | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| West Park | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Weston | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
-| Wilton Manors | Broward | not probed yet | not probed yet | - | TODO (inventory not finished this session) |
+| Coconut Creek | Broward | - | - | EnerGov energov.coconutcreek.net (connection fails from the box) | NOT WIRED - unreachable from the box; may work from another network |
+| Cooper City | Broward | - | - | Accela ACA | NOT WIRED - interactive portal only, no bulk/API |
+| Coral Springs | Broward | - | - | eTRAKiT (per-address only) | NOT WIRED - interactive portal only, no bulk/API |
+| Dania Beach | Broward | EnerGov tenant nearly empty (7) | EnerGov nearly empty (9) | cityofdaniabeachfl-energovweb.tylerhost.net | NOT WIRED - tenant just went live; re-check |
+| Davie | Broward | - | - | eSuite | NOT WIRED - interactive portal only, no bulk/API |
+| Deerfield Beach | Broward | - | - | gov-easy portal | NOT WIRED - interactive portal only, no bulk/API |
+| Hallandale Beach | Broward | - | - | AGOL Experience app only | NOT WIRED - interactive only |
+| Hillsboro Beach | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Hollywood | Broward | - | - | Accela ACA (since 2026-08-04) | NOT WIRED - interactive portal only, no bulk/API |
+| Lauderdale-By-The-Sea | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Lauderdale Lakes | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Lauderhill | Broward | EnerGov nearly empty (23) | EnerGov nearly empty (2) | cityoflauderhillfl-energovweb.tylerhost.net; legacy eGovPlus unreachable | NOT WIRED - nearly empty |
+| Lazy Lake | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Lighthouse Point | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Margate | Broward | - | - | Click2Gov BP | NOT WIRED - interactive portal only, no bulk/API |
+| Miramar | Broward | yes, EnerGov (466k records) | none public (EnerGov code module returns 0) | Tyler EnerGov CSS miramarfl-energovweb.tylerhost.net | WIRED permits only (`broward_energov`) 2026-10-22. Pulled 2026-10-22: 466,286 permits (458,072 with a folio), 3,244 distress-type permits in the last 24 months; newest 2026-10-22. |
+| North Lauderdale | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Oakland Park | Broward | yes, EnerGov (29.6k records, tenant since 2023) | yes, EnerGov (8.2k records) | Tyler EnerGov CSS oaklandparkfl-energovweb.tylerhost.net | WIRED (`broward_energov`) 2026-10-22. Pulled 2026-10-22: 29,558 permits (26,316 with a folio), 1,140 distress-type permits in the last 24 months; 8,167 code cases (8,055 with a folio), 6,511 opened in the last 5 years, 961 open; newest 2026-10-22. |
+| Parkland | Broward | - | - | MyGovernmentOnline | NOT WIRED - interactive portal only, no bulk/API |
+| Pembroke Park | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Pembroke Pines | Broward | yes, EnerGov (253k records) | yes, EnerGov (158k records) | Tyler EnerGov CSS pembrokepinesfl-energovweb.tylerhost.net | WIRED (`broward_energov`) 2026-10-22. Pulled 2026-10-22: 253,233 permits (229,951 with a folio), 4,492 distress-type permits in the last 24 months; 158,208 code cases (83,845 with a folio), 17,721 opened in the last 5 years, 1,693 open; newest 2026-10-22. Note: about 47% of Pembroke Pines code cases carry no parcel number and cannot be joined. |
+| Plantation | Broward | - | - | Accela ACA | NOT WIRED - interactive portal only, no bulk/API |
+| Pompano Beach | Broward | - | - | Click2Gov BP | NOT WIRED - interactive portal only, no bulk/API |
+| Sea Ranch Lakes | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Southwest Ranches | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Sunrise | Broward | yes, EnerGov (338k records) | yes, EnerGov (150k records) | Tyler EnerGov CSS energov.sunrisefl.gov | WIRED (`broward_energov`) 2026-10-22. Pulled 2026-10-22: 338,456 permits (336,351 with a folio), 2,534 distress-type permits in the last 24 months; 149,955 code cases (149,018 with a folio), 22,023 opened in the last 5 years, 4,097 open; newest 2026-10-22. |
+| Tamarac | Broward | - | - | Click2Gov BP | NOT WIRED - interactive portal only, no bulk/API |
+| West Park | Broward | - | - | none found (probe 2026-10-22) | NO PUBLIC DATA |
+| Weston | Broward | - | - | Accela ACA; portal.westonfl.org layers need a token | NOT WIRED - interactive portal only, no bulk/API |
+| Wilton Manors | Broward | - | - | Citizenserve | NOT WIRED - interactive portal only, no bulk/API |
+
+
+Broward probe details: `BROWARD_PROBE.md` (2026-10-22). Broward permits / code cases join to parcels by the 12-character BCPA folio (EnerGov `MainParcel`, FTL `PARCELID`); scoring and filters in `scripts/counties/broward/broward_permit_lib.py` + `build_broward.py`.
+
+Broward auctions (`broward_auctions`, weekly since 2026-10-22): `fetch_auctions_fl.py broward https://broward.realforeclose.com https://broward.realtaxdeed.com`. Checked 2026-10-22: both sites return 403 to plain curl and to a bare `Mozilla/5.0` User-Agent but 200 to the full browser User-Agent the script sends; `www.broward.realtaxdeed.com` fails with an SSL hostname mismatch, so the hosts are used without `www.` (tax-deed sales had been silently missing).

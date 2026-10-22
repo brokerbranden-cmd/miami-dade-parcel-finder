@@ -96,7 +96,17 @@ case " ${SKIP_COUNTIES:-} " in *" monroe "*) note "skip monroe (SKIP_COUNTIES)";
   build monroe_data  python3 scripts/counties/monroe/build_monroe.py data/monroe ;;
 esac
 # Broward city permits (public ArcGIS; Broward-only raw files, not mixed with Miami-Dade)
-RETRIES=2 fetch broward_permits "broward/permits" timeout 1800 python3 scripts/counties/broward/fetch_broward_permits.py
+RETRIES=2 fetch broward_permits "broward/permits/fort_lauderdale.json" timeout 1800 python3 scripts/counties/broward/fetch_broward_permits.py
+case " ${SKIP_COUNTIES:-} " in *" broward "*) note "skip broward (SKIP_COUNTIES)";; *)
+  # EnerGov permits + code cases: Pembroke Pines, Sunrise, Oakland Park (+ Miramar permits only); staggered threads, ~1 req/s per portal; resumable
+  # (cached windows older than 120 days are reused, so a weekly run re-pulls only the recent windows). -> RAW/broward/permits/energov/
+  RETRIES=2 fetch broward_energov "broward/permits/energov" timeout 5400 python3 scripts/fetch_energov.py "$RAW" --set broward
+  # Published foreclosure notices (floridapublicnotices.com, county 6; ~30 requests, 1 per 2 s) -> RAW/broward/fpn_foreclosure.json
+  RETRIES=2 fetch broward_fc_notices "broward/fpn_foreclosure.json broward/fpn_raw.json" timeout 1800 python3 scripts/counties/broward/fetch_fpn_foreclosure.py
+  # RealAuction calendars: hosts WITHOUT www. (www.broward.realtaxdeed.com has an SSL hostname mismatch) -> RAW/broward/auctions.json
+  RETRIES=2 fetch broward_auctions "broward/auctions.json" timeout 2400 python3 scripts/counties/broward/fetch_auctions_fl.py broward https://broward.realforeclose.com https://broward.realtaxdeed.com
+  build broward_data python3 scripts/counties/broward/build_broward.py data/broward ;;   # re-applies the tax layer itself
+esac
 python3 scripts/refresh_status.py "$ST" data/refresh-status.json > "$ST/status.txt" || echo "WARN: status file failed"
 cat "$ST/status.txt" 2>/dev/null
 now > "$ST/run_finished"

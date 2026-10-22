@@ -17,3 +17,13 @@ PORTALS = {
     'opa_locka':     ('Opa-locka', '08', 'https://cityofopalockafl-energovweb.tylerhost.net/apps/selfservice'),       # live, essentially empty (0 permits, 1 case)
 }
 
+
+# Broward city portals (fetch_energov.py --set broward -> RAW/broward/permits/energov/; never merged into the Miami-Dade permit index).
+# Probed 2026-10-22 (BROWARD_PROBE.md): MainParcel = 12-char BCPA folio. Miramar has no public code-case module (permits only).
+BROWARD_PORTALS = {
+    'pembroke_pines': ('Pembroke Pines', 'BW', 'https://pembrokepinesfl-energovweb.tylerhost.net/apps/selfservice'),
+    'miramar':        ('Miramar', 'BW', 'https://miramarfl-energovweb.tylerhost.net/apps/selfservice'),
+    'sunrise':        ('Sunrise', 'BW', 'https://energov.sunrisefl.gov/EnerGov_Prod/SelfService'),
+    'oakland_park':   ('Oakland Park', 'BW', 'https://oaklandparkfl-energovweb.tylerhost.net/apps/selfservice'),
+}
+BROWARD_KINDS = {'miramar': ['permit']}

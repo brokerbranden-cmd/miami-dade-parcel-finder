@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Scheduled foreclosure + tax-deed sales from a county's RealAuction sites (public, no login, ~1 req/s): reuses scripts/fetch_auctions.py with another host.
-usage: fetch_auctions_fl.py <county-id> <host-foreclose> <host-taxdeed>   e.g. broward https://www.broward.realforeclose.com https://www.broward.realtaxdeed.com
+usage: fetch_auctions_fl.py <county-id> <host-foreclose> <host-taxdeed>   e.g. broward https://broward.realforeclose.com https://broward.realtaxdeed.com
+  (2026-10-22: use the hosts WITHOUT www. - www.broward.realtaxdeed.com serves a certificate for another name (SSL hostname mismatch), and plain
+  curl / a bare "Mozilla/5.0" User-Agent get 403 from both sites while the full browser User-Agent set in fetch_auctions.py gets 200.)
 Output: $RAW/<county>/auctions.json {pulled, source, items:[{date,type,case,cert,folio,address,city,judgment,opening_bid,assessed,...}]}  (items[].src = 'foreclosure'|'taxdeed')"""
 import sys, os, json, datetime as dt
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))

@@ -8,7 +8,7 @@ The search window is capped at 10,000 rows, so the fetch walks apply/opened-date
 more than 9,500 rows) at 1,000 rows per request and ~1 request/second per portal. Resumable: finished windows are kept in
 RAW/permits/energov/<slug>_<kind>.jsonl and skipped on re-run.
 
-usage: fetch_energov.py [RAW] [--only slug,slug] [--kinds permit,code] [--since 1990]
+usage: fetch_energov.py [RAW] [--only slug,slug] [--kinds permit,code] [--since 1990] [--set miami-dade|broward]
 Output: RAW/permits/energov/<slug>_permit.jsonl / <slug>_code.jsonl  (one line per window: {w:[from,to], total, rows:[...]}),
         RAW/permits/energov/summary.json (per portal: reported totals vs rows kept).
 """
@@ -24,14 +24,17 @@ def opt(name, default=None):
 ONLY = set((opt('--only') or '').split(',')) - {''}
 KINDS = (opt('--kinds') or 'permit,code').split(',')
 SINCE = int(opt('--since', '1990'))
-OUT = f'{RAW}/permits/energov'
+SET = opt('--set', 'miami-dade')   # 'broward' -> Broward city portals (fetch_energov_cfg.BROWARD_PORTALS), own raw dir
+OUT = f'{RAW}/broward/permits/energov' if SET == 'broward' else f'{RAW}/permits/energov'
 RECENT_DAYS = int(opt('--recent-days', '120'))
 TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'energov_template.json')   # the portal's own search request body (all criteria blocks, nulls)
 SORT = {'permit': 'PermitNumber.keyword', 'code': 'CaseNumber.keyword'}
 
 # slug: (city, municipality code in the PA roll, portal base). Portals found from each city's own permit page / web search.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fetch_energov_cfg import PORTALS
+from fetch_energov_cfg import PORTALS, BROWARD_PORTALS, BROWARD_KINDS
+KIND_LIMIT = {}
+if SET == 'broward': PORTALS = BROWARD_PORTALS; KIND_LIMIT = BROWARD_KINDS
 
 def blank_body(kind):
     crit = {
@@ -135,14 +138,15 @@ def summarize():
         for kind in ('permit', 'code'):
             fn = f'{OUT}/{slug}_{kind}.jsonl'
             if not os.path.exists(fn): continue
-            tot = got = 0; ids = set(); lo = '9'; hi = ''
+            tot = got = 0; ids = set(); lo = '9'; hi = ''; hi_ok = ''; td = dt.date.today().isoformat()
             for ln in open(fn):
                 j = json.loads(ln); tot += j['total']; got += len(j['rows'])
                 for r in j['rows']:
                     ids.add(r['id'])
                     d = r['apply'] or r['issue']
                     if d and d > '1950': lo = min(lo, d); hi = max(hi, d)
-            S[f'{slug}_{kind}'] = {'reported': tot, 'rows': got, 'unique': len(ids), 'min_date': lo, 'max_date': hi}
+                    if d and d <= td: hi_ok = max(hi_ok, d)
+            S[f'{slug}_{kind}'] = {'reported': tot, 'rows': got, 'unique': len(ids), 'min_date': lo, 'max_date': hi, 'newest': hi_ok}   # newest = newest date not in the future (honest 'data through')
     json.dump({'pulled': time.strftime('%Y-%m-%d %H:%M'), 'portals': S}, open(f'{OUT}/summary.json', 'w'), indent=1)
     return S
 
@@ -152,6 +156,7 @@ if __name__ == '__main__':
     errs = []
     def work(slug):
         for kind in KINDS:
+            if slug in KIND_LIMIT and kind not in KIND_LIMIT[slug]: continue
             try: run(slug, kind)
             except BaseException as e:
                 errs.append((slug, kind, repr(e))); print(f'[{slug}/{kind}] ERROR {e!r}', flush=True)

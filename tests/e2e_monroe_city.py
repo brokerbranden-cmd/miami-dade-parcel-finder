@@ -71,7 +71,9 @@ with sync_playwright() as pw:
     # Broward has none of the Monroe city chips
     pg.goto(URL + '?county=broward#hg=0'); pg.wait_for_selector('#cards .card', timeout=180000); pg.wait_for_timeout(800)
     bk = pg.eval_on_selector_all('#mrSig .chip', 'n=>n.map(x=>x.dataset.mr)')
-    check(not any(k in bk for k in ('sig:code_open', 'sig:permit_open', 'sig:permit_recent')), f'Broward has no Monroe city chips ({len(bk)} chips)')
+    # Broward has its own 'Open code case' chip (sigm bit 128 from build_broward.py), so only the Monroe-only permit chips must be absent
+    check(not any(k in bk for k in ('sig:permit_open', 'sig:permit_recent')), f'Broward has no Monroe city permit chips ({len(bk)} chips)')
+    check(bk.count('sig:code_open') <= 1, 'Broward has at most its own one Open code case chip')
     b.close()
 check(not errs, 'no page errors ' + '; '.join(errs[:3]))
 print('RESULT', 'PASS' if not fails else f'FAIL ({len(fails)})'); sys.exit(1 if fails else 0)

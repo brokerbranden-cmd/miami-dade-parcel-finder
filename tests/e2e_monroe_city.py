@@ -27,6 +27,10 @@ with sync_playwright() as pw:
     ctx = b.new_context(viewport=vp, service_workers='block', is_mobile=MOB, has_touch=MOB)
     pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.goto(URL + '?county=monroe#hg=0'); pg.wait_for_selector('#cards .card', timeout=120000); pg.wait_for_timeout(1000)
+    def tap(sel):  # mobile sheet has a sticky bar / search group: centre the control first so nothing overlaps it
+        pg.eval_on_selector(sel, "e=>e.scrollIntoView({block:'center'})"); pg.wait_for_timeout(200); pg.click(sel)
+    def done():  # close the mobile filter sheet before tapping a result card
+        if MOB and pg.is_visible('#sheetDone'): pg.click('#sheetDone'); pg.wait_for_timeout(400)
     sheet = lambda: (pg.click('#filtersBtn'), pg.wait_for_timeout(400)) if MOB and not pg.is_visible('#panel') else None
     sheet(); n0 = cnt(pg)
     def sec(title):
@@ -42,15 +46,15 @@ with sync_playwright() as pw:
     for k in ('sig:code_open', 'sig:permit_open', 'sig:permit_recent', 'sig:code'): check(k in keys, f'chip {k} present')
     for k, bit, lo in (('code_open', 65536, 20), ('permit_open', 128, 200), ('permit_recent', 64, 500)):
         tm, tc = truth(bit)
-        pg.click(f'#mrSig .chip[data-mr="sig:{k}"]'); pg.wait_for_timeout(1200); n = cnt(pg)
+        tap(f'#mrSig .chip[data-mr="sig:{k}"]'); pg.wait_for_timeout(1200); n = cnt(pg)
         check(lo <= n and 0.9 * tm <= n <= tm + tc and n < n0, f'{k}: filter {n} (pack bits: main {tm}, condo {tc})')
         check(f'msig={k}' in pg.evaluate('location.hash'), f'hash carries msig={k}')
-        pg.click('#clrMr'); pg.wait_for_timeout(800)
+        tap('#clrMr'); pg.wait_for_timeout(800)
     check(cnt(pg) == n0, 'clear restores the count')
     # drawer: open code case parcel shows the city case text + open count
     pg.goto(URL + '?county=monroe#msig=code_open'); pg.wait_for_selector('#cards .card', timeout=120000); pg.wait_for_timeout(1500); sheet()
     check(pg.eval_on_selector_all('#mrSig .chip.on', 'n=>n.map(x=>x.dataset.mr)') == ['sig:code_open'], 'open-code-case chip restored from the URL')
-    pg.click('#cards .card h3'); pg.wait_for_selector('.drawer', timeout=30000); pg.wait_for_timeout(1500)
+    done(); pg.click('#cards .card h3'); pg.wait_for_selector('.drawer', timeout=30000); pg.wait_for_timeout(1500)
     txt = sec('Permits, code cases')
     check(re.search(r'\d+ open', txt) is not None and re.search(r'(Key West|Islamorada|county|Marathon)', txt) is not None, 'drawer shows open code cases: ' + (re.search(r'\d+ (Key West|Islamorada)[^\n]{0,80}', txt) or [''])[0])
     check('eTRAKiT' in txt and 'CityView' in txt, 'drawer coverage note names the Key West / Islamorada sources')
@@ -58,7 +62,7 @@ with sync_playwright() as pw:
     # a Key West parcel with a recent permit: drawer has Last permit + permit text, vacancy hint shows the -15 recent-permit line
     pg.goto(URL + '?county=monroe#msig=permit_recent'); pg.wait_for_selector('#cards .card', timeout=120000); pg.wait_for_timeout(1500)
     nk = cnt(pg); check(nk > 100, f'parcels with a city permit in the last 2 yrs: {nk}')
-    pg.click('#cards .card h3'); pg.wait_for_selector('.drawer', timeout=30000); pg.wait_for_timeout(1500); txt = sec('Permits, code cases')
+    done(); pg.click('#cards .card h3'); pg.wait_for_selector('.drawer', timeout=30000); pg.wait_for_timeout(1500); txt = sec('Permits, code cases')
     check('Last permit' in txt and re.search(r'\d+ (Key West|Islamorada) permits', txt) is not None, 'drawer lists the city permits with a last-permit date')
     hasb = True; rp = [0, 0]
     for nme in ('main', 'condo'):

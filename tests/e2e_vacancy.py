@@ -72,10 +72,10 @@ with sync_playwright() as pw:
     ok(x['vacant'] and x['cond'].startswith('Boarded'), 'JSON export carries vacant + cond')
     with pg.expect_download() as dl: pg.click('#svExportCsv')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
-    ok(rows and list(rows[0].keys()) == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], 'saved CSV = the 11 contact columns (no vacancy / notes columns)')
+    ok(rows and (list(rows[0].keys())[:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and list(rows[0].keys())[11:] in ([], ['Waterfront'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'] + ['Waterfront'])), 'saved CSV = the 11 contact columns (no vacancy / notes columns)')
     with pg.expect_download() as dl: pg.click('#exportBtn')
     rows = list(csv.DictReader(io.StringIO(open(dl.value.path()).read())))
-    ok(rows and list(rows[0].keys()) == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'], 'results CSV = the 11 contact columns')
+    ok(rows and (list(rows[0].keys())[:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and list(rows[0].keys())[11:] in ([], ['Waterfront'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'] + ['Waterfront'])), 'results CSV = the 11 contact columns')
     pg.click('#svBack'); pg.wait_for_timeout(500)
     # import merges flag into a fresh context
     ctx2 = b.new_context(viewport={'width': 1360, 'height': 900}); p2 = ctx2.new_page()

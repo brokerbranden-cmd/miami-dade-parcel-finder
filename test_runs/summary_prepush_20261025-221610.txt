@@ -1,0 +1,11 @@
+# start 22:16:10 http://127.0.0.1:8115/
+PASS unit
+PASS unit_ask
+PASS ownerkind
+FAIL scenarios_desktop (exit 1)   FAILED s16_csv_columns | 11 contact columns first (+ equity columns appended at the end only) (['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County'
+PASS export_desktop
+FAIL monroe_desktop (exit 1) FAIL export header unchanged: ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip'
+PASS monroe_city_desktop
+FAIL broward_desktop (exit 1) FAIL export with tax filter keeps the 11 columns (71 rows)
+PASS broward_signals_desktop
+PASS layout_counties_desktop

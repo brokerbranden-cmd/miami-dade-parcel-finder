@@ -1,144 +1,123 @@
 {
- "built": "2026-10-22T11:32:28-04:00",
- "run_started": "2026-10-21T21:50:34-0400",
+ "built": "2026-10-26T14:52:37-04:00",
+ "run_started": "2026-10-26T07:53:53-0400",
  "sources": {
   "pagis": {
    "label": "Property Appraiser roll",
    "status": "fresh",
-   "last_good": "2026-10-19T07:58:20-0400"
+   "last_good": "2026-10-26T07:53:59-0400"
   },
   "layers": {
    "label": "Zoning/CRA layers",
    "status": "fresh",
-   "last_good": "2026-10-19T07:59:17-0400"
+   "last_good": "2026-10-26T07:54:55-0400"
   },
   "zone_desc": {
    "label": "Zoning descriptions",
    "status": "fresh",
-   "last_good": "2026-10-19T07:59:58-0400"
+   "last_good": "2026-10-26T07:55:33-0400"
   },
   "clerk": {
    "label": "Clerk lis pendens",
    "status": "fresh",
-   "last_good": "2026-10-16",
-   "data_through": "2026-10-16",
-   "lag_days": 6,
-   "clerk_index_through": "2026-10-16",
+   "last_good": "2026-10-23",
+   "data_through": "2026-10-23",
+   "lag_days": 3,
+   "clerk_index_through": "2026-10-20",
    "clerk_index_checked": "live",
    "behind_clerk_days": 0,
-   "note": "through Oct 16 (Clerk's latest)"
+   "note": "through Oct 20 (Clerk's latest)"
   },
   "clerk_clp": {
    "label": "Clerk CLP (open check)",
    "status": "fresh",
-   "last_good": "2026-10-16",
-   "data_through": "2026-10-16",
-   "lag_days": 6,
-   "clerk_index_through": "2026-10-16",
+   "last_good": "2026-10-22",
+   "data_through": "2026-10-22",
+   "lag_days": 4,
+   "clerk_index_through": "2026-10-20",
    "clerk_index_checked": "live",
    "behind_clerk_days": 0,
-   "note": "through Oct 16 (Clerk's latest)"
+   "note": "through Oct 20 (Clerk's latest)"
   },
   "auctions": {
    "label": "Foreclosure/tax auctions",
    "status": "fresh",
-   "last_good": "2026-10-19T08:03:39-0400"
+   "last_good": "2026-10-26T07:59:19-0400"
   },
   "tax": {
    "label": "Tax delinquency",
    "status": "fresh",
-   "last_good": "2026-10-19T08:04:32-0400"
+   "last_good": "2026-10-26T08:01:16-0400"
   },
   "viol": {
    "label": "Code violations",
    "status": "fresh",
-   "last_good": "2026-10-19T08:08:18-0400"
+   "last_good": "2026-10-26T08:05:01-0400"
   },
   "permits": {
    "label": "City of Miami permits",
    "status": "fresh",
-   "last_good": "2026-10-21T21:34:50-0400"
+   "last_good": "2026-10-26T10:30:03-0400"
   },
   "county_permits": {
    "label": "County permits",
    "status": "fresh",
-   "last_good": "2026-10-19T08:38:53-0400"
+   "last_good": "2026-10-26T10:35:59-0400"
   },
   "energov": {
    "label": "EnerGov city permits",
    "status": "fresh",
-   "last_good": "2026-10-21T21:50:34-0400"
+   "last_good": "2026-10-26T11:06:52-0400"
   },
   "parcels": {
    "label": "Parcel polygons",
    "status": "fresh",
-   "last_good": "2026-10-19T10:48:18-0400"
+   "last_good": "2026-10-26T11:36:55-0400"
   },
   "probate": {
    "label": "Clerk probate (PAD/PRO/DCE)",
    "status": "fresh",
-   "last_good": "2026-10-16",
-   "data_through": "2026-10-16",
-   "lag_days": 6,
-   "clerk_index_through": "2026-10-16",
+   "last_good": "2026-10-23",
+   "data_through": "2026-10-23",
+   "lag_days": 3,
+   "clerk_index_through": "2026-10-20",
    "clerk_index_checked": "live",
    "behind_clerk_days": 0,
-   "note": "through Oct 16 (Clerk's latest)"
+   "note": "through Oct 20 (Clerk's latest)"
   },
   "cot": {
    "label": "Clerk certificates of title (CTI)",
    "status": "fresh",
-   "last_good": "2026-10-16",
-   "data_through": "2026-10-16",
-   "lag_days": 6,
-   "clerk_index_through": "2026-10-16",
+   "last_good": "2026-10-22",
+   "data_through": "2026-10-22",
+   "lag_days": 4,
+   "clerk_index_through": "2026-10-20",
    "clerk_index_checked": "live",
    "behind_clerk_days": 0,
-   "note": "through Oct 16 (Clerk's latest)"
+   "note": "through Oct 20 (Clerk's latest)"
   },
   "monroe_clerk": {
    "label": "Monroe Clerk foreclosure+probate cases",
    "status": "fresh",
-   "last_good": "2026-10-21",
-   "data_through": "2026-10-21",
-   "lag_days": 1
+   "last_good": "2026-10-22",
+   "data_through": "2026-10-22",
+   "lag_days": 4
   },
   "monroe_marathon_code": {
    "label": "Monroe: Marathon code hearings",
    "status": "fresh",
-   "last_good": "2026-10-21T21:57:18-0400"
+   "last_good": "2026-10-26T11:59:13-0400"
   },
   "broward_permits": {
    "label": "Broward: Fort Lauderdale permits",
-   "status": "stale",
-   "last_good": "2026-03-16",
-   "data_through": "2026-03-16",
-   "lag_days": 220
+   "status": "fresh",
+   "last_good": "2026-10-26T12:00:49-0400"
   },
   "broward_lp": {
    "label": "Broward lis pendens (County Records FTP)",
    "status": "stale",
    "last_good": null,
    "data_through": null
-  },
-  "broward_energov": {
-   "label": "Broward: EnerGov permits + code cases (Pembroke Pines, Sunrise, Oakland Park; Miramar permits)",
-   "status": "fresh",
-   "last_good": "2026-10-21",
-   "data_through": "2026-10-21",
-   "lag_days": 1
-  },
-  "broward_fc_notices": {
-   "label": "Broward: foreclosure notices (published, floridapublicnotices.com)",
-   "status": "fresh",
-   "last_good": "2026-10-22",
-   "data_through": "2026-10-22",
-   "lag_days": 0
-  },
-  "broward_auctions": {
-   "label": "Broward: foreclosure + tax-deed auctions",
-   "status": "fresh",
-   "last_good": "2026-10-22T09:28"
   }
  },
  "builds": {
@@ -151,27 +130,26 @@
   "commercial": "ok",
   "data": "ok",
   "zoning_rules": "ok",
-  "assemblages": "ok",
-  "broward_data": "ok"
+  "assemblages": "ok"
  },
  "counts": {
   "parcels": 922797,
   "salesThrough": "09/22/2026",
   "rollYear": 2026,
-  "lis_pendens_matched": 1041,
-  "lis_pendens_through": "2026-10-16",
-  "auction_items": 531,
-  "auctions_pulled": "2026-10-19T08:03",
-  "open_preforeclosures": 1007,
-  "probate": 739,
-  "auctions_with_max_bid": 207,
-  "comps": 9997,
+  "lis_pendens_matched": 1092,
+  "lis_pendens_through": "2026-10-23",
+  "auction_items": 573,
+  "auctions_pulled": "2026-10-26T07:59",
+  "open_preforeclosures": 1054,
+  "probate": 777,
+  "auctions_with_max_bid": 213,
+  "comps": 9511,
   "commercial_list": 4344,
   "commercial_live_tax": 4162,
   "tax": 3,
   "viol": 9,
   "permits_files": 35,
   "parcel_files": 597,
-  "clerk_files": 49
+  "clerk_files": 73
  }
 }

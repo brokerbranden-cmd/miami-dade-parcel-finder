@@ -68,7 +68,7 @@ if [ "${FAST:-0}" != 1 ] && [ "$RESULT" = PASS ]; then
     if [ $rc = 0 ]; then echo "PASS $n" >> "$S"; else echo "FAIL $n (exit $rc) $(grep -m1 -E '^FAIL|FAILED|Error' "$L/$n.log" | cut -c1-200)" >> "$S"; fi; }
   run unit node tests/unit_skiptrace.js
   for m in desktop mobile; do
-    for t in e2e_monroe e2e_broward e2e_broward_signals e2e_layout_counties e2e_export e2e_sendmark e2e_deterrents e2e_skiptrace scenarios e2e_filter_audit; do run "${t#e2e_}_$m" python3 tests/$t.py "$U" $m; done
+    for t in e2e_monroe e2e_broward e2e_broward_signals e2e_layout_counties e2e_export e2e_sendmark e2e_deterrents e2e_skiptrace scenarios e2e_filter_audit e2e_waterfront; do run "${t#e2e_}_$m" python3 tests/$t.py "$U" $m; done
   done
   run county python3 tests/e2e_county.py "$U"
   run ownerkind python3 tests/e2e_ownerkind.py "$U"

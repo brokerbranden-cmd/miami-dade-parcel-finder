@@ -26,7 +26,7 @@ with sync_playwright() as pw:
         with pg.expect_download(timeout=240000) as dl: pg.evaluate(f"document.querySelector('{sel}').click()")
         t = open(dl.value.path(), encoding='utf-8').read(); return list(csv.reader(io.StringIO(t)))
     def check(rows, what):
-        ok(rows and rows[0][:11] == HDR and rows[0][11:] in ([], EQH), f'{what}: header is the 11 contact columns in order (+ estimated-equity columns appended at the end only)')
+        ok(rows and rows[0][:11] == HDR and rows[0][11:] in ([], EQH, ['Waterfront'], EQH + ['Waterfront']), f'{what}: header is the 11 contact columns in order (+ estimated-equity columns appended at the end only)')
         body = rows[1:]; bad_a = [r for r in body if not r[1].strip()]; bad_f = [r for r in body if not FD.fullmatch(r[10])]
         ok(body and not bad_a and not bad_f and all(len(r) == len(rows[0]) and r[5] == 'Miami-Dade' and r[3] == 'FL' for r in body), f'{what}: {len(body)} rows, blank Address {len(bad_a)}, non-dashed Folio {len(bad_f)}')
         bad_z = [r[4] for r in body if r[4] and not ZIP.fullmatch(r[4])]; ok(not bad_z and sum(1 for r in body if r[4]) >= 0.95 * len(body), f'{what}: Property Zip is 5-digit text ({sum(1 for r in body if r[4])}/{len(body)} filled, bad {bad_z[:3]})')

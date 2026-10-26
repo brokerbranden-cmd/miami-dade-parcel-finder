@@ -120,6 +120,13 @@
       <div class="chips" id="types"></div>
     </div>
 
+    <div class="grp" id="wfGrp">
+      <div class="grp-h"><h2>Waterfront</h2><span class="hint">Only parcels that touch mapped water. Oceanfront = the ocean, Gulf, Florida Bay, Biscayne Bay or another wide open water.</span><button class="clr" type="button" id="clrWf">Clear</button></div>
+      <div class="mrrow"><span class="mrlab">On the water</span><select id="wfSel" aria-label="Waterfront filter"><option value="">Any or none</option></select></div>
+      <div class="mrnote" id="wfSrc">Waterfront data loads with the properties.</div>
+      <div class="mrnote" id="wfNote" hidden></div>
+    </div>
+
     <div class="grp" data-need="mzoning">
       <div class="grp-h"><h2>City zoning code</h2><span class="hint">The actual code from the city or county zoning map. Type one or more codes; "T6" also finds T6-8-O, T6-36A-L and so on.</span><button class="clr" type="button" id="clrMz">Clear</button></div>
       <input type="search" id="mzq" placeholder="e.g. T4, T5-O, RU-2, BU-1A" autocomplete="off" aria-label="City zoning codes" style="max-width: 420px;">
@@ -390,6 +397,7 @@
 <script src="teardown.js"></script>
 <script src="ask.js"></script>
 <script src="equity.js"></script>
+<script src="waterfront.js"></script>
 <script src="app.js"></script>
 <script src="ui.js"></script>
 <script src="drive.js"></script>

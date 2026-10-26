@@ -77,7 +77,7 @@ with sync_playwright() as pw:
     ok(th[-2:] == ['Est. equity', 'Est. loans'], f'table has Est. equity / Est. loans columns at the end ({th[-3:]})')
     with pg.expect_download(timeout=240000) as dl: pg.evaluate("document.querySelector('#exportBtn').click()")
     rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read())))
-    ok(rows[0] == HDR + EQH, f'CSV: the 11 fixed columns in order, equity columns appended at the end ({rows[0][9:]})')
+    ok(rows[0] in (HDR + EQH, HDR + EQH + ['Waterfront']), f'CSV: the 11 fixed columns in order, equity columns appended at the end ({rows[0][9:]})')
     body = rows[1:]; ok(body and all(len(x) == 18 and x[16] == 'Y' and x[13] == '0' for x in body), f'CSV: {len(body)} rows, all Free & Clear = Y, balance 0')
     # 7. other counties hide it
     for cty in ('monroe', 'broward'):

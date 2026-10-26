@@ -111,6 +111,14 @@ case " ${SKIP_COUNTIES:-} " in *" broward "*) note "skip broward (SKIP_COUNTIES)
   RETRIES=2 fetch broward_auctions "broward/auctions.json" timeout 2400 python3 scripts/counties/broward/fetch_auctions_fl.py broward https://broward.realforeclose.com https://broward.realtaxdeed.com
   build broward_data python3 scripts/counties/broward/build_broward.py data/broward ;;   # re-applies the tax layer itself
 esac
+# --- waterfront / oceanfront (every county, same method): parcel polygons vs OpenStreetMap water (coastline water polygons +
+# Overture Maps base/water = OSM lakes / canals / rivers, cached 28 days) -> data/<county>/water.json.gz (folio -> ocean/bay/canal/lake bits)
+RETRIES=2 fetch water "water/marine_sfl.gpkg water/overture" timeout 7200 python3 scripts/fetch_water.py
+RETRIES=2 fetch broward_polys "broward/polys" timeout 7200 python3 scripts/fetch_parcel_polys.py broward
+RETRIES=2 fetch monroe_polys "monroe/polys" timeout 3600 python3 scripts/fetch_parcel_polys.py monroe
+build water_miami_dade python3 scripts/build_waterfront.py miami-dade
+build water_broward    python3 scripts/build_waterfront.py broward
+build water_monroe     python3 scripts/build_waterfront.py monroe
 python3 scripts/refresh_status.py "$ST" data/refresh-status.json > "$ST/status.txt" || echo "WARN: status file failed"
 cat "$ST/status.txt" 2>/dev/null
 now > "$ST/run_finished"

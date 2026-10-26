@@ -8,10 +8,14 @@
   const WORKER_URL = 'https://parcel-skiptrace.brokerbranden.workers.dev';
   const CODE_KEY = 'pf.skapi.code.v1', SRC = 'BatchData API';
   const ls = () => { try { return root.localStorage; } catch (e) { return null; } };
-  const getCode = () => { try { return (ls().getItem(CODE_KEY) || '').trim(); } catch (e) { return ''; } };
+  // Cookie fallback (400 days) so the code survives Safari/ITP localStorage clearing.
+  const CK = 'pf_skapi_code_v1';
+  const ckGet = () => { try { const m = (root.document && root.document.cookie || '').match(/(?:^|;\s*)pf_skapi_code_v1=([^;]*)/); return m ? decodeURIComponent(m[1]).trim() : ''; } catch (e) { return ''; } };
+  const ckSet = v => { try { if (!root.document) return; const sec = root.location && root.location.protocol === 'https:' ? '; Secure' : ''; root.document.cookie = CK + '=' + (v ? encodeURIComponent(v) + '; Max-Age=34560000' : '; Max-Age=0') + '; Path=/; SameSite=Lax' + sec; } catch (e) {} };
+  const getCode = () => { let v = ''; try { v = (ls().getItem(CODE_KEY) || '').trim(); } catch (e) {} if (!v) { v = ckGet(); if (v) { try { ls().setItem(CODE_KEY, v); } catch (e) {} } } return v; };
   const persist = () => { try { const st = root.navigator && root.navigator.storage; if (st && st.persist) st.persist().catch(() => {}); } catch (e) {} };
-  const setCode = c => { try { ls().setItem(CODE_KEY, String(c || '').trim()); persist(); return true; } catch (e) { return false; } };
-  const clearCode = () => { try { ls().removeItem(CODE_KEY); } catch (e) {} };
+  const setCode = c => { const v = String(c || '').trim(); let ok = false; try { ls().setItem(CODE_KEY, v); ok = true; } catch (e) {} ckSet(v); persist(); return ok || !!ckGet(); };
+  const clearCode = () => { try { ls().removeItem(CODE_KEY); } catch (e) {} ckSet(''); };
 
   class ApiError extends Error { constructor(code, status, data) { super(code); this.code = code; this.status = status || 0; this.data = data || {}; } }
   const MESSAGES = {

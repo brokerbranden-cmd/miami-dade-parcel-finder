@@ -58,8 +58,8 @@ with sync_playwright() as pw:
         if not MOB:
             with pg.expect_download(timeout=240000) as dl: pg.evaluate("document.querySelector('#exportBtn').click()")
             rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read())))
-            ok(rows[0][:11] == HDR and rows[0][-1] == 'Waterfront', f'{name}: CSV header = 11 fixed columns, Waterfront last ({rows[0][11:]})')
-            ok(len(rows) > 1 and all('Oceanfront' in r[-1] for r in rows[1:]), f'{name}: every exported row says Oceanfront ({len(rows) - 1:,} rows)')
+            ok(rows[0][:11] == HDR and (rows[0][-1] == 'Waterfront' or rows[0][-2:] == ['Waterfront', 'Power / water cut']), f'{name}: CSV header = 11 fixed columns, Waterfront last (or before Power / water cut) ({rows[0][11:]})')
+            ok(len(rows) > 1 and all('Oceanfront' in r[rows[0].index('Waterfront')] for r in rows[1:]), f'{name}: every exported row says Oceanfront ({len(rows) - 1:,} rows)')
         # clear
         pg.evaluate("document.getElementById('clrWf').click()"); pg.wait_for_timeout(2500)
         ok(pg.evaluate("document.getElementById('wfSel').value") == '' and 'wf=' not in pg.evaluate('location.hash') and pg.evaluate('PF.sample(10)')['n'] >= n, f'{name}: Clear removes the filter')

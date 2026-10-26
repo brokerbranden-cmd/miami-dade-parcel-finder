@@ -127,6 +127,13 @@
       <div class="mrnote" id="wfNote" hidden></div>
     </div>
 
+    <div class="grp" id="utGrp">
+      <div class="grp-h"><h2>Power / water cut</h2><span class="hint">Signs the utilities are off, most accurate first: a utility's own shutoff list, a code case that says no water / no power / utilities off, a recent reconnect / FPL release / meter permit, then open unsafe or vacant cases (weaker).</span><button class="clr" type="button" id="clrUt">Clear</button></div>
+      <div class="mrrow"><span class="mrlab">Utility signal</span><select id="utSel" aria-label="Power / water cut filter"><option value="">Any or none</option></select></div>
+      <div class="mrnote" id="utSrc">Power / water data loads with the properties.</div>
+      <div class="mrnote" id="utNote" hidden></div>
+    </div>
+
     <div class="grp" data-need="mzoning">
       <div class="grp-h"><h2>City zoning code</h2><span class="hint">The actual code from the city or county zoning map. Type one or more codes; "T6" also finds T6-8-O, T6-36A-L and so on.</span><button class="clr" type="button" id="clrMz">Clear</button></div>
       <input type="search" id="mzq" placeholder="e.g. T4, T5-O, RU-2, BU-1A" autocomplete="off" aria-label="City zoning codes" style="max-width: 420px;">
@@ -398,6 +405,7 @@
 <script src="ask.js"></script>
 <script src="equity.js"></script>
 <script src="waterfront.js"></script>
+<script src="utility.js"></script>
 <script src="app.js"></script>
 <script src="ui.js"></script>
 <script src="drive.js"></script>

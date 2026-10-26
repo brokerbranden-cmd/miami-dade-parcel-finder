@@ -551,3 +551,4 @@ input[aria-invalid="true"]{border-color:var(--danger)!important;box-shadow:0 0 0
 .eqline .v{font-size:12.5px}.eqh{margin:14px 0 4px}.eqh small{font-weight:400;color:var(--muted)}.eqsum{margin:4px 0 6px}
 .eqrow{flex-wrap:wrap;gap:6px 14px}.eqrow .hint{flex-basis:100%;font-size:12px;color:var(--muted)}
 .tt.wf{color:#0b6aa2;background:#e6f3fb}.tt.wf1{color:#05568a;background:#d6ecfa}
+.tt.ut{color:#8a4b00;background:#fff1de}.tt.ut1,.tt.ut2{color:#9b1c1c;background:#fde5e5}.tt.ut8{color:#6b5a3a;background:#f3efe6}

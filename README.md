@@ -469,3 +469,12 @@ Both counties. Filters sit in the Owner section; each is Either / Only / Hide an
 - **What:** "Waterfront" filter group (`#wf=any|o|b|c|l`): Any waterfront, Oceanfront / open water, Bay / Intracoastal, Canal, Lake or other water, each with a count. Card tag (Oceanfront / Bayfront / Canalfront / Lakefront), drawer line, table column *Waterfront* (last), CSV column `Waterfront` appended after every other column (main, saved and folder exports; Send-to-list exports unchanged). Same feature in Miami-Dade, Broward and Monroe.
 - **Data** (`scripts/fetch_water.py`, `scripts/fetch_parcel_polys.py`, `scripts/build_waterfront.py` → `data/<county>/water.json.gz`, weekly in `build_all.sh`): no county roll has a waterfront flag, so it is geometric and identical for every county. Parcel polygons (MD PA parcels, BCPA parcel boundaries, Monroe PA APO_GIS) vs OpenStreetMap coastline water polygons (open water ≥800 m across = ocean, ≥100 m = bay, narrower = canal) and Overture Maps base/water (OSM lakes, ponds, canals, rivers; ODbL). Tolerance 12 m (bay 20 m, ocean 150 m for beach/dune strips) plus a first-row check; condo units inherit their building's class. Screening only.
 - **Known gaps:** homes around HOA lakes where the lake sits inside a separate common-area parcel with a wide bank strip can be missed; lake coverage depends on OSM mapping.
+
+## Power / water cut (all counties)
+Filter, card tag, drawer line and the last CSV column, "Power / water cut". The signals are listed strongest first:
+1. A utility shutoff list, dropped in `raw/utility_shutoffs/<county>/*.csv` (address + date), used when one exists.
+2. A no-water / utility-off code case.
+3. A reconnect, meter or FPL release permit in the last 24 months.
+4. An open unsafe / vacant case (weaker).
+
+Built weekly by `scripts/build_utility.py` and written to `data/<county>/utility.json.gz`. Its `notes` field lists the per-county source gaps.

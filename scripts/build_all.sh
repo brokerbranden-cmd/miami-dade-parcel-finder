@@ -122,6 +122,13 @@ RETRIES=2 fetch monroe_polys "monroe/polys" timeout 3600 python3 scripts/fetch_p
 build water_miami_dade python3 scripts/build_waterfront.py miami-dade
 build water_broward    python3 scripts/build_waterfront.py broward
 build water_monroe     python3 scripts/build_waterfront.py monroe
+# --- power / water cut (every county, same method): utility shutoff lists ($RAW/utility_shutoffs/<county>/*.csv, from monthly
+# public-records requests; top accuracy, matched by service address) + no-water / utility-off code cases + reconnect / FPL release /
+# meter permits (24 months) + open unsafe / vacant cases -> data/<county>/utility.json.gz
+mkdir -p "$RAW/utility_shutoffs/miami-dade" "$RAW/utility_shutoffs/broward" "$RAW/utility_shutoffs/monroe"
+build utility_miami_dade python3 scripts/build_utility.py miami-dade
+build utility_broward    python3 scripts/build_utility.py broward
+build utility_monroe     python3 scripts/build_utility.py monroe
 python3 scripts/refresh_status.py "$ST" data/refresh-status.json > "$ST/status.txt" || echo "WARN: status file failed"
 cat "$ST/status.txt" 2>/dev/null
 now > "$ST/run_finished"

@@ -246,7 +246,7 @@ def s16_csv_columns():
     reset(); go('city=Miami%20Gardens&sig=TD&type=sf'); n = cnt(); ok(0 < n < 5000, f'{n} rows to export')
     rs = csv_of('#exportBtn'); hdr = list(rs[0].keys()) if rs else []
     ok(len(rs) == n, f'CSV rows {len(rs)} = results {n}')
-    ok(hdr[:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and hdr[11:] in ([], ['Waterfront'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'] + ['Waterfront']), f'11 contact columns first (+ equity columns appended at the end only) ({hdr})')
+    ok(hdr[:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and hdr[11:] in ([], ['Waterfront', 'Power / water cut'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'] + ['Waterfront', 'Power / water cut']), f'11 contact columns first (+ equity columns appended at the end only) ({hdr})')
     ok(all(re.fullmatch(r'\d\d-\d{4}-\d{3}-\d{4}', r['Folio']) for r in rs), 'folios are dashed 13-digit (Excel keeps them as text)')
     ok(all(r['Property Address'].strip() for r in rs), 'no blank Address')
     ok(len({r['Folio'] for r in rs}) == len(rs), 'no duplicate rows')

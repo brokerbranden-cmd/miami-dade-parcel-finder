@@ -74,11 +74,11 @@ with sync_playwright() as pw:
     # 6. table + export
     go('fc=1&gov=1&view=table'); pg.wait_for_timeout(1500)
     th = [x.strip() for x in pg.eval_on_selector_all('#thead th', 'e=>e.map(x=>x.textContent)')]
-    ok(th[-2:] == ['Est. equity', 'Est. loans'], f'table has Est. equity / Est. loans columns at the end ({th[-3:]})')
+    ok(th[-2:] == ['Est. equity', 'Est. loans'] or th[-3:] == ['Est. equity', 'Est. loans', 'Waterfront'], f'table has Est. equity / Est. loans columns at the end ({th[-3:]})')
     with pg.expect_download(timeout=240000) as dl: pg.evaluate("document.querySelector('#exportBtn').click()")
     rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read())))
     ok(rows[0] in (HDR + EQH, HDR + EQH + ['Waterfront']), f'CSV: the 11 fixed columns in order, equity columns appended at the end ({rows[0][9:]})')
-    body = rows[1:]; ok(body and all(len(x) == 18 and x[16] == 'Y' and x[13] == '0' for x in body), f'CSV: {len(body)} rows, all Free & Clear = Y, balance 0')
+    body = rows[1:]; ok(body and all(len(x) == len(rows[0]) and x[16] == 'Y' and x[13] == '0' for x in body), f'CSV: {len(body)} rows, all Free & Clear = Y, balance 0')
     # 7. other counties hide it
     for cty in ('monroe', 'broward'):
         pg.goto('about:blank'); pg.goto(BASE + Q + 'county=' + cty, timeout=180000)

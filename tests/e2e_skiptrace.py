@@ -62,7 +62,7 @@ with sync_playwright() as pw:
     n_props = n_of(); ok(n_props > 20, f'Homestead "SW 2" search: {n_props} properties')
 
     # ---------- normal export unchanged ----------
-    nrows = dl_rows(lambda: jsclick('#exportBtn')); ok((nrows[0][:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and nrows[0][11:] in ([], ['Waterfront'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'] + ['Waterfront'])), 'normal CSV export still the 11 contact columns'); ok(len(nrows) - 1 == n_props, 'normal export row count unchanged')
+    nrows = dl_rows(lambda: jsclick('#exportBtn')); ok(nrows[0][:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and nrows[0][11:] in ([], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked']), 'normal CSV export still the 11 contact columns (+ estimated-equity columns appended at the end only)'); ok(len(nrows) - 1 == n_props, 'normal export row count unchanged')
     pg.wait_for_timeout(500); jsclick('#expSkip'); pg.wait_for_timeout(300)
 
     # ---------- skip trace export ----------

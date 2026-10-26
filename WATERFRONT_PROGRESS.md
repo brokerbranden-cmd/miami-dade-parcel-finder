@@ -22,3 +22,4 @@ Requested by Branden 2026-10-25. Clone: /workspace/pf-water (from origin/main a1
 - Monroe rebuilt with inland: any 38,005 (ocean 14,342, bay 15,305, canal 27,765, lake 3,987).
 - 22:06 resumed after interruption; desktop e2e_waterfront passed (after county-slug fix); running mobile
 - 22:17 mobile e2e passed; README; committing + pre_push regression (PORT=8115)
+- 22:43 regression #1 failed only on exact-header asserts (scenarios s16, monroe, broward); fixed those + vacancy/skiptrace/saved; regression #2 started

@@ -9,7 +9,8 @@
   const CODE_KEY = 'pf.skapi.code.v1', SRC = 'BatchData API';
   const ls = () => { try { return root.localStorage; } catch (e) { return null; } };
   const getCode = () => { try { return (ls().getItem(CODE_KEY) || '').trim(); } catch (e) { return ''; } };
-  const setCode = c => { try { ls().setItem(CODE_KEY, String(c || '').trim()); return true; } catch (e) { return false; } };
+  const persist = () => { try { const st = root.navigator && root.navigator.storage; if (st && st.persist) st.persist().catch(() => {}); } catch (e) {} };
+  const setCode = c => { try { ls().setItem(CODE_KEY, String(c || '').trim()); persist(); return true; } catch (e) { return false; } };
   const clearCode = () => { try { ls().removeItem(CODE_KEY); } catch (e) {} };
 
   class ApiError extends Error { constructor(code, status, data) { super(code); this.code = code; this.status = status || 0; this.data = data || {}; } }

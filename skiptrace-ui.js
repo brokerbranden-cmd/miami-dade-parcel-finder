@@ -383,10 +383,13 @@
   function askCode(B, why) {
     return new Promise(resolve => {
       const body = openModal('Skip trace access code', `
-        <p class="note">${why ? esc(why) + ' ' : ''}Skip tracing runs through BatchData using a secure service, so it needs your <b>access code</b>. Enter it once; it is kept only in this browser on this device.</p>
-        <div class="stopts"><label class="stmax" for="skCode">Access code <input type="password" id="skCode" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Access code" style="min-width:220px"></label></div>
+        <p class="note">${why ? esc(why) + ' ' : ''}Skip tracing runs through BatchData using a secure service, so it needs your <b>access code</b>. Enter it once; it is kept in this browser, and your phone or browser can offer to save it in its password manager so other devices fill it in for you.</p>
+        <form id="skCodeForm" action="#" method="post" autocomplete="on">
+        <input type="text" name="username" id="skCodeUser" autocomplete="username" value="Prop Hunters skip trace" readonly tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden">
+        <div class="stopts"><label class="stmax" for="skCode">Access code <input type="password" id="skCode" name="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" aria-label="Access code" style="min-width:220px"></label></div>
         <div class="stwarn" id="skCodeMsg" role="alert" hidden></div>
-        <div class="stact"><button type="button" class="btn primary" id="skCodeGo">Save and continue</button><button type="button" class="btn" data-stclose>Cancel</button></div>`);
+        <div class="stact"><button type="submit" class="btn primary" id="skCodeGo">Save and continue</button><button type="button" class="btn" data-stclose>Cancel</button></div>
+        </form>`);
       let settled = false; const done = v => { if (!settled) { settled = true; resolve(v); } };
       const mo = new MutationObserver(() => { if (!document.getElementById('stModal')) { mo.disconnect(); done(''); } }); mo.observe(document.body, { childList: true });
       const inp = body.querySelector('#skCode'), msg = body.querySelector('#skCodeMsg'), go = body.querySelector('#skCodeGo');
@@ -396,7 +399,7 @@
         try { const st = await API.status(v); API.setCode(v); window.PF_SKAPI_STATUS = st; mo.disconnect(); done(v); closeModal(); }
         catch (e) { go.disabled = false; go.textContent = 'Save and continue'; msg.hidden = false; msg.textContent = API.messageFor(e); }
       };
-      go.onclick = submit; inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }); setTimeout(() => inp.focus(), 50);
+      body.querySelector('#skCodeForm').addEventListener('submit', e => { e.preventDefault(); submit(); }); setTimeout(() => inp.focus(), 50);
     });
   }
   const busyFolios = new Set();

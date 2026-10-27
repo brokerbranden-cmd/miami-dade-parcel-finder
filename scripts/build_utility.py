@@ -3,7 +3,8 @@
   python3 scripts/build_utility.py miami-dade|broward|monroe      -> data/<dir>/utility.json.gz
 Signals, most accurate first (bit, code):
   1 'list'  Utility shutoff list: a utility's own list of service addresses shut off / disconnected (public-records request, Fla. ch. 119).
-            Drop CSV / XLSX into $RAW/utility_shutoffs/<county>/ (optional sidecar <file>.meta.json: source, city, kind, sheet, address_col, date_col;
+            Drop CSV / XLSX into $RAW/utility_shutoffs/<county>/ (optional sidecar <file>.meta.json: source, city, kind (water|power|lien), label, sheet, header_row, address_col, date_col;
+            kind 'lien' = a city's open utility-lien listing (unpaid water / utility bill liened to the parcel), same top tier, label 'Utility lien (open)';
             unmatched rows -> <county>/unmatched/<file>_unmatched.csv) (any column names containing 'address' (service address), optional
             'city' / 'zip', a date column ('shut', 'disconnect' or 'date'), optional 'service' / 'type' and 'utility'); rows are matched to
             parcels by normalized street address (+ zip when given). Last 12 months count. Empty / missing folder = no list signal yet.
@@ -103,6 +104,7 @@ def read_rows(fn):
         import openpyxl
         wb = openpyxl.load_workbook(fn, read_only=True, data_only=True); m = list_meta(fn)
         ws = wb[m['sheet']] if m.get('sheet') in wb.sheetnames else wb.worksheets[0]; it = ws.iter_rows(values_only=True)
+        for _ in range(int(m.get('header_row') or 1) - 1): next(it, None)   # title rows above the header (meta 'header_row', 1-based)
         hd = [str(h or '').strip() for h in next(it, [])]
         rows = [{h: ('' if v is None else v.date().isoformat() if hasattr(v, 'date') else str(v)) for h, v in zip(hd, r)} for r in it if any(v is not None for v in r)]
         return hd, rows
@@ -243,7 +245,10 @@ for fn in sorted(glob.glob(os.path.join(UD, '*.csv')) + glob.glob(os.path.join(U
     if not ca: notes.append(f'{os.path.basename(fn)}: no address column found ({hd[:8]})'); continue
     idx = addr_index(m.get('city')); util = m.get('source') or re.sub(r'[_-]+', ' ', os.path.splitext(os.path.basename(fn))[0])
     for r in rows:
-        nrow += 1; n = norm_addr(r.get(ca)); z = re.sub(r'\D', '', str(r.get(cz) or ''))[:5] if cz else ''
+        a0 = str(r.get(ca) or ''); a1, _, a2 = a0.strip().partition('\n')   # multi-line cell 'street \n\n CITY, FL  zip' (Margate lien listing)
+        if not a1.strip(): continue
+        nrow += 1; n = norm_addr(a1); z = re.sub(r'\D', '', str(r.get(cz) or ''))[:5] if cz else ''
+        if not z and a2: zm = re.search(r'\b(\d{5})(?:-\d{4})?\s*$', a2.strip()); z = zm.group(1) if zm else ''
         d = d10(r.get(cd)) if cd else ''
         if d and d < C12: nold += 1; continue
         hits = idx.get(n) or idx.get('S:' + n) or idx.get('S:' + street_only(n)) or []
@@ -253,10 +258,10 @@ for fn in sorted(glob.glob(os.path.join(UD, '*.csv')) + glob.glob(os.path.join(U
             if len({h[0] for h in hits}) > 4: hits = []
         if z: hits = [h for h in hits if not h[1] or h[1] == z] or []
         fs = sorted({h[0] for h in hits})
-        if not fs or len(fs) > 50: unm.append({'address': r.get(ca), 'normalized': n, 'date': d, 'reason': 'no parcel at this address' if not fs else f'{len(fs)} parcels'}); continue
+        if not fs or len(fs) > 50: unm.append({'address': a1.strip(), 'normalized': n, 'date': d, 'reason': 'no parcel at this address' if not fs else f'{len(fs)} parcels'}); continue
         nmatch += 1; sv = (r.get(cs) or '').strip() if cs else ''
         kind = m.get('kind') or ('water' if re.search(r'water|sewer|wasd|aqueduct', sv + ' ' + util, re.I) else 'power' if re.search(r'power|electric|energy', sv + ' ' + util, re.I) else 'service')
-        lab = {'water': 'Water shut off', 'power': 'Power shut off', 'service': 'Service shut off'}[kind]
+        lab = m.get('label') or {'water': 'Water shut off', 'power': 'Power shut off', 'service': 'Service shut off', 'lien': 'Utility lien (open)'}[kind]
         src = m.get('source') or ('Utility shutoff list: ' + ((r.get(cu) or '').strip() if cu else util))
         for f in fs: add(f, 1, d, lab, src)
     if unm and not os.environ.get('UT_OUT'):

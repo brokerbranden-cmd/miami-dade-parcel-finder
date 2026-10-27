@@ -43,7 +43,7 @@ with sync_playwright() as pw:
         ok(name in pg.inner_text('#utSrc'), f"{name}: source line {pg.inner_text('#utSrc')[:120]!r}")
         if pg.locator('#cards .card').count():
             t0 = pg.inner_text('#cards .card .tt.ut >> nth=0'); fol = pg.get_attribute('#cards .card >> nth=0', 'data-folio'); r0 = R.get(fol)
-            ok(r0 is not None and SRCW[r0[1]] in t0 and (not r0[2] or r0[2][:7] in t0), f'{name}: card tag {t0!r} = signal + source + month')
+            ok(r0 is not None and ('utility lien' if r0[1] == 1 and r0[3].startswith('Utility lien') else SRCW[r0[1]]) in t0 and (not r0[2] or r0[2][:7] in t0), f'{name}: card tag {t0!r} = signal + source + month')
         pg.screenshot(path=os.path.join(SHOTS, f'ut_{cid}_{TAG}.png'))
         for v in ['case', 'rc', 'uv', 'list']:
             pick(v); s2 = pg.evaluate('PF.sample(1500)')

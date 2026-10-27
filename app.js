@@ -1720,14 +1720,14 @@ function renderWf(){ const sel=$('wfSel'); if(!sel) return; const f=facet.wfc, d
   const nt=$('wfNote'); if(nt&&d){ const miss=[['ocean','Oceanfront / open water'],['bay','Bay / Intracoastal'],['canal','Canal'],['lake','Lake or other water']].filter(([k])=>!(d.counts||{})[k]).map(x=>x[1]);
     nt.hidden=!miss.length; nt.textContent=miss.length?`${miss.join(', ')}: none mapped in ${PFC.cfg.name}${(d.notes&&d.notes.length)?' ('+d.notes.join(' ')+')':' (no water of that kind next to parcels in the map sources)'}.`:''; } }
 /* power / water cut layer (every county): data/<county>/utility.json.gz, folio-keyed, indexed into p.ut per pack */
-let utTried=0; const UT_VER='2';
+let utTried=0; const UT_VER='3';
 async function ensureUt(){ if(PFUT.data) return; if(utTried>2) return; try{ await PFUT.load({fetchJSON:n=>gzJSON(DP+n+'?v='+META.ver+'-u'+UT_VER), folioCol:p=>strCol(p,'folio'), packs:PACKS}); renderUt(); }catch(e){ utTried++; const s=$('utSrc'); if(s) s.textContent='Power / water data did not load ('+PFUT.err+').'; } }
 function renderUt(){ const sel=$('utSel'); if(!sel) return; const f=facet.utc, d=PFUT.data;
   if(sel.options.length!==PFUT.OPTS.length) sel.innerHTML=PFUT.OPTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
   PFUT.OPTS.forEach(([v,l],k)=>{ let n=''; if(v&&d&&f){ const m=PFUT.MASK[v]; let t=0; for(let b=1;b<16;b++) if(b&m) t+=f[b]; n=' ('+fmt.format(t)+')'; } sel.options[k].textContent=l+n; });
   sel.value=S.ut||''; const src=$('utSrc');
-  if(src&&d){ const c=d.counts||{}; src.textContent=`${fmt.format(c.any||0)} parcels / units with a power or water signal in ${PFC.cfg.name}: ${fmt.format(c.list||0)} on a utility shutoff list, ${fmt.format(c.case||0)} no-water / utility code case (since ${(d.windows||{}).case_from||'-'}), ${fmt.format(c.rc||0)} reconnect / FPL / meter permit (since ${(d.windows||{}).permit_from||'-'}), ${fmt.format(c.uv||0)} open unsafe / vacant case. Built ${d.built}.`; }
-  const nt=$('utNote'); if(nt&&d){ const miss=[['list','Utility shutoff list'],['case','No-water / utility code case'],['rc','Recent reconnect permit'],['uv','Unsafe / vacant case']].filter(([k])=>!(d.counts||{})[k]).map(x=>x[1]);
+  if(src&&d){ const c=d.counts||{}; src.textContent=`${fmt.format(c.any||0)} parcels / units with a power or water signal in ${PFC.cfg.name}: ${fmt.format(c.list||0)} on a utility shutoff list / open utility lien, ${fmt.format(c.case||0)} no-water / utility code case (since ${(d.windows||{}).case_from||'-'}), ${fmt.format(c.rc||0)} reconnect / FPL / meter permit (since ${(d.windows||{}).permit_from||'-'}), ${fmt.format(c.uv||0)} open unsafe / vacant case. Built ${d.built}.`; }
+  const nt=$('utNote'); if(nt&&d){ const miss=[['list','Utility shutoff list / lien'],['case','No-water / utility code case'],['rc','Recent reconnect permit'],['uv','Unsafe / vacant case']].filter(([k])=>!(d.counts||{})[k]).map(x=>x[1]);
     nt.hidden=!(miss.length||(d.notes||[]).length); nt.textContent=(miss.length?`${miss.join(', ')}: none in ${PFC.cfg.name}. `:'')+(d.notes||[]).join(' '); } }
 async function ensureEq(){ if(PFEQ.data||!HAS('equity')) return; try{ await PFEQ.load({fetchJSON:n=>gzJSON(DP+n+'?v='+META.ver+'-e1'), folioCol:p=>strCol(p,'folio'), packs:PACKS}); renderEqSrc(); eqPatch(); }catch(e){ toast('Equity estimate data did not load: '+e.message); } }
 /* equity data arrived after cards were drawn: add the line + badge in place (no re-render / scroll jump); table rows redraw */

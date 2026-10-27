@@ -38,6 +38,8 @@ for k in np.where(miss)[0]:
             for dx in (-1, 0, 1):
                 best = best or vote.get(c0 + dy * 100000 + dx)
     if best: muni[k] = best; filled += 1
+# Culebra is not in the JP zoning layer (own plan): assign by island bounding box
+cul = (muni == '') & (lon > -65.40) & (lon < -65.18) & (lat > 18.26) & (lat < 18.37); muni[cul] = 'Culebra'; stats['muni_culebra_bbox'] = int(cul.sum())
 stats.update({'zoning_matched': int(m.cali.notna().sum()), 'muni_from_neighbours': int(filled), 'no_muni': int((muni == '').sum())})
 print(stats, flush=True)
 

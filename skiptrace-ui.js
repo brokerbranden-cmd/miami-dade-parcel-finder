@@ -12,11 +12,19 @@
   const LIT_TIP = 'Flagged as a TCPA litigator / TCPA-restricted number by your skip trace provider: no tap link, excluded from the Text list. Reminder only, not legal advice.';
 
   /* ---------- rendering (cards / drawer / table) ---------- */
-  function phoneHTML(q) {
-    const n = q[0], t = q[1];   // DNC / litigator flags stay stored in q[2] but are not shown (Branden's call)
-    const badges = t ? `<span class="phty ${t}">${TYPE[t]}</span>` : '';
-    return `<span class="stph"><b class="stnum">${SK.fmtPhone(n)}</b>${badges}<a class="stl" href="tel:+1${n}" title="Call ${SK.fmtPhone(n)}">Call</a><a class="stl" href="sms:+1${n}" title="Text ${SK.fmtPhone(n)}">Text</a></span>`;
+  // grade badge (A+ / A / B / C / F) + Reached owner / Wrong # buttons (drawer only); g = grade from SK.gradeOf (computed when not given)
+  const gradeBadge = g => `<span class="phg g${g === 'A+' ? 'ap' : g.toLowerCase()}" title="${esc(SK.GRADE_TIP[g])}">${g}</span>`;
+  function phoneHTML(q, g, ctl) {
+    const n = q[0], t = q[1];   // DNC / litigator flags stay stored in q[2] but are not shown as text (Branden's call); they lower the grade to C
+    if (!g) g = SK.gradeOf(q, 0, SK.callResult(n));
+    const badges = gradeBadge(g) + (t ? `<span class="phty ${t}">${TYPE[t]}</span>` : '');
+    const res = SK.callResult(n);
+    const btns = ctl ? `<button type="button" class="lnk stres" data-stres="${n}" data-v="${res === 'reached' ? '' : 'reached'}" title="${res === 'reached' ? 'Undo Reached owner' : 'You reached the owner on this number: grade A+, moves to the top'}">${res === 'reached' ? 'Undo reached' : 'Reached owner'}</button><button type="button" class="lnk stres" data-stres="${n}" data-v="${res === 'wrong' ? '' : 'wrong'}" title="${res === 'wrong' ? 'Undo Wrong number' : 'Wrong number: grade F, hidden from cards'}">${res === 'wrong' ? 'Undo wrong #' : 'Wrong #'}</button>` : '';
+    if (g === 'F') return `<span class="stph gF"><s class="stnum">${SK.fmtPhone(n)}</s>${badges}${btns}</span>`;
+    return `<span class="stph"><b class="stnum">${SK.fmtPhone(n)}</b>${badges}<a class="stl" href="tel:+1${n}" title="Call ${SK.fmtPhone(n)}">Call</a><a class="stl" href="sms:+1${n}" title="Text ${SK.fmtPhone(n)}">Text</a>${btns}</span>`;
   }
+  const shown = r => SK.graded(r).filter(x => x.g !== 'F');   // cards / table: F hidden, best grade first
+  const topPhones = (r, k) => { const a = shown(r); return { html: a.slice(0, k).map(x => phoneHTML(x.q, x.g)).join(''), more: Math.max(0, a.length - k) }; };
 
   const BAD_KEY = 'pf.bademail.v1', BAD_KNOWN = ['cal_l_cox@yahoo.com', 'jamesw830@earthlink.com', 'arinajohanajulio@yahoo.es'];
   const badMap = () => { let o = {}; try { o = JSON.parse(localStorage.getItem(BAD_KEY) || '{}') || {}; } catch (e) {} return o; };
@@ -122,19 +130,19 @@
   function cardLine(folio) {
     const r = ST.get(folio); if (!r) return API ? `<div class="line skgo" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v">${goBtn(folio, 'Skip trace')}</span></div>` : '';
     if (!r.p.length && !r.e.length) return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Skip trace</span><span class="v"><span class="stnone">Traced, no phone found</span></span></div>`;
-    const ph = r.p.slice(0, 2).map(phoneHTML).join(''), more = r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2} more</span>` : '';
+    const tp = topPhones(r, 2), ph = tp.html, more = tp.more ? `<span class="stmore">+${tp.more} more</span>` : '';
     return `<div class="line skl" data-skfolio="${esc(folio)}"><span class="k">Phone</span><span class="v stv">${ph}${more}${ownerBtn(folio)}${(goodEmails(r)[0] || r.e[0]) ? mailto(goodEmails(r)[0] || r.e[0]) : ''}</span></div>`;
   }
   function cellHTML(folio) {
     const r = ST.get(folio); if (!r) return '–'; if (!r.p.length && !r.e.length) return '<span class="stnone">traced · none</span>';
-    return (r.p.slice(0, 2).map(phoneHTML).join('') || '') + (r.p.length > 2 ? `<span class="stmore">+${r.p.length - 2}</span>` : '') + ownerBtn(folio) + ((goodEmails(r)[0] || r.e[0]) ? mailto(goodEmails(r)[0] || r.e[0]) : '');
+    const tp = topPhones(r, 2); return (tp.html || '') + (tp.more ? `<span class="stmore">+${tp.more}</span>` : '') + ownerBtn(folio) + ((goodEmails(r)[0] || r.e[0]) ? mailto(goodEmails(r)[0] || r.e[0]) : '');
   }
   function drawerBody(folio) {
     const r = ST.get(folio);
     if (!r) return `${API ? `<div class="stdgo">${goBtn(folio, 'Skip trace this owner')}<span class="note" role="status" aria-live="polite" data-stmsg></span></div>` : ''}<div class="note">No skip trace results for this property yet. Press <b>Skip trace this owner</b>, or use <b>Skip trace these</b> / <b>Skip trace export</b> in the filters panel (export, run the file through your provider, then <b>Import results</b>).</div>`;
     const none = !r.p.length && !r.e.length;
     return `${none ? '<div class="note">Skip traced: the provider found no phone or email.</div>' : ''}
-      ${r.p.length ? `<ul class="stlist">${r.p.map(q => `<li>${phoneHTML(q)}</li>`).join('')}</ul>` : ''}
+      ${r.p.length ? `<ul class="stlist">${SK.graded(r).map(x => `<li${x.g === 'F' ? ' class="gF"' : ''}>${phoneHTML(x.q, x.g, true)}</li>`).join('')}</ul><div class="note phgnote">Grades: <b>A+</b> you reached the owner · <b>A</b> recent mobile, not DNC · <b>B</b> active, older or less certain · <b>C</b> VoIP, weak link or DNC: call last · <b>F</b> disconnected / wrong: hidden from cards.</div>` : ''}
       ${r.e.length ? `<div class="stemails">${ownerBtn(folio)}${r.e.map(mailto).join('')}</div>` : ''}
       <div class="note">${r.n ? 'Provider name: ' + esc(r.n) + ' · ' : ''}${r.s === (API && API.SRC) ? 'Skip traced' : 'Imported'} ${esc(r.a || '')}${r.s ? ' · ' + esc(r.s) : ''}. <button type="button" class="lnk" data-stdel="${esc(folio)}">Remove this property's skip trace data</button></div>`;
   }
@@ -235,23 +243,23 @@
     async function compute() {
       q('sttGo').disabled = true; q('sttCounts').textContent = 'Preparing…'; await B.ensureDetail();
       const exS = q('sttSent').checked, exC = q('sttCont').checked, per = +q('sttPer').value || 1; const rows = [], byPhone = new Map(), folios = new Set(), idmap = new Map();
-      let noPh = 0, dnc = 0, lan = 0, sent = 0, cont = 0, dupes = 0;
+      let noPh = 0, dnc = 0, lan = 0, bad = 0, sent = 0, cont = 0, dupes = 0;
       for (let j = 0; j < ids.length; j++) {
         if (j % 20000 === 19999) await tick(); const f = B.folioOf(ids[j]); const r = ST.get(f); if (!r || !r.p.length) { noPh++; continue; }
         if (exS && B.sentOf(f, 'sms')) { sent++; continue; } if (exC && B.contacted(f)) { cont++; continue; }
-        const ok = [], cand = r.p; for (const q2 of cand) { if (q2[2] & 3) { dnc++; continue; } if (q2[1] === 'l') { lan++; continue; } ok.push(q2); }
+        const ok = [], cand = SK.graded(r); for (const x2 of cand) { const q2 = x2.q; if (x2.g === 'F') { bad++; continue; } if (q2[2] & 3) { dnc++; continue; } if (q2[1] === 'l') { lan++; continue; } q2.g = x2.g; ok.push(q2); }   // best grade first
         if (!ok.length) continue; const x = B.info(ids[j]);
         const o = SK.parseOwner(x.owner, { order: B.order, gov: x.gov }); let fn = o.first, ln = o.last;
         if (o.isCompany || !fn) { const [a, b] = SK.splitName(r.n, 'first-last'); if (a || b) { fn = a; ln = b; } else if (o.isCompany) { fn = ''; ln = o.company; } }
         const T = s => SK.title(s);
         for (const p of ok.slice(0, per)) {
           const prev = byPhone.get(p[0]); if (prev) { prev.folios.push(f); dupes++; folios.add(f); idmap.set(f, ids[j]); continue; }
-          const row = { f, vals: [T(fn), o.isCompany && !(fn) ? ln : T(ln), SK.fmtPhone(p[0]), TYPE[p[1]] || '', r.e[0] || '', x.addr, /unincorporated/i.test(x.city) ? '' : x.city, 'FL', SK.zip5(x.zip) || x.zip, x.owner.split(' | ').filter(Boolean).join('; '), B.folioOut(f), PFC.cfg.name], folios: [f] };
+          const row = { f, vals: [T(fn), o.isCompany && !(fn) ? ln : T(ln), SK.fmtPhone(p[0]), TYPE[p[1]] || '', r.e[0] || '', x.addr, /unincorporated/i.test(x.city) ? '' : x.city, 'FL', SK.zip5(x.zip) || x.zip, x.owner.split(' | ').filter(Boolean).join('; '), B.folioOut(f), PFC.cfg.name, p.g || ''], folios: [f] };
           byPhone.set(p[0], row); rows.push(row); folios.add(f); idmap.set(f, ids[j]);
         }
       }
       plan = { rows, folios: [...folios], idmap }; const props = folios.size;
-      q('sttCounts').innerHTML = `<b>${fmt.format(rows.length)} ${rows.length === 1 ? 'number' : 'numbers'}</b> for ${fmt.format(props)} ${props === 1 ? 'property' : 'properties'}.<br><span class="note">Left out: ${fmt.format(noPh)} without a phone, ${fmt.format(dnc)} DNC / litigator numbers, ${fmt.format(lan)} landlines, ${fmt.format(sent)} already texted${cont ? ', ' + fmt.format(cont) + ' already contacted' : ''}${dupes ? '; ' + fmt.format(dupes) + ' repeat numbers merged' : ''}.</span>`;
+      q('sttCounts').innerHTML = `<b>${fmt.format(rows.length)} ${rows.length === 1 ? 'number' : 'numbers'}</b> for ${fmt.format(props)} ${props === 1 ? 'property' : 'properties'}.<br><span class="note">Left out: ${fmt.format(noPh)} without a phone, ${fmt.format(dnc)} DNC / litigator numbers, ${fmt.format(lan)} landlines, ${fmt.format(bad)} wrong / disconnected (grade F), ${fmt.format(sent)} already texted${cont ? ', ' + fmt.format(cont) + ' already contacted' : ''}${dupes ? '; ' + fmt.format(dupes) + ' repeat numbers merged' : ''}.</span>`;
       q('sttGo').disabled = !rows.length;
     }
     body.addEventListener('change', e => { if (e.target.closest('.stopts')) compute(); });
@@ -517,6 +525,7 @@
     if ($('stApiBtn')) $('stApiBtn').onclick = guard(() => apiModal(B));
     document.addEventListener('click', e => { const b = e.target.closest('[data-stgo]'); if (!b || !API) return; e.preventDefault(); e.stopPropagation(); const f = b.dataset.stgo; const holder = b.closest('[data-id]') || document.getElementById('savedBox'); const id = holder && holder.dataset.id != null ? +holder.dataset.id : -1; if (id < 0) { B.toast('Open the property and try again.'); return; } traceOne(B, id, f, b).catch(err => { console.error(err); B.toast('Skip trace: ' + (err && err.message || err)); }); });
     document.addEventListener('click', e => { const b = e.target.closest('[data-stbad]'); if (!b) return; e.preventDefault(); e.stopPropagation(); setBad(b.dataset.stbad, b.dataset.v === '1'); ST.reload(); document.querySelectorAll('.stdraw[data-stfolio]').forEach(x => { x.innerHTML = drawerBody(x.dataset.stfolio); }); }, true);
+    document.addEventListener('click', e => { const b = e.target.closest('[data-stres]'); if (!b) return; e.preventDefault(); e.stopPropagation(); SK.setCallResult(b.dataset.stres, b.dataset.v); ST.reload(); document.querySelectorAll('.stdraw[data-stfolio]').forEach(x => { x.innerHTML = drawerBody(x.dataset.stfolio); }); }, true);
     document.addEventListener('click', e => { const b = e.target.closest('[data-stown]'); if (!b) return; e.preventDefault(); e.stopPropagation(); ownerClick(B, b); }, true);
     document.addEventListener('click', e => { const b = e.target.closest('[data-stemail]'); if (!b) return; e.preventDefault(); e.stopPropagation(); emailClick(B, b); }, true);
     if ($('stTplBtn')) $('stTplBtn').onclick = () => templateModal(B);
@@ -529,7 +538,7 @@
     ST.onChange(refreshPanel); refreshPanel();
     window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.openApi = () => apiModal(B); window.PFSkipUI.traceOne = (id, folio) => traceOne(B, id, folio); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text); window.PFSkipUI.openTemplate = () => templateModal(B); window.PFSkipUI.emailUrlFor = (id, folio, to) => emailUrl(to, emailVars(B, id, folio));
   }
-  window.PFSkipUI = { cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, BCC_MAX, isBad, setBad, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
+  window.PFSkipUI = { gradeBadge, shown, cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, BCC_MAX, isBad, setBad, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
   const start = () => wire(window.PF.skBridge);
   if (window.PF_READY && window.PF) start(); else document.addEventListener('pf:ready', start, { once: true });
 })();

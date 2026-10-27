@@ -175,7 +175,7 @@
   }
 
   /* ---------- text list ---------- */
-  const TEXT_HEAD = ['First Name', 'Last Name', 'Phone', 'Phone Type', 'Email', 'Property Address', 'City', 'State', 'Zip', 'Owner Name', 'Folio', 'County'];
+  const TEXT_HEAD = ['First Name', 'Last Name', 'Phone', 'Phone Type', 'Email', 'Property Address', 'City', 'State', 'Zip', 'Owner Name', 'Folio', 'County', 'Phone Grade'];   // Phone Grade appended last (2026-10-27)
   const splitName = (n, order) => { const t = String(n || '').trim().split(/\s+/).filter(Boolean); if (!t.length) return ['', '']; if (t.length === 1) return [t[0], '']; return order === 'last-first' ? [t[1], t[0]] : [t[0], t[t.length - 1]]; };
 
   /* ---------- column detection ---------- */
@@ -286,7 +286,7 @@
   /* ---------- store ---------- */
   function makeStore(key, storage) {
     let data = {}, rev = 1, err = ''; const subs = new Set();
-    const clean = o => { const out = {}; if (o && typeof o === 'object') for (const [f, x] of Object.entries(o)) { if (!/^\d{6,24}$/.test(f) || !x || typeof x !== 'object') continue; out[f] = { a: String(x.a || '').slice(0, 10), s: String(x.s || '').slice(0, 60), n: String(x.n || '').slice(0, 80), p: (Array.isArray(x.p) ? x.p : []).filter(q => Array.isArray(q) && /^\d{10}$/.test(q[0])).slice(0, MAXP).map(q => [q[0], ['m', 'l', 'v'].includes(q[1]) ? q[1] : '', (q[2] | 0) & 3]), e: (Array.isArray(x.e) ? x.e : []).filter(e => typeof e === 'string').slice(0, MAXE) }; } return out; };
+    const clean = o => { const out = {}; if (o && typeof o === 'object') for (const [f, x] of Object.entries(o)) { if (!/^\d{6,24}$/.test(f) || !x || typeof x !== 'object') continue; out[f] = { a: String(x.a || '').slice(0, 10), s: String(x.s || '').slice(0, 60), n: String(x.n || '').slice(0, 80), p: (Array.isArray(x.p) ? x.p : []).filter(q => Array.isArray(q) && /^\d{10}$/.test(q[0])).slice(0, MAXP).map(q => [q[0], ['m', 'l', 'v'].includes(q[1]) ? q[1] : '', (q[2] | 0) & 63]), e: (Array.isArray(x.e) ? x.e : []).filter(e => typeof e === 'string').slice(0, MAXE) }; } return out; };
     const load = () => { try { data = clean(JSON.parse(storage.getItem(key) || '{}')); } catch (e) { data = {}; } };
     const save = () => { try { storage.setItem(key, JSON.stringify(data)); err = ''; return true; } catch (e) { err = 'Browser storage is full: import a smaller file or clear old skip trace data.'; return false; } };
     let idx = null; const ix = () => idx || (idx = { phone: new Set(Object.keys(data).filter(f => data[f].p.length)), traced: new Set(Object.keys(data)) });
@@ -300,7 +300,7 @@
       // merge one result into a folio: phones/emails are united; a re-import updates flags/types of numbers already stored
       merge(f, rec, src, day) {
         const cur = data[f] || { a: '', s: '', n: '', p: [], e: [] }; const out = { a: day || cur.a, s: src || cur.s, n: rec.n || cur.n, p: cur.p.map(q => q.slice()), e: cur.e.slice() };
-        for (const q of rec.p || []) { const ex = out.p.find(x => x[0] === q[0]); if (ex) { if (q[1]) ex[1] = q[1]; ex[2] = q[2] | 0; } else out.p.push([q[0], q[1] || '', q[2] | 0]); }
+        for (const q of rec.p || []) { const ex = out.p.find(x => x[0] === q[0]); if (ex) { if (q[1]) ex[1] = q[1]; ex[2] = (q[2] | 0) & 63; } else out.p.push([q[0], q[1] || '', (q[2] | 0) & 63]); }
         for (const e of rec.e || []) if (!out.e.includes(e)) out.e.push(e);
         // best first: mobile and callable numbers on top
         const rank = q => (q[2] ? 4 : 0) + (q[1] === 'm' ? 0 : q[1] === '' ? 1 : q[1] === 'v' ? 2 : 3);
@@ -313,11 +313,34 @@
     };
   }
 
+
+  /* ---------- phone grades (A+ / A / B / C / F) ----------
+     flags q[2]: 1 DNC, 2 litigator / TCPA, 4 provider: reachable / active, 8 provider: disconnected / not reachable, 16 last seen within 2 years, 32 last seen over 2 years ago.
+     A = mobile, not DNC, and recent (last seen within 2 years, or the provider's top-ranked mobile when it gives no date); B = active but older / less certain
+     (landline, unknown type, lower-ranked mobile, last seen over 2 years ago); C = VoIP, weak link (4th number or later) or DNC / litigator: call last;
+     F = provider says disconnected, or you marked it Wrong number: hidden from cards. Your call results win: Reached owner = A+ (moves to the top), Wrong number = F.
+     Call results are kept per number in this browser (all counties share it: a number is the same number everywhere). */
+  const RES_KEY = 'pf.phoneres.v1', GRADE_ORDER = { 'A+': 0, A: 1, B: 2, C: 3, F: 4 };
+  const resMap = (st) => { let o = {}; try { o = JSON.parse((st || (typeof localStorage !== 'undefined' ? localStorage : null)).getItem(RES_KEY) || '{}') || {}; } catch (e) {} return o; };
+  function callResult(num, st) { const v = resMap(st)[num]; return v && (v.r === 'reached' || v.r === 'wrong') ? v.r : ''; }
+  function setCallResult(num, r, st) { st = st || localStorage; const o = resMap(st); if (r === 'reached' || r === 'wrong') o[num] = { r, d: new Date().toISOString().slice(0, 10) }; else delete o[num]; try { st.setItem(RES_KEY, JSON.stringify(o)); return true; } catch (e) { return false; } }
+  function gradeOf(q, i, res) {
+    if (res === 'reached') return 'A+'; if (res === 'wrong') return 'F';
+    const f = q[2] | 0, t = q[1];
+    if (f & 8) return 'F';
+    if (f & 3 || t === 'v' || i >= 3) return 'C';
+    if (t === 'm' && !(f & 32) && ((f & 16) || (f & 4) || i === 0)) return 'A';
+    return 'B';
+  }
+  // -> [{q, g, i}] sorted by grade (A+ first), provider order kept inside a grade
+  function graded(rec, st) { const map = resMap(st); return ((rec && rec.p) || []).map((q, i) => ({ q, i, g: gradeOf(q, i, (map[q[0]] || {}).r || '') })).sort((a, b) => GRADE_ORDER[a.g] - GRADE_ORDER[b.g] || a.i - b.i); }
+  const GRADE_TIP = { 'A+': 'You reached the owner on this number', A: 'Active recent mobile, not on DNC', B: 'Active but older or less certain (landline, unknown type, lower-ranked or older number)', C: 'VoIP, weak link or on DNC / litigator list: call last', F: 'Disconnected or wrong number: hidden from cards' };
+
   const best = rec => { if (!rec) return null; return rec.p.filter(q => !(q[2] & 3)).sort((a, b) => (a[1] === 'm' ? 0 : a[1] === '' || a[1] === 'v' ? 1 : 2) - (b[1] === 'm' ? 0 : b[1] === '' || b[1] === 'v' ? 1 : 2))[0] || null; };
-  const canText = q => !!q && q[1] !== 'l' && !(q[2] & 3);   // not DNC / litigator, and not a known landline
+  const canText = q => !!q && q[1] !== 'l' && !(q[2] & 3) && !(q[2] & 8) && callResult(q[0]) !== 'wrong';   // not DNC / litigator, and not a known landline
 
   root.PFSkip = { parseCSV, toCSV, csvq, normPhone, phonesIn, fmtPhone, normEmail, phoneType, TYPE_NAME, truthy, addrKeys, zip5, parseMailing, mailKey, parseOwner, ownerKeys, ownerGroupKey, personKey, companyKey, title,
-    EXPORT_HEAD, exportRow, TEXT_HEAD, splitName, FIELDS, detectMapping, readRow, matcher, makeStore, best, canText, MAXP, MAXE };
+    EXPORT_HEAD, exportRow, TEXT_HEAD, splitName, FIELDS, detectMapping, readRow, matcher, makeStore, best, canText, MAXP, MAXE, gradeOf, graded, callResult, setCallResult, GRADE_TIP, GRADE_ORDER, RES_KEY };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.PFSkip;
   if (typeof window !== 'undefined') {
     try { const PFC = window.PFCounty; root.PFSkip.store = makeStore(PFC ? PFC.key('pf.skip.v1') : 'pf.skip.v1', window.localStorage); } catch (e) { root.PFSkip.store = makeStore('pf.skip.v1', { getItem() { return null; }, setItem() { throw new Error('no storage'); }, removeItem() {} }); }

@@ -246,3 +246,7 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 /* phone: keep the first card above the fold (2026-10-22): Ask examples hidden (the placeholder shows one), source line clamped to one line */
 @media (max-width:600px){ #askHelp{display:none} #srcLine{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:calc(100vw - 32px)} }
 @media (max-width:600px){ header.top,#askBar,#stickybar,#results,#results .resbar,#summary{min-width:0;max-width:100%} #summary{overflow-wrap:anywhere} }
+/* phone grades (skiptrace.js gradeOf) */
+.phg{font-size:11px;font-weight:700;border-radius:4px;padding:0 5px;margin-left:4px;color:#fff;background:#6b7280}
+.phg.gap{background:#065f46}.phg.ga{background:#0a7a3f}.phg.gb{background:#2563eb}.phg.gc{background:#b45309}.phg.gf{background:#991b1b}
+.stph.gF{opacity:.6}.stres{margin-left:6px;font-size:12px}

@@ -17,6 +17,7 @@ LAYERS = {
     'cc_finance':    f'{MDC}/CodeComplianceViolation_ReferredtoFinance_View/FeatureServer/0',  # unpaid, referred to collections
     'cc_all':        f'{MDC}/CCVIOL_gdb/FeatureServer/0',                             # every county Code Compliance case incl. closed (history: 5-yr count, types, lien book/page)
     'bldg_closed5':  f'{MDC}/Closed_Building_Violations_(Past_5_years)/FeatureServer/0',  # closed county building cases, past 5 years
+    'cc_energov':    f'{MDC}/EnergovCodeCasePublicView/FeatureServer/0',          # county Code Compliance cases in the county's new EnerGov system (since 2020; PARCELNUMBER = folio)
     'miami_recert':  f'{COM}/40_Year_Recertification/FeatureServer/0',               # City of Miami 40/50-yr recertification
 }
 UA = {'User-Agent': 'parcel-finder weekly refresh (python-requests)'}

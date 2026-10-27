@@ -11,7 +11,7 @@ SOURCES = {  # step -> label
     'probate': 'Clerk probate (PAD/PRO/DCE)', 'cot': 'Clerk certificates of title (CTI)',
     'monroe_clerk': 'Monroe Clerk foreclosure+probate cases', 'monroe_marathon_code': 'Monroe: Marathon code hearings',
     'monroe_keywest': 'Monroe: Key West permits + code cases (eTRAKiT)', 'monroe_islamorada': 'Monroe: Islamorada permits + code cases (CityView)',
-    'broward_permits': 'Broward: Fort Lauderdale permits', 'broward_lp': 'Broward lis pendens (County Records FTP)',
+    'broward_permits': 'Broward: Fort Lauderdale permits (ArcGIS to 2026-03-16 + LauderBuild)', 'broward_lp': 'Broward lis pendens (County Records FTP)',
     'broward_energov': 'Broward: EnerGov permits + code cases (Pembroke Pines, Sunrise, Oakland Park; Miramar permits)',
     'broward_fc_notices': 'Broward: foreclosure notices (published, floridapublicnotices.com)', 'broward_auctions': 'Broward: foreclosure + tax-deed auctions'}
 MAX_LAG_DAYS = int(os.environ.get('MAX_LAG_DAYS', '3'))
@@ -30,7 +30,7 @@ DATA_THROUGH = {  # source -> newest filing date held (stale when older than MAX
     'cot': lambda: through(['raw/lp_downloads/cot_*.csv', os.path.join(RAW, 'clerk/COT/*.json')]),
     'probate': lambda: through(['raw/probate_downloads/probate_*.csv', 'raw/probate_cases/ocs_*.txt']),
     'monroe_clerk': lambda: jmax(os.path.join(RAW, 'monroe/clerk_cases.json'), lambda d: max((c.get('filed') or '' for c in d.get('cases', [])), default='')),
-    'broward_lp': lambda: through([os.path.join(RAW, 'broward/official_records/*doc*.txt')]),
+    'broward_lp': lambda: max((m[2] + m[0] + m[1] for f in glob.glob(os.path.join(RAW, 'broward/official_records/*doc-ver.txt')) for m in re.findall(r'(\d\d)-(\d\d)-(\d{4})', os.path.basename(f))), default=None),   # MM-DD-YYYYdoc-ver.txt
     # newest record actually held (not the pull time): FTL's own layer stopped updating 2026-03-16, so it reports stale honestly
     'broward_permits': lambda: jmax(os.path.join(RAW, 'broward/permits/fort_lauderdale.json'), lambda d: d.get('data_through') or ''),
     'broward_energov': lambda: jmax(os.path.join(RAW, 'broward/permits/energov/summary.json'), lambda d: min((v.get('newest') or v['max_date'] for v in d['portals'].values() if v.get('rows')), default='')),   # the OLDEST of the per-portal newest dates

@@ -353,6 +353,17 @@ if os.path.exists(f'{RAW}/muni_cases.json'):
             if kind == 'lien':
                 c['LN'] += 1; add(f, 'LN', pdate(opened), f"{city} code lien / fines: {ctype or 'Code violation'}", 0, no, url, f"status {status}")
 STATS['municipal_code_cases_open'] = dict(c)
+# county Code Compliance cases from the county's EnerGov system (EnergovCodeCasePublicView, VLTN-######-YYYY; cases the older CCVIOL layers do not carry)
+v = V('cc_energov'); c = collections.Counter()
+_CLOSED = re.compile(r'clos|complied|compliance|void|cancel|dismiss|withdraw|unfounded|no violation|resolved|abated|paid|satisf|duplicate|invalid|final', re.I)
+for r in v['rows']:
+    f = fol(r.get('PARCELNUMBER') or ''); st = (r.get('STATUS') or '').strip()
+    if r.get('CLOSEDDATE') or _CLOSED.search(st): c['closed'] += 1; continue
+    if f not in FOLIOS: c['unmatched'] += 1; continue
+    c['matched'] += 1; no = r.get('CASENUMBER') or ''
+    if re.search(r'lien|collection', st, re.I): c['LN'] += 1; add(f, 'LN', ms2d(r.get('OPENEDDATE')), 'County code lien / collections (EnerGov)', 0, no, ARC(v['source'], 'CASENUMBER', no), f"status {st}")
+    add(f, 'CC', ms2d(r.get('OPENEDDATE')), 'County code case (EnerGov): ' + ((r.get('DESCRIPTION') or '').strip()[:80] or r.get('TYPE') or 'Code violation'), 0, no, ARC(v['source'], 'CASENUMBER', no), f"status {st}")
+STATS['county_energov_code_open'] = {**c, 'rows': len(v['rows']), 'source': v['source']}
 seen_lien = set(); c = collections.Counter()
 for nm, label in (('cc_lien', 'Code lien'), ('cc_finance', 'Code fines sent to collections')):
     v = V(nm)

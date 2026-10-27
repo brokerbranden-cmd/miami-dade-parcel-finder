@@ -923,17 +923,17 @@ function trStatus(f){ const em=sentOf(f,'em'), other=wasSent(f)&&Object.keys(SEN
 function renderTraced(){ const all=SKS.count(), rows=trRows(), lim=500, show=rows.slice(0,lim);
   $('trQ').value=TR.q; $('trSort').value=TR.sort;
   $('trInfo').textContent=all?`${fmt.format(rows.length)}${rows.length!==all?' of '+fmt.format(all):''} skip traced ${all===1?'property':'properties'} in ${PFC.cfg.name} County on this device${rows.length>lim?` · showing the first ${lim}, refine the search or export the CSV for all`:''}. Results from the one-click skip trace (BatchData Worker) and imported files are kept here.`:`No skip traced properties in ${PFC.cfg.name} County on this device yet. Use Skip trace on a card, Skip trace these, or Import results in the filters panel.`;
-  $('trList').innerHTML=show.map(x=>{ const r=x.r, ph=r.p.map(SKU.phoneHTML).join(''), em=SKU.ownerBtn(x.f)+r.e.map(SKU.emailHTML).join('');
+  $('trList').innerHTML=show.map(x=>{ const r=x.r, ph=SKU.shown(r).map(x=>SKU.phoneHTML(x.q,x.g)).join(''), em=SKU.ownerBtn(x.f)+r.e.map(SKU.emailHTML).join('');
     return `<article class="trrow${x.id==null?' missing':''}" data-trow="${x.f}" ${x.id!=null?`data-id="${x.id}"`:''} tabindex="0" aria-label="${esc(x.addr||folioFmt(x.f))}. Open details">
       <div class="trmain"><b class="traddr">${esc(x.addr||'No street address')}</b><span class="trcity">${esc(x.city)} ${esc(x.zip)}</span><span class="trowner">${esc(x.owner||r.n||'')}</span><small>Traced ${esc(r.a||'')}${r.s?' · '+esc(r.s):''} · Folio ${esc(folioFmt(x.f))}</small></div>
       <div class="trcontact stv" data-stfolio="${x.f}">${ph||(r.e.length?'':'<span class="stnone">No phone or email found</span>')}${em}</div>
       <div class="trstat sendline">${trStatus(x.f)}</div></article>`; }).join('');
 }
 function trCSV(){ const rows=trRows(), NP=5, NE=3;
-  const head=EXP_HEAD.trim()+',Traced Date,'+Array.from({length:NP},(_,k)=>`Phone ${k+1},Phone ${k+1} Type`).join(',')+','+Array.from({length:NE},(_,k)=>'Email '+(k+1)).join(',')+'\n';
+  const head=EXP_HEAD.trim()+',Traced Date,'+Array.from({length:NP},(_,k)=>`Phone ${k+1},Phone ${k+1} Type`).join(',')+','+Array.from({length:NE},(_,k)=>'Email '+(k+1)).join(',')+','+Array.from({length:NP},(_,k)=>`Phone ${k+1} Grade`).join(',')+'\n';   // grades appended last
   const T={m:'Mobile',l:'Landline',v:'VoIP'}; const lines=rows.map(x=>{ const base=x.id!=null?exportRow(P(x.id),I(x.id)):contactRow(x.owner,x.addr||'No site address',x.city,x.zip,x.mail,folio13(x.f)); const r=x.r;
-    const ph=Array.from({length:NP},(_,k)=>{ const q=r.p[k]; return q?[q[0],T[q[1]]||'']:['','']; }).flat(), em=Array.from({length:NE},(_,k)=>r.e[k]||'');
-    return base+','+[r.a||'',...ph,...em].map(csvq).join(','); });
+    const G=PFSkip.graded(r), ph=Array.from({length:NP},(_,k)=>{ const x=G[k]; return x?[x.q[0],T[x.q[1]]||'']:['','']; }).flat(), em=Array.from({length:NE},(_,k)=>r.e[k]||''), gr=Array.from({length:NP},(_,k)=>G[k]?G[k].g:'');
+    return base+','+[r.a||'',...ph,...em,...gr].map(csvq).join(','); });
   return {blob:new Blob([head+lines.join('\n')+(lines.length?'\n':'')],{type:'text/csv'}),n:rows.length}; }
 function renderPipe(){ const ids=savedIdx(), t=todayDay(), by=Object.fromEntries(SV.STAGES.map(s=>[s,[]]));
   for(const x of SV.list()) by[x.stage].push(x);

@@ -84,7 +84,9 @@ function mapEntry(d) {
     if (!name && p.name) name = S(p.name.full || [p.name.first, p.name.last].filter(Boolean).join(' '), 80);
     const lit = p.litigator === true;
     const list = (Array.isArray(p.phones) ? p.phones : []).slice().sort((a, b) => (a.rank || 99) - (b.rank || 99));
-    for (const ph of list) { const n = normPhone(ph.number); if (!n || phones.some(x => x[0] === n)) continue; phones.push([n, phoneType(ph.type), (ph.dnc === true ? 1 : 0) | (lit || ph.tcpa === true ? 2 : 0)]); }
+    // 16 = last reported within 2 years, 32 = older (feeds phone grades in skiptrace.js)
+    const recency = d => { const t = Date.parse(d || ''); if (!t) return 0; return Date.now() - t < 730 * 864e5 ? 16 : 32; };
+    for (const ph of list) { const n = normPhone(ph.number); if (!n || phones.some(x => x[0] === n)) continue; phones.push([n, phoneType(ph.type), (ph.dnc === true ? 1 : 0) | (lit || ph.tcpa === true ? 2 : 0) | (ph.reachable === true ? 4 : 0) | (ph.reachable === false ? 8 : 0) | recency(ph.lastReportedDate)]); }
     for (const e of Array.isArray(p.emails) ? p.emails : []) { const m = normEmail(e && (e.email || e)); if (m && !emails.includes(m)) emails.push(m); }
   }
   return { phones: phones.slice(0, 8), emails: emails.slice(0, 5), name, hasPerson: persons.length > 0 };

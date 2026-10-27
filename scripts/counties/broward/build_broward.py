@@ -3,7 +3,7 @@
 Inputs ($RAW/broward + $RAW/sdf): FDOR NAL 2026 preliminary roll (owners, mailing, values, use, 2 sales, exemptions), parcel centroids (BCPA parcel polygons),
 FEMA flood (BCGIS FloodZones2024), county Land Use Plan, city / BMSD zoning layers, scheduled foreclosure + tax-deed auctions (broward.realforeclose / realtaxdeed).
 Same pack format + column names as build_monroe.py / build_data.py so app.js reads it unchanged. Permits / code cases: Fort Lauderdale + 4 EnerGov cities (broward_permit_lib.py); published foreclosure notices (fetch_fpn_foreclosure.py). Columns with no public Broward source are zeros."""
-import json, os, re, sys, gzip, collections, datetime as dt, numpy as np, pandas as pd
+import json, os, re, sys, gzip, glob, collections, datetime as dt, numpy as np, pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__)); SCR = os.path.abspath(os.path.join(HERE, '..', '..')); sys.path.insert(0, SCR); sys.path.insert(0, HERE)
 import owner_kind, owners_lib, broward_zoning as BZ
 RAWB = os.path.join(os.environ.get('RAW', '/workspace/raw'), 'broward'); LAY = os.path.join(RAWB, 'layers')
@@ -282,6 +282,26 @@ if os.path.exists(fp):
     fpn_stats = {'pulled': FJ.get('pulled'), 'newest': FJ.get('newest'), 'oldest': FJ.get('oldest'), 'cases': len(NOT), 'with_address': na, **dict(how), 'parcels': int(fnb.sum()),
                  'match_rate_all': round(how['matched'] / max(1, len(NOT)), 3), 'match_rate_with_address': round(how['matched'] / max(1, na), 3), 'source': 'floridapublicnotices.com (Florida Press Association), Broward newspaper legal notices'}
 print('foreclosure notices', fpn_stats, flush=True)
+
+# ---- recorded lis pendens (Broward RTT Official Records free daily index, scripts/counties/broward/fetch_broward_or.sh -> $RAW/broward/official_records/
+# MM-DD-YYYYdoc-ver.txt, pipe-delimited: instrument|YYYYMMDD|MM/DD/YYYY|time|doc type|consideration|book|page|book type|legal|parcel id|...).
+# Doc type LP within the last 12 months, joined by the 12-char parcel id; same signal bit + points as the published notices (Miami-Dade LP = 25).
+lp_stats = {'files': 0, 'lp_docs': 0, 'lp_12m': 0, 'matched': 0, 'no_parcel_id': 0, 'parcel_not_in_roll': 0, 'newest': ''}
+fidx = {f: k for k, f in enumerate(df.FOLIO)}; y1 = (dt.date.today() - dt.timedelta(days=365)).strftime('%Y%m%d')
+for fn in sorted(glob.glob(os.path.join(RAWB, 'official_records', '*doc-ver.txt'))):
+    lp_stats['files'] += 1
+    for ln in open(fn, errors='replace'):
+        w = ln.rstrip('\n').split('|')
+        if len(w) < 11 or w[4].strip().upper() != 'LP': continue
+        lp_stats['lp_docs'] += 1; lp_stats['newest'] = max(lp_stats['newest'], w[1])
+        if w[1] < y1: continue
+        lp_stats['lp_12m'] += 1; f = re.sub(r'[^0-9A-Za-z]', '', w[10]).upper()
+        if not f: lp_stats['no_parcel_id'] += 1; continue
+        i = fidx.get(f)
+        if i is None: lp_stats['parcel_not_in_roll'] += 1; continue
+        lp_stats['matched'] += 1; fnb[i] = True; t = f"{w[2]} Lis pendens recorded, instrument {w[0]}"
+        if t not in fn_txt[i]: fn_txt[i] = (fn_txt[i] + ' | ' if fn_txt[i] else '') + t
+print('recorded lis pendens', lp_stats, flush=True)
 
 # ---- buildability screen (bld 1 green / 2 yellow / 3 red) for vacant lots, teardown candidates and 1-9 unit homes; reasons "R~text¦Y~text¦G~text¦i~text"
 lowrisk = np.array([not f.startswith('V') and not f.startswith('A') for f in flood_s]); hi_f = np.array([f.startswith('A') for f in flood_s]); ve_f = np.array([f.startswith('V') for f in flood_s])

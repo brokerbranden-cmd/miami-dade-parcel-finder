@@ -100,6 +100,9 @@ case " ${SKIP_COUNTIES:-} " in *" monroe "*) note "skip monroe (SKIP_COUNTIES)";
   build monroe_data  python3 scripts/counties/monroe/build_monroe.py data/monroe ;;
 esac
 # Broward city permits (public ArcGIS; Broward-only raw files, not mixed with Miami-Dade)
+# Fort Lauderdale LauderBuild (Accela) monthly record exports: the city ArcGIS permit layer froze on 2026-03-16 at the source; this keeps FTL current
+# (previous + current month each week, plus any missing month since 2026-03; headless Chromium, ~1-2 min per month) -> RAW/broward/permits/ftl_accela/
+RETRIES=2 fetch broward_ftl_accela "broward/permits/ftl_accela" timeout 3600 python3 scripts/counties/broward/fetch_ftl_lauderbuild.py
 RETRIES=2 fetch broward_permits "broward/permits/fort_lauderdale.json" timeout 1800 python3 scripts/counties/broward/fetch_broward_permits.py
 case " ${SKIP_COUNTIES:-} " in *" broward "*) note "skip broward (SKIP_COUNTIES)";; *)
   # EnerGov permits + code cases: Pembroke Pines, Sunrise, Oakland Park (+ Miramar permits only); staggered threads, ~1 req/s per portal; resumable

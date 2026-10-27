@@ -10,7 +10,7 @@ BASE = URL.split('#')[0].split('?')[0]
 errs = []
 TMP = tempfile.mkdtemp(prefix='st_')
 EXP_HEAD = ['Property Address', 'City', 'State', 'Zip', 'Owner First Name', 'Owner Last Name', 'Company Name', 'Is Company', 'Owner Type', 'Owner Name (full)', 'Owner 2 First Name', 'Owner 2 Last Name', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio', 'County', 'Property Count', 'All Folios']
-TXT_HEAD = ['First Name', 'Last Name', 'Phone', 'Phone Type', 'Email', 'Property Address', 'City', 'State', 'Zip', 'Owner Name', 'Folio', 'County']
+TXT_HEAD = ['First Name', 'Last Name', 'Phone', 'Phone Type', 'Email', 'Property Address', 'City', 'State', 'Zip', 'Owner Name', 'Folio', 'County', 'Phone Grade']
 def ok(c, m):
     print(('PASS ' if c else 'FAIL ') + f'[{TAG}] ' + m, flush=True)
     if not c: errs.append(m)

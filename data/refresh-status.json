@@ -1,5 +1,5 @@
 {
- "built": "2026-10-26T16:27:21-04:00",
+ "built": "2026-10-26T23:08:50-04:00",
  "run_started": "2026-10-26T07:53:53-0400",
  "sources": {
   "pagis": {
@@ -23,10 +23,10 @@
    "last_good": "2026-10-23",
    "data_through": "2026-10-23",
    "lag_days": 3,
-   "clerk_index_through": "2026-10-20",
+   "clerk_index_through": "2026-10-21",
    "clerk_index_checked": "live",
    "behind_clerk_days": 0,
-   "note": "through Oct 20 (Clerk's latest)"
+   "note": "through Oct 21 (Clerk's latest)"
   },
   "clerk_clp": {
    "label": "Clerk CLP (open check)",
@@ -34,10 +34,10 @@
    "last_good": "2026-10-22",
    "data_through": "2026-10-22",
    "lag_days": 4,
-   "clerk_index_through": "2026-10-20",
+   "clerk_index_through": "2026-10-21",
    "clerk_index_checked": "live",
    "behind_clerk_days": 0,
-   "note": "through Oct 20 (Clerk's latest)"
+   "note": "through Oct 21 (Clerk's latest)"
   },
   "auctions": {
    "label": "Foreclosure/tax auctions",
@@ -52,7 +52,7 @@
   "viol": {
    "label": "Code violations",
    "status": "fresh",
-   "last_good": "2026-10-26T08:05:01-0400"
+   "last_good": "2026-10-26T23:04:46-0400"
   },
   "permits": {
    "label": "City of Miami permits",
@@ -80,10 +80,10 @@
    "last_good": "2026-10-23",
    "data_through": "2026-10-23",
    "lag_days": 3,
-   "clerk_index_through": "2026-10-20",
+   "clerk_index_through": "2026-10-21",
    "clerk_index_checked": "live",
    "behind_clerk_days": 0,
-   "note": "through Oct 20 (Clerk's latest)"
+   "note": "through Oct 21 (Clerk's latest)"
   },
   "cot": {
    "label": "Clerk certificates of title (CTI)",
@@ -91,10 +91,10 @@
    "last_good": "2026-10-22",
    "data_through": "2026-10-22",
    "lag_days": 4,
-   "clerk_index_through": "2026-10-20",
+   "clerk_index_through": "2026-10-21",
    "clerk_index_checked": "live",
    "behind_clerk_days": 0,
-   "note": "through Oct 20 (Clerk's latest)"
+   "note": "through Oct 21 (Clerk's latest)"
   },
   "monroe_clerk": {
    "label": "Monroe Clerk foreclosure+probate cases",
@@ -123,11 +123,11 @@
    "lag_days": 4
   },
   "broward_permits": {
-   "label": "Broward: Fort Lauderdale permits",
-   "status": "stale",
-   "last_good": "2026-03-16",
-   "data_through": "2026-03-16",
-   "lag_days": 224
+   "label": "Broward: Fort Lauderdale permits (ArcGIS to 2026-03-16 + LauderBuild)",
+   "status": "fresh",
+   "last_good": "2026-10-26",
+   "data_through": "2026-10-26",
+   "lag_days": 0
   },
   "broward_lp": {
    "label": "Broward lis pendens (County Records FTP)",
@@ -137,10 +137,10 @@
   },
   "broward_energov": {
    "label": "Broward: EnerGov permits + code cases (Pembroke Pines, Sunrise, Oakland Park; Miramar permits)",
-   "status": "stale",
-   "last_good": "2026-10-21",
-   "data_through": "2026-10-21",
-   "lag_days": 5
+   "status": "fresh",
+   "last_good": "2026-10-26",
+   "data_through": "2026-10-26",
+   "lag_days": 0
   },
   "broward_fc_notices": {
    "label": "Broward: foreclosure notices (published, floridapublicnotices.com)",
@@ -166,7 +166,7 @@
   "data": "ok",
   "zoning_rules": "ok",
   "assemblages": "ok",
-  "broward_data": "not run"
+  "broward_data": "ok"
  },
  "counts": {
   "parcels": 922797,
@@ -183,7 +183,7 @@
   "commercial_list": 4344,
   "commercial_live_tax": 4162,
   "tax": 3,
-  "viol": 9,
+  "viol": 10,
   "permits_files": 35,
   "parcel_files": 597,
   "clerk_files": 73

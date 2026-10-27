@@ -746,7 +746,7 @@ function cardHTML(id){
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
     <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
     ${HAS('mscreen')?mrCardLine(c,i):''}${HAS('mtax')?mtCardLine(c,i):''}${upLine(p,i)}
-    ${compsLine(id)}${cmLine(folio)}${auLine(folio)}${PFEQ.line(folio)}${outLine(folio)}${folderLine(folio)}${SKU.cardLine(folio)}
+    ${compsLine(id)}${cmLine(folio)}${auLine(folio)}${PFEQ.line(folio)}${outLine(folio)}${folderLine(folio)}${SKU.noteSite(folio,getStr(p,'addr',i),D.city[c.city[i]])}${SKU.cardLine(folio)}
     <div class="sendline">${sendBtns(folio)}${sentBadges(folio)}${p.ap&&p.ap[i]?'<span class="hot apb" title="Adverse possession claim noted in the Property Appraiser legal description">Adverse possession</span>':''}</div>
     <div class="ob">${dueBadge(folio)}${clerkBadges(folio)}${PFEQ.badge(folio)}${cmBadges(folio)}${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
@@ -789,7 +789,7 @@ function rowHTML(id){
   <td class="num">${c.lot[i]?fmt.format(c.lot[i]):'–'}</td><td class="num">${c.lot[i]?(c.lot[i]/SQFT_AC).toFixed(2):'–'}</td>
   <td class="num">${c.sqft[i]?fmt.format(c.sqft[i]):'–'}</td><td class="num">${c.units[i]||'–'}</td><td class="num">${c.yb[i]||'–'}</td>
   <td class="num">${mv?dollars(mv):'–'}</td><td class="num">${mv?Math.round(c.land[i]/mv*100)+'%':'–'}</td>
-  <td class="num">${dateStr(c.sd1[i])||'–'}</td><td class="num">${c.sale1[i]?dollars(c.sale1[i]):'–'}</td><td>${esc(getStr(p,'owner',i))}</td><td class="stcell">${SKU.cellHTML(folio)}</td>${HAS('equity')?PFEQ.cells(folio).map(v=>`<td class="num eqcol" title="Estimate">${esc(v)}</td>`).join(''):''}<td>${p.wf&&p.wf[i]?esc(PFWF.label(p.wf[i])):'–'}</td><td>${p.ut&&p.ut[i]?esc(PFUT.cell(folio)):'–'}</td></tr>`;
+  <td class="num">${dateStr(c.sd1[i])||'–'}</td><td class="num">${c.sale1[i]?dollars(c.sale1[i]):'–'}</td><td>${esc(getStr(p,'owner',i))}</td><td class="stcell">${SKU.noteSite(folio,getStr(p,'addr',i),D.city[c.city[i]])}${SKU.cellHTML(folio)}</td>${HAS('equity')?PFEQ.cells(folio).map(v=>`<td class="num eqcol" title="Estimate">${esc(v)}</td>`).join(''):''}<td>${p.wf&&p.wf[i]?esc(PFWF.label(p.wf[i])):'–'}</td><td>${p.ut&&p.ut[i]?esc(PFUT.cell(folio)):'–'}</td></tr>`;
 }
 const ROWH=40; let lastRange='';
 function renderTable(reset){
@@ -924,7 +924,7 @@ function trStatus(f){ const em=sentOf(f,'em'), other=wasSent(f)&&Object.keys(SEN
 function renderTraced(){ const all=SKS.count(), rows=trRows(), lim=500, show=rows.slice(0,lim);
   $('trQ').value=TR.q; $('trSort').value=TR.sort;
   $('trInfo').textContent=all?`${fmt.format(rows.length)}${rows.length!==all?' of '+fmt.format(all):''} skip traced ${all===1?'property':'properties'} in ${PFC.cfg.name} County on this device${rows.length>lim?` · showing the first ${lim}, refine the search or export the CSV for all`:''}. Results from the one-click skip trace (BatchData Worker) and imported files are kept here.`:`No skip traced properties in ${PFC.cfg.name} County on this device yet. Use Skip trace on a card, Skip trace these, or Import results in the filters panel.`;
-  $('trList').innerHTML=show.map(x=>{ const r=x.r, ph=SKU.shown(r).map(x=>SKU.phoneHTML(x.q,x.g)).join(''), em=SKU.ownerBtn(x.f)+r.e.map(SKU.emailHTML).join('');
+  $('trList').innerHTML=show.map(x=>{ const r=x.r, ph=(SKU.noteSite(x.f,x.addr,x.city),SKU.shown(r).map(q=>SKU.phoneHTML(q.q,q.g,false,x.f)).join('')), em=SKU.ownerBtn(x.f)+r.e.map(SKU.emailHTML).join('');
     return `<article class="trrow${x.id==null?' missing':''}" data-trow="${x.f}" ${x.id!=null?`data-id="${x.id}"`:''} tabindex="0" aria-label="${esc(x.addr||folioFmt(x.f))}. Open details">
       <div class="trmain"><b class="traddr">${esc(x.addr||'No street address')}</b><span class="trcity">${esc(x.city)} ${esc(x.zip)}</span><span class="trowner">${esc(x.owner||r.n||'')}</span><small>Traced ${esc(r.a||'')}${r.s?' · '+esc(r.s):''} · Folio ${esc(folioFmt(x.f))}</small></div>
       <div class="trcontact stv" data-stfolio="${x.f}">${ph||(r.e.length?'':'<span class="stnone">No phone or email found</span>')}${em}</div>
@@ -999,7 +999,7 @@ async function openDrawer(id,opts){
     </div>
     <div class="sendline dsend">${sendBtns(folio)}${sentBadges(folio)}</div>
     <div id="savedBox" data-folio="${folio}" data-id="${id}">${savedBoxHTML(id,folio)}</div>
-    ${SKU.drawerHTML(folio)}
+    ${(()=>{ try{ const q=P(id), j=I(id); return SKU.noteSite(folio,getStr(q,'addr',j),D.city[q.c.city[j]]); }catch(e){ return ''; } })()}${SKU.drawerHTML(folio)}
     ${outreachHTML(id,folio)}
     <div id="finBox">${finHTML(folio)}</div>
     ${distressHTML(p,i,folio)}${clerkHTML(folio)}${PFEQ.html(folio)}${cmHTML(folio)}

@@ -147,8 +147,8 @@ with sync_playwright() as pw:
     ok(len(M['calls']) == 1 and len(M['calls'][0]) == 1 and M['calls'][0][0]['id'] == fA, 'one click sent exactly one record (no prompt: code already saved)')
     ok(pg.evaluate("document.getElementById('drawerHost').children.length") == 0, 'clicking the button does not open the drawer')
     cardA = f'#cards .card[data-folio="{fA}"]'
-    ok(pg.query_selector(f'{cardA} a[href="sms:+13055559001"]') is not None and pg.query_selector(f'{cardA} [data-stgo]') is None, 'phone appears on the card at once with Call + Text links; button gone')
-    ok(pg.query_selector(f'{cardA} .dncb') is None and 'DNC' not in pg.inner_text(cardA) and pg.query_selector(f'{cardA} a[href="tel:+13055559002"]') is not None and pg.query_selector(f'{cardA} a[href="sms:+13055559002"]') is not None, 'DNC number shows plain with Call + Text, no badge')
+    ok(pg.query_selector(f'{cardA} a[href^="sms:+13055559001?&body="]') is not None and pg.query_selector(f'{cardA} [data-stgo]') is None, 'phone appears on the card at once with Call + Text links; button gone')
+    ok(pg.query_selector(f'{cardA} .dncb') is None and 'DNC' not in pg.inner_text(cardA) and pg.query_selector(f'{cardA} a[href="tel:+13055559002"]') is not None and pg.query_selector(f'{cardA} a[href^="sms:+13055559002?&body="]') is not None, 'DNC number shows plain with Call + Text, no badge')
     ok('ana@example.com' in pg.inner_text(cardA) and pg.query_selector(f'{cardA} a[href="mailto:ana@example.com"]') is not None, 'email shown as a mailto link')
     ok(store()[fA]['p'][0][:2] == ['3055559001', 'm'] and store()[fA]['s'] == 'BatchData API', 'saved in the county store')
     one = pg.evaluate('window.PF_LAST_SKAPI_ONE'); ok(one and one['folio'] == fA and one['phones'] == 2 and one['emails'] == 1 and one['dnc'] == 1, f'single-run summary (found 2 phones, 1 email, 1 DNC) {one}')

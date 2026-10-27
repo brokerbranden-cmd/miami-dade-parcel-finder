@@ -3,7 +3,8 @@
   python3 scripts/build_utility.py miami-dade|broward|monroe      -> data/<dir>/utility.json.gz
 Signals, most accurate first (bit, code):
   1 'list'  Utility shutoff list: a utility's own list of service addresses shut off / disconnected (public-records request, Fla. ch. 119).
-            Drop CSVs into $RAW/utility_shutoffs/<county>/*.csv (any column names containing 'address' (service address), optional
+            Drop CSV / XLSX into $RAW/utility_shutoffs/<county>/ (optional sidecar <file>.meta.json: source, city, kind, sheet, address_col, date_col;
+            unmatched rows -> <county>/unmatched/<file>_unmatched.csv) (any column names containing 'address' (service address), optional
             'city' / 'zip', a date column ('shut', 'disconnect' or 'date'), optional 'service' / 'type' and 'utility'); rows are matched to
             parcels by normalized street address (+ zip when given). Last 12 months count. Empty / missing folder = no list signal yet.
   2 'case'  Code case that says the property has no water / water shut off / utilities off or disconnected / no power or electricity
@@ -58,11 +59,12 @@ def read_pack(path, cols):
         out[c['name']] = np.frombuffer(raw, dtype=c['type']) if c['type'] != 'str' else raw.decode('utf-8').split('\n')
     return out
 meta = json.load(open(os.path.join(DATA, 'meta.json'))); ZIPD = (meta.get('dicts') or {}).get('zip') or []
-FOL = []; ADDR = []; ZIP = []
+FOL = []; ADDR = []; ZIP = []; CITY = []; CITYD = (meta.get('dicts') or {}).get('city') or []
 for name in ('main', 'condo'):
     p = os.path.join(DATA, name + '.bin.gz')
     if not os.path.exists(p): continue
-    k = read_pack(p, {'folio', 'addr', 'zip'}); FOL += k['folio'][:k['n']]; ADDR += k['addr'][:k['n']]
+    k = read_pack(p, {'folio', 'addr', 'zip', 'city'}); FOL += k['folio'][:k['n']]; ADDR += k['addr'][:k['n']]
+    CITY += [str(CITYD[z]) if z < len(CITYD) else '' for z in k['city'][:k['n']]] if 'city' in k else [''] * k['n']
     ZIP += [str(ZIPD[z]) if z < len(ZIPD) else '' for z in k['zip'][:k['n']]] if 'zip' in k else [''] * k['n']
 FSET = set(FOL)
 def key_md(f): f = re.sub(r'\D', '', str(f or '')); return f if len(f) == 13 else None
@@ -83,17 +85,33 @@ def norm_addr(a):
     w = [re.sub(r'^(\d+)(ST|ND|RD|TH)$', r'\1', x) for x in w]
     return ' '.join(w)
 def street_only(n): return re.sub(r'\s+(APT|UNIT|STE|SUITE|BLDG|#)\s*\S+$', '', n)
-AIDX = None
-def addr_index():
-    global AIDX
-    if AIDX is None:
-        AIDX = collections.defaultdict(list)
-        for f, a, z in zip(FOL, ADDR, ZIP):
-            if not a: continue
-            n = norm_addr(a); AIDX[n].append((f, z))
+AIDX = {}
+def addr_index(city=None):
+    # city (optional, from the list's sidecar <file>.meta.json): only parcels in that city (pack 'city' column) are candidates
+    k = (city or '').upper()
+    if k not in AIDX:
+        ix = AIDX[k] = collections.defaultdict(list)
+        for f, a, z, c in zip(FOL, ADDR, ZIP, CITY or [''] * len(FOL)):
+            if not a or (k and c.upper() != k): continue
+            n = norm_addr(a); ix[n].append((f, z))
             s = street_only(n)
-            if s != n: AIDX['S:' + s].append((f, z))
-    return AIDX
+            if s != n: ix['S:' + s].append((f, z))
+    return AIDX[k]
+def read_rows(fn):
+    # CSV or XLSX (first sheet, or meta 'sheet'); header names are stripped (city exports carry trailing spaces)
+    if fn.lower().endswith('.xlsx'):
+        import openpyxl
+        wb = openpyxl.load_workbook(fn, read_only=True, data_only=True); m = list_meta(fn)
+        ws = wb[m['sheet']] if m.get('sheet') in wb.sheetnames else wb.worksheets[0]; it = ws.iter_rows(values_only=True)
+        hd = [str(h or '').strip() for h in next(it, [])]
+        rows = [{h: ('' if v is None else v.date().isoformat() if hasattr(v, 'date') else str(v)) for h, v in zip(hd, r)} for r in it if any(v is not None for v in r)]
+        return hd, rows
+    with open(fn, newline='', encoding='utf-8-sig', errors='replace') as fh:
+        rd = csv.DictReader(fh); rows = [{(k or '').strip(): v for k, v in r.items()} for r in rd]
+        return [(h or '').strip() for h in (rd.fieldnames or [])], rows
+def list_meta(fn):
+    p = os.path.splitext(fn)[0] + '.meta.json'
+    return json.load(open(p)) if os.path.exists(p) else {}
 
 # ---------- collect ----------
 best = {}   # folio -> dict(bits, code, date, label, src)
@@ -214,28 +232,39 @@ elif C == 'monroe':
 
 # ---------- utility shutoff lists (top accuracy) ----------
 UD = os.path.join(RAW, 'utility_shutoffs', C); lists = []
-for fn in sorted(glob.glob(os.path.join(UD, '*.csv'))):
-    nrow = nmatch = 0
-    with open(fn, newline='', encoding='utf-8-sig', errors='replace') as fh:
-        rd = csv.DictReader(fh); hd = [h for h in (rd.fieldnames or [])]; low = {h: h.lower() for h in hd}
-        pick = lambda *keys, excl=(): next((h for h in hd if any(k in low[h] for k in keys) and not any(x in low[h] for x in excl)), None)
-        ca = pick('service address', 'service_address', 'svc addr', 'premise') or pick('address', 'addr', excl=('mail', 'billing', 'email'))
-        cz = pick('zip'); cd = pick('shut', 'disconnect', 'cut', 'off date') or pick('date'); cs = pick('service', 'type', excl=('address', 'addr', 'date')); cu = pick('utility', 'provider')
-        if not ca: notes.append(f'{os.path.basename(fn)}: no address column found ({hd[:8]})'); continue
-        idx = addr_index(); util = re.sub(r'[_-]+', ' ', os.path.splitext(os.path.basename(fn))[0])
-        for r in rd:
-            nrow += 1; n = norm_addr(r.get(ca)); z = re.sub(r'\D', '', str(r.get(cz) or ''))[:5] if cz else ''
-            d = d10(r.get(cd)) if cd else ''
-            if d and d < C12: continue
-            hits = idx.get(n) or idx.get('S:' + n) or idx.get('S:' + street_only(n)) or []
-            if z: hits = [h for h in hits if not h[1] or h[1] == z] or []
-            fs = sorted({h[0] for h in hits})
-            if not fs or len(fs) > 50: continue
-            nmatch += 1; sv = (r.get(cs) or '').strip() if cs else ''
-            kind = 'water' if re.search(r'water|sewer|wasd|aqueduct', sv + ' ' + util, re.I) else 'power' if re.search(r'power|electric|energy', sv + ' ' + util, re.I) else 'service'
-            lab = {'water': 'Water shut off', 'power': 'Power shut off', 'service': 'Service shut off'}[kind]
-            for f in fs: add(f, 1, d, lab, 'Utility shutoff list: ' + ((r.get(cu) or '').strip() if cu else util))
-    lists.append({'file': os.path.basename(fn), 'rows': nrow, 'matched': nmatch}); sources.insert(0, f'Utility shutoff list {os.path.basename(fn)} ({nrow:,} rows, {nmatch:,} matched)')
+UNM_DIR = os.environ.get('UT_UNMATCHED') or os.path.join(UD, 'unmatched')
+for fn in sorted(glob.glob(os.path.join(UD, '*.csv')) + glob.glob(os.path.join(UD, '*.xlsx'))):
+    # optional sidecar <file>.meta.json: {"source": label, "city": pack city, "kind": water|power, "date_col", "address_col", "sheet"}
+    nrow = nmatch = nold = 0; m = list_meta(fn); unm = []
+    hd, rows = read_rows(fn); low = {h: h.lower() for h in hd}
+    pick = lambda *keys, excl=(): next((h for h in hd if any(k in low[h] for k in keys) and not any(x in low[h] for x in excl)), None)
+    ca = m.get('address_col') or pick('service address', 'service_address', 'svc addr', 'premise') or pick('address', 'addr', 'location', excl=('mail', 'billing', 'email'))
+    cz = pick('zip'); cd = m.get('date_col') or pick('shut', 'disconnect', 'cut', 'off date', 'complete') or pick('date'); cs = pick('service', 'type', excl=('address', 'addr', 'date')); cu = pick('utility', 'provider')
+    if not ca: notes.append(f'{os.path.basename(fn)}: no address column found ({hd[:8]})'); continue
+    idx = addr_index(m.get('city')); util = m.get('source') or re.sub(r'[_-]+', ' ', os.path.splitext(os.path.basename(fn))[0])
+    for r in rows:
+        nrow += 1; n = norm_addr(r.get(ca)); z = re.sub(r'\D', '', str(r.get(cz) or ''))[:5] if cz else ''
+        d = d10(r.get(cd)) if cd else ''
+        if d and d < C12: nold += 1; continue
+        hits = idx.get(n) or idx.get('S:' + n) or idx.get('S:' + street_only(n)) or []
+        mu = re.match(r'^(.* (?:ST|AVE|RD|DR|CT|PL|TER|BLVD|LN|CIR|HWY|PKWY|WAY|TRL|MNR|CIRCLE)) ([A-Z]|\d{1,3})$', n)
+        if not hits and mu:   # trailing unit / building token without APT/UNIT ('3991 WOODSIDE DR B', '11000 NW 44 ST W'): base street address, max 4 parcels
+            hits = idx.get(mu.group(1)) or idx.get('S:' + mu.group(1)) or []
+            if len({h[0] for h in hits}) > 4: hits = []
+        if z: hits = [h for h in hits if not h[1] or h[1] == z] or []
+        fs = sorted({h[0] for h in hits})
+        if not fs or len(fs) > 50: unm.append({'address': r.get(ca), 'normalized': n, 'date': d, 'reason': 'no parcel at this address' if not fs else f'{len(fs)} parcels'}); continue
+        nmatch += 1; sv = (r.get(cs) or '').strip() if cs else ''
+        kind = m.get('kind') or ('water' if re.search(r'water|sewer|wasd|aqueduct', sv + ' ' + util, re.I) else 'power' if re.search(r'power|electric|energy', sv + ' ' + util, re.I) else 'service')
+        lab = {'water': 'Water shut off', 'power': 'Power shut off', 'service': 'Service shut off'}[kind]
+        src = m.get('source') or ('Utility shutoff list: ' + ((r.get(cu) or '').strip() if cu else util))
+        for f in fs: add(f, 1, d, lab, src)
+    if unm and not os.environ.get('UT_OUT'):
+        os.makedirs(UNM_DIR, exist_ok=True); up = os.path.join(UNM_DIR, os.path.splitext(os.path.basename(fn))[0] + '_unmatched.csv')
+        with open(up, 'w', newline='') as fh: w = csv.DictWriter(fh, ['address', 'normalized', 'date', 'reason']); w.writeheader(); w.writerows(unm)
+    lists.append({'file': os.path.basename(fn), 'source': util, 'rows': nrow, 'matched': nmatch, 'unmatched': len(unm), 'older': nold})
+    sources.insert(0, f'{util}: {os.path.basename(fn)} ({nrow:,} rows, {nmatch:,} matched)')
+    print(f'LIST {os.path.basename(fn)} rows={nrow} matched_rows={nmatch} unmatched={len(unm)} older_than_12m={nold}', file=sys.stderr)
 if not lists: notes.insert(0, f'No utility shutoff list on file yet for this county (drop CSVs in raw/utility_shutoffs/{C}/).')
 
 for b in best.values():

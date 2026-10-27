@@ -148,6 +148,7 @@ with sync_playwright() as pw:
     # ---------- cards / drawer / table ----------
     pg.wait_for_selector('#cards .card')
     ok(pg.query_selector_all('#cards .card a[href^="tel:+1"]') != [] and pg.query_selector_all('#cards .card a[href^="sms:+1"]') != [], 'cards show tap-to-call (tel:) and tap-to-text (sms:) links')
+    ok(pg.query_selector_all('#cards .card a.stwa[href^="https://wa.me/1"][target="_blank"]') != [], 'cards show WhatsApp (wa.me) links')
     ok(pg.evaluate("document.querySelector('#cards .stl').getBoundingClientRect().height") >= 24, 'tap targets are button sized')
     dnc_card = pg.evaluate(f"(()=>{{const c=document.querySelector('#cards .card[data-folio=\"{k1}\"]'); return c?{{dnc:!!c.querySelector('.dncb'), smsOnDnc:[...c.querySelectorAll('.stph.flagged a[href^=\"sms:\"],.stph.flagged a[href^=\"tel:\"]')].length, txt:c.textContent.includes('DNC')}}:null}})()")
     ok(dnc_card and not dnc_card['dnc'] and not dnc_card['txt'] and pg.query_selector(f'#cards .card[data-folio="{k1}"] a[href="sms:+13055550102"]') is not None, f'DNC number shows plain: no badge, Call + Text links {dnc_card}')
@@ -222,7 +223,7 @@ with sync_playwright() as pw:
     pg.set_input_files('#stFile', write_csv('provider_m.csv', mA)); pg.wait_for_selector('#stModal .stmap', timeout=60000); jsclick('#stImpGo'); pg.wait_for_selector('#stReport', timeout=240000)
     ok(pg.inner_text('#rpMatched') == '2', 'Monroe import matched both rows (20-digit folio and 14-digit RE number): ' + pg.inner_text('#rpMatched')); pg.evaluate("document.querySelector('#stModal [data-stclose]').click()")
     ms = store('monroe'); ok(len(ms) >= 2 and any('3055550301' in [q[0] for q in v['p']] for v in ms.values()), 'Monroe results stored under the Monroe key'); ok(pg.evaluate("localStorage.getItem('pf.skip.v1')") == json.dumps(S2, separators=(',', ':')) or len(store()) == len(S2), 'Miami-Dade results untouched by the Monroe import')
-    go('hg=0&city=Key West&q=College&ph=1'); ok(n_of() >= 2, f'Monroe Has phone -> {n_of()}'); ok(pg.query_selector('#cards a[href^="sms:+13055550301"]') is not None, 'Monroe card shows the text link')
+    go('hg=0&city=Key West&q=College&ph=1'); ok(n_of() >= 2, f'Monroe Has phone -> {n_of()}'); ok(pg.query_selector('#cards a[href^="sms:+13055550301"]') is not None, 'Monroe card shows the text link'); ok(pg.query_selector('#cards a.stwa[href="https://wa.me/13055550301"][target="_blank"]') is not None, 'Monroe card shows the WhatsApp link')
     # back in Miami-Dade the Monroe numbers are not visible
     load('miami-dade', 'hg=0&q=SW 2&city=Homestead&ph=1'); ok(pg.evaluate("PFSkip.store.key") == 'pf.skip.v1', 'Miami-Dade store key'); ok(not any('3055550301' in json.dumps(v) for v in store().values()), 'no Monroe numbers in Miami-Dade storage')
     ok(n_of() == len(S2), f'Miami-Dade Has phone count unchanged ({n_of()})')

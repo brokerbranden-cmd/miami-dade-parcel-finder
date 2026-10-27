@@ -24,6 +24,13 @@ Change the access code: Cloudflare dashboard > Workers & Pages > parcel-skiptrac
 The key is read per request from Workers KV (`env.SK_KV.get('batchdata_key')`), falling back to the `BATCHDATA_API_KEY` secret. It was stored once with a **temporary** `PUT /setup-key` route (protected by the access code, constant-time check) because the Cloudflare MCP used for deployment redacts secret values. **That route has been removed and redeployed** (`/setup-key` now returns 404 for every method); nothing in the repo contains the key.
 To rotate the key: Cloudflare dashboard > Storage & Databases > KV > `parcel-skiptrace-kv` > add/edit entry `batchdata_key`, or `npx wrangler kv key put --namespace-id 71a8b95c182c4b1782c850f34c7e4fcc batchdata_key "<key>" --remote`. Delete the entry to fall back to the secret. When redeploying through the API keep the bindings (`keep_bindings: ['secret_text']` plus the `SK_KV` kv_namespace binding).
 
+## Private site (Cloudflare Access)
+The private copy of the app, `https://app.prop-hunters.com` (Cloudflare Pages project `ph-parcel-finder`, deployed with `scripts/deploy_cloudflare.sh`), sits behind Cloudflare Access (team `prophunters.cloudflareaccess.com`, application "Parcel Finder", email one-time PIN, 1-month session).
+The Worker is also routed at `app.prop-hunters.com/skiptrace-api/*`, so requests from the app go through Access and arrive with the signed `Cf-Access-Jwt-Assertion` header. The Worker verifies it (RS256 against `https://<team>/cdn-cgi/access/certs`, issuer, `ACCESS_AUD`, expiry) and then skips the access code. Rate limits and the daily cap still apply.
+The workers.dev URL and the `X-Access-Code` check stay as the fallback for the public GitHub Pages copy until it is retired. A forged or expired token counts as a wrong code (lockout rules apply).
+Settings: `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` (plain variables, not secrets), `ALLOWED_ORIGIN` = comma list of allowed browser origins.
+Deploy: `cd worker && npx wrangler deploy` (the Durable Object migration `v1` is already applied on the live Worker; if wrangler tries to re-apply it, deploy with a copy of `wrangler.toml` without the `[[migrations]]` block).
+
 ## API
 * `GET /health` public. `{ok, service, configured}`; no secrets.
 * `GET /status` header `X-Access-Code`. `{ok, dailyCap, usedToday, remainingToday, maxPerRequest}`. Used by the site to validate the code and show the daily allowance.

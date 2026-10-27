@@ -2,8 +2,11 @@
    The public site (GitHub Pages) cannot hold a BatchData API key, so the browser sends owner/property rows here with an access code,
    and this Worker calls BatchData's Property Skip Trace (V3) with the key stored as a Worker secret.
    Secrets (set in Cloudflare, never in this repo):  ACCESS_CODE, and BATCHDATA_API_KEY (the BatchData key can instead live in the KV namespace bound as SK_KV, key 'batchdata_key'; KV wins when present)
-   Plain variables:  ALLOWED_ORIGIN (default https://brokerbranden-cmd.github.io), MAX_PER_REQUEST (default 50), DAILY_CAP (default 500 records/day, New York day)
-   Routes:  GET /health (public, no secrets)   GET /status (access code)   POST /skiptrace (access code)
+   Plain variables:  ALLOWED_ORIGIN (comma list, default https://brokerbranden-cmd.github.io), MAX_PER_REQUEST (default 50), DAILY_CAP (default 500 records/day, New York day),
+                     ACCESS_TEAM_DOMAIN (e.g. prophunters.cloudflareaccess.com) + ACCESS_AUD (Access application AUD tag): when both are set, a valid Cloudflare Access login
+                     (Cf-Access-Jwt-Assertion header / CF_Authorization cookie, RS256-verified against the team's public certs) is accepted instead of the access code.
+   Routes:  GET /health (public, no secrets)   GET /status (access code or Access login)   POST /skiptrace (access code or Access login)
+            Also served under the prefix /skiptrace-api (Worker route app.prop-hunters.com/skiptrace-api/* behind Cloudflare Access).
    Nothing personal is logged or stored: the Durable Object only keeps counters (per day, per IP request times and failed-code times). */
 
 const BD_URL = 'https://api.batchdata.com/api/v3/property/skip-trace';
@@ -15,7 +18,7 @@ const UPSTREAM_TIMEOUT = 50e3;
 
 const cfgInt = (v, d, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 const conf = env => ({
-  origin: String(env.ALLOWED_ORIGIN || DEFAULT_ORIGIN).replace(/\/+$/, ''),
+  origins: String(env.ALLOWED_ORIGIN || DEFAULT_ORIGIN).split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean),
   maxPer: cfgInt(env.MAX_PER_REQUEST, 50, 1, 100),
   cap: cfgInt(env.DAILY_CAP, 500, 0, 1e6)
 });
@@ -30,12 +33,50 @@ const nyDay = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: 'Ame
 function corsHeaders(req, c) {
   const o = req.headers.get('Origin');
   const h = { 'Vary': 'Origin', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
-  if (o && o === c.origin) {
+  if (o && c.origins.includes(o)) {
     h['Access-Control-Allow-Origin'] = o; h['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
     h['Access-Control-Allow-Headers'] = 'Content-Type, X-Access-Code'; h['Access-Control-Max-Age'] = '600';
   }
   return h;
 }
+/* ---------- Cloudflare Access login (JWT, RS256) ---------- */
+const b64u = s => { s = String(s).replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+let certCache = { team: '', at: 0, keys: [] };
+async function accessKeys(team, fetchImpl, force) {
+  if (!force && certCache.team === team && Date.now() - certCache.at < 3600e3 && certCache.keys.length) return certCache.keys;
+  const r = await fetchImpl('https://' + team + '/cdn-cgi/access/certs', { headers: { Accept: 'application/json' } });
+  if (!r.ok) return certCache.team === team ? certCache.keys : [];
+  const j = await r.json(); certCache = { team, at: Date.now(), keys: Array.isArray(j && j.keys) ? j.keys : [] };
+  return certCache.keys;
+}
+function accessToken(req) {
+  const h = req.headers.get('Cf-Access-Jwt-Assertion'); if (h) return h.trim();
+  const m = (req.headers.get('Cookie') || '').match(/(?:^|;\s*)CF_Authorization=([^;]+)/); return m ? m[1].trim() : '';
+}
+// returns true only for a token signed by the team's Access keys, for this application (aud), not expired
+async function accessOk(req, env, fetchImpl) {
+  const team = String(env.ACCESS_TEAM_DOMAIN || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, ''), aud = String(env.ACCESS_AUD || '').trim();
+  if (!team || !aud) return false;
+  const tok = accessToken(req); const parts = tok.split('.'); if (parts.length !== 3 || tok.length > 8192) return false;
+  let hdr, pl; try { hdr = JSON.parse(new TextDecoder().decode(b64u(parts[0]))); pl = JSON.parse(new TextDecoder().decode(b64u(parts[1]))); } catch (e) { return false; }
+  if (!hdr || hdr.alg !== 'RS256' || !pl) return false;
+  const now = Math.floor(Date.now() / 1000);
+  if (!(typeof pl.exp === 'number' && pl.exp > now - 30) || (typeof pl.nbf === 'number' && pl.nbf > now + 30)) return false;
+  if (pl.iss !== 'https://' + team) return false;
+  const auds = Array.isArray(pl.aud) ? pl.aud : [pl.aud]; if (!auds.includes(aud)) return false;
+  if (!pl.email && !pl.sub) return false;
+  for (const force of [false, true]) {
+    let keys; try { keys = await accessKeys(team, fetchImpl, force); } catch (e) { return false; }
+    const jwk = keys.find(k => k && k.kid === hdr.kid && k.kty === 'RSA');
+    if (!jwk) continue;
+    try {
+      const key = await crypto.subtle.importKey('jwk', { kty: 'RSA', n: jwk.n, e: jwk.e, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+      return await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64u(parts[2]), new TextEncoder().encode(parts[0] + '.' + parts[1]));
+    } catch (e) { return false; }
+  }
+  return false;
+}
+
 const json = (obj, status, h, extra) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...h, ...(extra || {}) } });
 
 async function sha256(s) { return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)))); }
@@ -110,20 +151,21 @@ function parseUpstream(body, sent) {
 
 /* ---------- routes ---------- */
 async function handle(req, env, ctx, fetchImpl) {
-  const c = conf(env), cors = corsHeaders(req, c), url = new URL(req.url), path = url.pathname.replace(/\/+$/, '') || '/';
+  const c = conf(env), cors = corsHeaders(req, c), url = new URL(req.url), path = url.pathname.replace(/^\/skiptrace-api(?=\/|$)/, '').replace(/\/+$/, '') || '/';
   const origin = req.headers.get('Origin');
-  if (req.method === 'OPTIONS') return origin === c.origin ? new Response(null, { status: 204, headers: cors }) : new Response(null, { status: 403, headers: cors });
+  if (req.method === 'OPTIONS') return origin && c.origins.includes(origin) ? new Response(null, { status: 204, headers: cors }) : new Response(null, { status: 403, headers: cors });
   if (path === '/health' && req.method === 'GET') return json({ ok: true, service: 'parcel-skiptrace', configured: !!((await bdKey(env)) && env.ACCESS_CODE && env.LIMITER) }, 200, cors);
   if (path !== '/skiptrace' && path !== '/status') return json({ error: 'not_found' }, 404, cors);
   if ((path === '/skiptrace' && req.method !== 'POST') || (path === '/status' && req.method !== 'GET')) return json({ error: 'method_not_allowed' }, 405, cors, { Allow: path === '/status' ? 'GET' : 'POST' });
-  if (origin && origin !== c.origin) return json({ error: 'forbidden_origin' }, 403, cors);   // browsers from other sites; curl has no Origin
+  if (origin && !c.origins.includes(origin)) return json({ error: 'forbidden_origin' }, 403, cors);   // browsers from other sites; curl has no Origin
   const apiKey = await bdKey(env);
   if (!env.ACCESS_CODE || !apiKey || !env.LIMITER) return json({ error: 'not_configured' }, 503, cors);
 
   const ip = req.headers.get('CF-Connecting-IP') || 'unknown', now = Date.now(), day = nyDay();
   const pre = await limiter(env, { op: 'precheck', ip, now });
   if (!pre.ok) return json({ error: pre.reason, retryAfter: pre.retryAfter }, 429, cors, { 'Retry-After': String(pre.retryAfter || 60) });
-  if (!(await codeOk(req.headers.get('X-Access-Code'), env.ACCESS_CODE))) {
+  const viaAccess = await accessOk(req, env, fetchImpl);   // signed in through Cloudflare Access: no access code needed
+  if (!viaAccess && !(await codeOk(req.headers.get('X-Access-Code'), env.ACCESS_CODE))) {
     await limiter(env, { op: 'fail', ip, now });
     return json({ error: 'bad_access_code' }, 401, cors);
   }
@@ -206,4 +248,4 @@ export default {
     catch (e) { return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(req, conf(env)) } }); }   // never echo the exception
   }
 };
-export const _test = { handle, parseUpstream, mapEntry, cleanItem, toRequest, codeOk, conf, Limiter };
+export const _test = { handle, accessOk, _resetCerts: () => { certCache = { team: '', at: 0, keys: [] }; }, parseUpstream, mapEntry, cleanItem, toRequest, codeOk, conf, Limiter };

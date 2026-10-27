@@ -16,8 +16,9 @@ self.addEventListener('activate', e => {
 async function networkFirst(req, cacheName, key) {
   const c = await caches.open(cacheName);
   try {
-    const r = await fetch(req.mode === 'navigate' ? req.url : req, { cache: 'no-cache' });   // revalidate with the server: never serve stale app code from the HTTP cache
-    if (r && r.ok) c.put(key || req, r.clone());
+    const r = await fetch(req.mode === 'navigate' ? req.url : req, req.mode === 'navigate' ? { cache: 'no-cache', redirect: 'manual' } : { cache: 'no-cache' });   // revalidate with the server: never serve stale app code from the HTTP cache
+    if (r && r.type === 'opaqueredirect') return r;   // private site: Cloudflare Access login expired -> let the browser follow the redirect to the sign-in page
+    if (r && r.ok && !r.redirected) c.put(key || req, r.clone());
     return r;
   } catch (err) {
     const hit = await c.match(key || req, { ignoreSearch: true });
@@ -57,6 +58,7 @@ self.addEventListener('fetch', e => {
     if (/\/data\/(?:[\w-]+\/)?meta\.json$/.test(u.pathname)) return e.respondWith(networkFirst(req, DATA));
     if (/\/data\/.+\.(gz|json)$/.test(u.pathname) && u.searchParams.has('v')) return e.respondWith(dataCacheFirst(req));
     if (/\/data\//.test(u.pathname)) return;
+    if (/^\/(skiptrace-api|cdn-cgi)\//.test(u.pathname)) return;   // skip trace Worker (private site) and Cloudflare Access endpoints: never cached
     return e.respondWith(networkFirst(req, SHELL, req.mode === 'navigate' ? 'index.html' : undefined));
   }
   if (/\/tile\/\d+\/\d+\/\d+$/.test(u.pathname) || /tile\.openstreetmap\.org$/.test(u.hostname)) return e.respondWith(tileSWR(req));

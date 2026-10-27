@@ -127,4 +127,27 @@ await t('KV key wins over the secret; secret is the fallback; /setup-key is gone
   const e3 = mkEnv({ SK_KV: { get: async () => { throw new Error('kv down'); } } }).env; assert.equal((await run(req('GET', '/status'), e3)).res.status, 200);
   for (const m of ['PUT', 'GET', 'POST']) assert.equal((await run(req(m, '/setup-key', m === 'GET' ? {} : { body: 'x' }), env)).res.status, 404);
 });
+await t('Cloudflare Access login: valid JWT replaces the access code; forged / wrong aud / expired / other team rejected; /skiptrace-api prefix; app origin allowed', async () => {
+  const { webcrypto } = await import('node:crypto'); const subtle = webcrypto.subtle;
+  const kp = await subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+  const bad = await subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+  const jwk = await subtle.exportKey('jwk', kp.publicKey); jwk.kid = 'k1';
+  const TEAM = 'team.cloudflareaccess.com', AUD = 'aud-tag-test', APP = 'https://app.prop-hunters.com';
+  const enc = o => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const sign = async (pl, key, hdr) => { const h = enc(hdr || { alg: 'RS256', kid: 'k1', typ: 'JWT' }), b = enc(pl); const sig = await subtle.sign('RSASSA-PKCS1-v1_5', (key || kp).privateKey, new TextEncoder().encode(h + '.' + b)); return h + '.' + b + '.' + Buffer.from(sig).toString('base64url'); };
+  const now = Math.floor(Date.now() / 1000), good = { iss: 'https://' + TEAM, aud: [AUD], email: 'a@b.c', sub: 'u1', exp: now + 600, iat: now };
+  let certCalls = 0;
+  const f = async (url, init) => { if (String(url).includes('/cdn-cgi/access/certs')) { certCalls++; assert.equal(url, 'https://' + TEAM + '/cdn-cgi/access/certs'); return new Response(JSON.stringify({ keys: [jwk] })); } return mkFetch(ok1)(url, init); };
+  const { env } = mkEnv({ ACCESS_TEAM_DOMAIN: TEAM, ACCESS_AUD: AUD, ALLOWED_ORIGIN: ORIGIN + ',' + APP }); _test._resetCerts();
+  const jr = async (tok, path, o) => run(req(o && o.body ? 'POST' : 'GET', path || '/skiptrace-api/status', { code: null, headers: { 'Cf-Access-Jwt-Assertion': tok }, ...(o || {}) }), env, f);
+  let r = await jr(await sign(good)); assert.equal(r.res.status, 200); assert.equal(r.j.ok, true);
+  r = await run(req('GET', '/skiptrace-api/status', { code: null, headers: { Cookie: 'x=1; CF_Authorization=' + await sign(good) } }), env, f); assert.equal(r.res.status, 200);
+  r = await jr(await sign(good), '/skiptrace-api/skiptrace', { body: { items: [item('1')] }, origin: APP }); assert.equal(r.res.status, 200); assert.equal(r.j.results[0].status, 'match');
+  for (const tok of [await sign(good, bad), await sign({ ...good, aud: ['other'] }), await sign({ ...good, exp: now - 120 }), await sign({ ...good, iss: 'https://evil.cloudflareaccess.com' }), await sign(good, null, { alg: 'none', kid: 'k1' }), await sign(good, null, { alg: 'RS256', kid: 'nope' }), 'a.b.c', '']) {
+    r = await jr(tok); assert.equal(r.res.status, 401, 'rejected token'); }
+  const { env: e1 } = mkEnv({ ACCESS_TEAM_DOMAIN: TEAM, ACCESS_AUD: AUD }); r = await run(req('GET', '/skiptrace-api/status'), e1, f); assert.equal(r.res.status, 200, 'access code still works as fallback');
+  const { env: e2 } = mkEnv(); r = await run(req('GET', '/status', { code: null, headers: { 'Cf-Access-Jwt-Assertion': await sign(good) } }), e2, f); assert.equal(r.res.status, 401, 'JWT ignored when Access is not configured');
+  r = await run(req('GET', '/status', { origin: APP }), e1, f); assert.equal(r.res.status, 403, 'app origin not allowed unless listed'); r = await run(req('GET', '/status', { origin: APP }), mkEnv({ ALLOWED_ORIGIN: ORIGIN + ',' + APP }).env, f); assert.equal(r.res.headers.get('Access-Control-Allow-Origin'), APP);
+  assert.ok(certCalls >= 1 && certCalls <= 4, 'certs cached');
+});
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

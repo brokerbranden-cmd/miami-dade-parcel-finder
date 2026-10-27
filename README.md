@@ -347,6 +347,7 @@ The test covers all presets, filters, sorts, the drawer, the table, CSV export, 
 Everything is static and the largest file is 19 MB, so all files are under GitHub's 100 MB per-file limit.
 - **GitHub Pages:** needs a GitHub account. Push this folder to a repo and turn on Pages. Free.
 - **Netlify** (drag-and-drop deploy) or **Vercel** or **Cloudflare Pages:** each needs a free account on that service.
+- **Private site (Oct 27, 2026): `https://app.prop-hunters.com`** - Cloudflare Pages project `ph-parcel-finder`, behind **Cloudflare Access** (Zero Trust free plan, team `prophunters.cloudflareaccess.com`, application "Parcel Finder"): sign in with an emailed one-time PIN, session lasts 1 month. Add or remove people in Cloudflare > Zero Trust > Access > Applications > Parcel Finder > Policies > "Allowed team emails". `scripts/deploy_cloudflare.sh [ref]` publishes a commit (default `origin/main`) with wrangler; only the web app is uploaded (no tests, shots, scripts, Worker source or notes). Pages limit: 25 MiB per file (`data/main-detail.bin.gz` is about 22.5 MB, keep it under). On that host, skip tracing goes through `/skiptrace-api/*` (the Worker routed behind Access) and needs no access code; the manifest is fetched with credentials, and the service worker lets an expired Access session redirect to the sign-in page instead of serving a stale copy.
 
 
 ## Probate layer (Clerk exports -> PR + DC)

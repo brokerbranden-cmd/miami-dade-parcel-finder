@@ -14,7 +14,7 @@
 <script>/* preload the active county's meta.json only (counties never share data) */(function(){try{var q=new URLSearchParams(location.search),c=q.get('county')||localStorage.getItem('pf.county')||'miami-dade',d={'miami-dade':'data/','broward':'data/broward/','monroe':'data/monroe/'}[c];if(c==='pr')d='data/pr/'+(q.get('muni')||localStorage.getItem('pf.pr.muni')||'san-juan').replace(/[^a-z0-9-]/g,'')+'/';if(d){var l=document.createElement('link');l.rel='preload';l.as='fetch';l.crossOrigin='anonymous';l.href=d+'meta.json';document.head.appendChild(l);}}catch(e){}})();</script>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="ui.css">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
 <meta name="theme-color" content="#0C0E10">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">

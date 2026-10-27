@@ -6,13 +6,17 @@
   'use strict';
   const SK = root.PFSkip || (typeof require !== 'undefined' ? require('./skiptrace.js') : null);
   const WORKER_URL = 'https://parcel-skiptrace.brokerbranden.workers.dev';
+  // On the private site (Cloudflare Access) the Worker is routed under the same hostname: the Access login replaces the per-device access code.
+  const ACCESS_HOSTS = ['app.prop-hunters.com'], ACCESS_TOKEN = 'cf-access';
+  const viaAccess = !!(root.location && ACCESS_HOSTS.includes(root.location.hostname));
+  const BASE_URL = viaAccess ? '/skiptrace-api' : WORKER_URL;
   const CODE_KEY = 'pf.skapi.code.v1', SRC = 'BatchData API';
   const ls = () => { try { return root.localStorage; } catch (e) { return null; } };
   // Cookie fallback (400 days) so the code survives Safari/ITP localStorage clearing.
   const CK = 'pf_skapi_code_v1';
   const ckGet = () => { try { const m = (root.document && root.document.cookie || '').match(/(?:^|;\s*)pf_skapi_code_v1=([^;]*)/); return m ? decodeURIComponent(m[1]).trim() : ''; } catch (e) { return ''; } };
   const ckSet = v => { try { if (!root.document) return; const sec = root.location && root.location.protocol === 'https:' ? '; Secure' : ''; root.document.cookie = CK + '=' + (v ? encodeURIComponent(v) + '; Max-Age=34560000' : '; Max-Age=0') + '; Path=/; SameSite=Lax' + sec; } catch (e) {} };
-  const getCode = () => { let v = ''; try { v = (ls().getItem(CODE_KEY) || '').trim(); } catch (e) {} if (!v) { v = ckGet(); if (v) { try { ls().setItem(CODE_KEY, v); } catch (e) {} } } return v; };
+  const getCode = () => { let v = ''; try { v = (ls().getItem(CODE_KEY) || '').trim(); } catch (e) {} if (!v) { v = ckGet(); if (v) { try { ls().setItem(CODE_KEY, v); } catch (e) {} } } return v || (viaAccess ? ACCESS_TOKEN : ''); };
   const persist = () => { try { const st = root.navigator && root.navigator.storage; if (st && st.persist) st.persist().catch(() => {}); } catch (e) {} };
   const setCode = c => { const v = String(c || '').trim(); let ok = false; try { ls().setItem(CODE_KEY, v); ok = true; } catch (e) {} ckSet(v); persist(); return ok || !!ckGet(); };
   const clearCode = () => { try { ls().removeItem(CODE_KEY); } catch (e) {} ckSet(''); };
@@ -30,7 +34,8 @@
   async function call(path, opts) {
     opts = opts || {}; const code = opts.code != null ? opts.code : getCode(); let res;
     try {
-      res = await fetch(WORKER_URL + path, { method: opts.body ? 'POST' : 'GET', headers: { 'X-Access-Code': code, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }, body: opts.body ? JSON.stringify(opts.body) : undefined, signal: opts.signal, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+      const hdr = { ...(code && code !== ACCESS_TOKEN ? { 'X-Access-Code': code } : {}), ...(opts.body ? { 'Content-Type': 'application/json' } : {}) };
+      res = await fetch(BASE_URL + path, { method: opts.body ? 'POST' : 'GET', headers: hdr, body: opts.body ? JSON.stringify(opts.body) : undefined, signal: opts.signal, cache: 'no-store', credentials: viaAccess ? 'same-origin' : 'omit', referrerPolicy: 'no-referrer' });
     } catch (e) { if (e && e.name === 'AbortError') throw e; throw new ApiError('network', 0); }
     let data = null; try { data = await res.json(); } catch (e) { data = null; }
     if (!res.ok || !data || data.ok === false) throw new ApiError((data && data.error) || (res.status === 401 ? 'bad_access_code' : 'internal_error'), res.status, data || {});
@@ -90,6 +95,6 @@
     }
     return sum;
   }
-  const api = { WORKER_URL, ApiError, getCode, setCode, clearCode, call, status, buildItem, hasAddress, applyResult, newSummary, tally, run, messageFor, SRC };
+  const api = { WORKER_URL, BASE_URL, viaAccess, ApiError, getCode, setCode, clearCode, call, status, buildItem, hasAddress, applyResult, newSummary, tally, run, messageFor, SRC };
   root.PFSkipApi = api; if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

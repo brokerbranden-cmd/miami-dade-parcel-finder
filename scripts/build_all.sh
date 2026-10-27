@@ -97,6 +97,8 @@ case " ${SKIP_COUNTIES:-} " in *" monroe "*) note "skip monroe (SKIP_COUNTIES)";
   # Incremental + resumable: each run re-pulls recent permit days / open cases and new records; MAX_MINUTES bounds a run, the rest continues next week.
   RETRIES=2 fetch monroe_keywest "monroe/kw_permits.json monroe/kw_cases.json" timeout 10800 env MAX_MINUTES=150 python3 scripts/counties/monroe/fetch_keywest_etrakit.py
   RETRIES=2 fetch monroe_islamorada "monroe/isl_cityview.json" timeout 7200 env MAX_MINUTES=100 ISL_MAX_DETAIL=600 python3 scripts/counties/monroe/fetch_islamorada_cityview.py
+  # Key Colony Beach: Ch. 119 Excel exports (sent only on request, no feed) dropped in $RAW/monroe/key_colony_beach/ -> monroe/kcb_records.json (local parse, no fetch)
+  if ls "$RAW"/monroe/key_colony_beach/*.xlsx > /dev/null 2>&1; then python3 scripts/counties/monroe/load_kcb_records.py || note "kcb parse failed (kept previous kcb_records.json)"; fi
   build monroe_data  python3 scripts/counties/monroe/build_monroe.py data/monroe ;;
 esac
 # Broward city permits (public ArcGIS; Broward-only raw files, not mixed with Miami-Dade)

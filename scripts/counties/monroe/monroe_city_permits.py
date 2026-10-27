@@ -1,5 +1,5 @@
 """Key West (eTRAKiT) + Islamorada (CityView) permits and code cases, joined to Monroe parcels by RE number.
-Inputs ($RAW/monroe): kw_permits.json, kw_cases.json (fetch_keywest_etrakit.py), isl_cityview.json (fetch_islamorada_cityview.py).
+Inputs ($RAW/monroe): kw_permits.json, kw_cases.json (fetch_keywest_etrakit.py), isl_cityview.json (fetch_islamorada_cityview.py), kcb_records.json (load_kcb_records.py, Key Colony Beach Ch. 119 export).
 load(RAW) -> {re: {'permits': [...], 'cases': [...]}} with normalised rows:
   permit: {src, no, date (ISO or None), year, type, status, open (bool), expired (bool), desc}
   case:   {src, no, date (ISO open date, or None = only the year is known), year, type, status, open, closed, kind ('US'|'NG'|'')}
@@ -48,4 +48,19 @@ def load(RAW):
             out[c['re']]['cases'].append({'src': 'Islamorada', 'no': c['no'], 'date': None, 'year': c.get('open_year') or _y(c['no']), 'type': t, 'status': s, 'open': not C_DONE.search(s), 'closed': None,
                                           'kind': 'US' if UNSAFE.search(t) else 'NG' if NEGLECT.search(t) else '', 'viol': ''})
         newest['isl'] = isl.get('newest')
+    kcb = J('kcb_records.json')
+    if kcb:   # Key Colony Beach: Citizenserve exports sent on request (statuses Closed / Issued / Expired / Canceled; cases Open / Closed, types Code Enforcement / Violation / Warning / Lien)
+        for p in kcb.get('permits', []):
+            st['kcb_permits'] += 1
+            if not p.get('re'): continue
+            st['kcb_permits_re'] += 1; s = p.get('status', '')
+            out[p['re']]['permits'].append({'src': 'Key Colony Beach', 'no': p['no'], 'date': p.get('issued'), 'year': _y(p.get('issued')), 'type': ' '.join(x for x in (p.get('subtype'),) if x) or p.get('type', ''), 'status': s,
+                                            'open': not P_DONE.search(s), 'expired': bool(P_EXP.search(s)), 'desc': p.get('desc', '')})
+        for c in kcb.get('cases', []):
+            st['kcb_cases'] += 1
+            if not c.get('re'): continue
+            st['kcb_cases_re'] += 1; s = c.get('status', ''); t = (c.get('type', '') + ' ' + c.get('desc', '')).strip()
+            out[c['re']]['cases'].append({'src': 'Key Colony Beach', 'no': c['no'], 'date': c.get('opened'), 'year': _y(c.get('opened')), 'type': c.get('type', ''), 'status': s, 'open': s.strip().lower() == 'open', 'closed': c.get('closed'),
+                                          'kind': 'US' if UNSAFE.search(t) else 'NG' if NEGLECT.search(t) else '', 'viol': c.get('desc', '')})
+        newest['kcb'] = kcb.get('newest')
     return out, dict(st), newest

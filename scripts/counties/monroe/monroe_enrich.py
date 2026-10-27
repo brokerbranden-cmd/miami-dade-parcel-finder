@@ -250,7 +250,7 @@ def enrich(df, g, uc, bv, lot, yb, sqft, mk, kinds, est, flood_s, absent, owners
         for r in json.load(open(p)): mc[r['re']].append(r)
     # Key West eTRAKiT + Islamorada CityView permits / code cases (joined by RE number)
     city, cst, cnew = MCP.load(RAW); st['city_permits'] = cst; st['city_newest'] = cnew
-    st['city_matched'] = {'kw_permit_parcels': 0, 'kw_code_parcels': 0, 'isl_permit_parcels': 0, 'isl_code_parcels': 0, 'kw_permits_matched': 0, 'kw_cases_matched': 0, 'isl_permits_matched': 0, 'isl_cases_matched': 0}
+    st['city_matched'] = {'kw_permit_parcels': 0, 'kw_code_parcels': 0, 'isl_permit_parcels': 0, 'isl_code_parcels': 0, 'kw_permits_matched': 0, 'kw_cases_matched': 0, 'isl_permits_matched': 0, 'isl_cases_matched': 0, 'kcb_permit_parcels': 0, 'kcb_code_parcels': 0, 'kcb_permits_matched': 0, 'kcb_cases_matched': 0}
     pcs = np.zeros(n, np.uint16); vadd = np.zeros(n, np.uint16)   # PCS bits (app.js PCS order) and vacancy-hint bits (vacancy_lib VSIG order)
     cut24 = (dt.date.today() - dt.timedelta(days=730)).isoformat()
     # MCE
@@ -276,7 +276,7 @@ def enrich(df, g, uc, bv, lot, yb, sqft, mk, kinds, est, flood_s, absent, owners
         cp = city.get(r) if r in city else None
         cpl = cp['permits'] if cp else []; ccl = cp['cases'] if cp else []
         if cpl:
-            src = cpl[0]['src']; cm = st['city_matched']; key = 'kw' if src == 'Key West' else 'isl'
+            src = cpl[0]['src']; cm = st['city_matched']; key = {'Key West': 'kw', 'Key Colony Beach': 'kcb'}.get(src, 'isl')
             cm[key + '_permit_parcels'] += 1; cm[key + '_permits_matched'] += len(cpl)
             pd_ = sorted(cpl, key=lambda x: (x['date'] or str(x['year'] or '')), reverse=True)
             dated = [x for x in pd_ if x['date']]
@@ -292,7 +292,7 @@ def enrich(df, g, uc, bv, lot, yb, sqft, mk, kinds, est, flood_s, absent, owners
             psum[k] = (psum[k] + ' | ' if psum[k] else '') + txt
         if cp: pcs[k] |= 128
         if ccl:
-            src = ccl[0]['src']; cm = st['city_matched']; key = 'kw' if src == 'Key West' else 'isl'
+            src = ccl[0]['src']; cm = st['city_matched']; key = {'Key West': 'kw', 'Key Colony Beach': 'kcb'}.get(src, 'isl')
             cm[key + '_code_parcels'] += 1; cm[key + '_cases_matched'] += len(ccl)
             co = [x for x in ccl if x['open']]
             cn_open[k] = min(255, int(cn_open[k]) + len(co)); cn5[k] += sum(1 for x in ccl if (x['year'] or 0) >= y5)

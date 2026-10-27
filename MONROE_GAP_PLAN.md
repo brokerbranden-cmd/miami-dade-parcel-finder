@@ -22,7 +22,7 @@ Both scripts use a 3 s delay and an identifying User-Agent.
 ## Next steps
 1. Key West: add the per-case detail postback (status/open date), then wire it with a weekly window plus a monthly re-check of open cases.
 2. Islamorada: wire a weekly first-N-pages pull plus a monthly full-year pull for status changes, and fix the COVERAGE.md row.
-3. Key Colony Beach and Layton: send the Chapter 119 requests below (not sent yet).
+3. Key Colony Beach: request sent 10/22/2026 from Branden@prop-hunters.com; the City answered 10/27/2026 with two Excel exports (1,717 permits issued 1/3/2023-10/26/2026, 1,059 code records opened 1/3/2023-10/21/2026), now loaded (`load_kcb_records.py`). The clerk says reports are sent only upon request (no automatic monthly feed) - re-request to refresh. Layton: send the Chapter 119 request below (not sent yet).
 
 ## Draft Chapter 119 requests (NOT SENT)
 

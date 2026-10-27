@@ -267,12 +267,20 @@ elif C == 'monroe':
             if c.get('withdrawn'): continue
             f = KEY(c.get('re')); d = d10(c.get('date')); do_case(f, d, c.get('violation') or '', '', 'Marathon code cases'); do_uv(f, d, c.get('violation') or '', '', 'Marathon code cases')
         sources.append('City of Marathon Special Magistrate code agendas')
+    p = f'{M}/kcb_records.json'
+    if os.path.exists(p):   # Key Colony Beach Ch. 119 export (load_kcb_records.py)
+        J = json.load(open(p))
+        for c in J['permits']: do_perm(KEY(c.get('re')), d10(c.get('issued')), ' | '.join(str(c.get(k) or '') for k in ('type', 'subtype', 'desc')), c.get('status', ''), 'Key Colony Beach permits')
+        for c in J['cases']:
+            f = KEY(c.get('re')); d = d10(c.get('opened')); t = str(c.get('type') or '') + ' | ' + str(c.get('desc') or ''); s_ = c.get('status', '')
+            do_case(f, d, t, s_, 'Key Colony Beach code cases'); do_uv(f, d, t, s_, 'Key Colony Beach code cases', is_open=s_.lower() != 'closed')
+        sources.append('City of Key Colony Beach permits and code cases (public-records export)')
     p = f'{M}/mce_permits.jsonl'
     if os.path.exists(p):
         for ln in open(p):
             c = json.loads(ln); do_perm(KEY(c.get('parcel_id')), d10(c.get('apply_date')), str(c.get('permit_type')) + ' | ' + str(c.get('permit_desc')), c.get('status') or '', 'Monroe County permits')
     notes.append('Unincorporated Monroe permits / code cases only exist publicly up to 2022 / 2024 (MCeSearch), so the 24-month reconnect and 36-month case windows find little there; '
-                 'Marathon only publishes hearing agendas; Key Colony Beach and Layton publish nothing.')
+                 'Marathon only publishes hearing agendas; Key Colony Beach comes from a one-off public-records export (no automatic feed); Layton publishes nothing.')
 
 # ---------- utility shutoff lists (top accuracy) ----------
 UD = os.path.join(RAW, 'utility_shutoffs', C); lists = []

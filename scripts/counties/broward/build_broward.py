@@ -303,6 +303,25 @@ for fn in sorted(glob.glob(os.path.join(RAWB, 'official_records', '*doc-ver.txt'
         if t not in fn_txt[i]: fn_txt[i] = (fn_txt[i] + ' | ' if fn_txt[i] else '') + t
 print('recorded lis pendens', lp_stats, flush=True)
 
+# ---- recorded lis pendens + certificates of title from Broward Official Records (AcclaimWeb) browser exports raw/broward/lp_downloads/{LP,CET}_*.csv
+# (no address / parcel id: matched by legal description + defendant / owner name in broward_lp.py; only high / medium matches are flagged).
+# Same signal as Miami-Dade LP: distress 'LP' bit (dsig 1<<1), 25 hard points (not on top of a scheduled sale / published notice), own sigm bit 4 + lsum text.
+import broward_lp
+BLPDIR = os.environ.get('BROWARD_LP_DOWNLOADS', os.path.join(SCR, '..', 'raw', 'broward', 'lp_downloads'))
+lpb = np.zeros(n, bool); ls_txt = [''] * n; blp_stats = None
+if glob.glob(os.path.join(BLPDIR, '*.csv')):
+    _lp, _cet, blp_stats, _un = broward_lp.run(BLPDIR, list(S('OWN_NAME')), list(S('S_LEGAL')))
+    for i, rs in _lp.items():
+        lpb[i] = True; ls_txt[i] = ' | '.join(broward_lp.text(r) for r in sorted(rs, key=lambda r: r['_date'], reverse=True))
+    for i, rs in _cet.items():
+        ls_txt[i] = ' | '.join([x for x in [ls_txt[i]] if x] + [f"{r.get('RecordDate', '').split()[0]} Certificate of title issued (foreclosure sale held), case {r.get('CaseNumber')}" for r in rs])
+    try:
+        import csv as _csv
+        with open(os.path.join(RAWB, 'lp_unmatched.csv'), 'w', newline='') as fh:
+            if _un: w_ = _csv.DictWriter(fh, fieldnames=list(_un[0].keys())); w_.writeheader(); w_.writerows(_un)
+    except OSError as e: print('WARN lp_unmatched', e)
+print('recorded lis pendens (AcclaimWeb exports)', blp_stats, flush=True)
+
 # ---- buildability screen (bld 1 green / 2 yellow / 3 red) for vacant lots, teardown candidates and 1-9 unit homes; reasons "R~text¦Y~text¦G~text¦i~text"
 lowrisk = np.array([not f.startswith('V') and not f.startswith('A') for f in flood_s]); hi_f = np.array([f.startswith('A') for f in flood_s]); ve_f = np.array([f.startswith('V') for f in flood_s])
 small = lot < 5000; resz = np.isin(zt_i, ['sf', 'duplex', 'mf', 'mixed'])
@@ -329,7 +348,7 @@ for i in np.where(cand)[0]:
 for i in range(n):
     if zj[i]: zinfo[i] = f'{zj[i]}: {zc[i]} {zd[i]}'.strip() + (f' | County land use plan: {flu_lbl[i]}' if flu_lbl[i] and zsrc[i] == 1 else '')
 dup = resz & np.isin(zt_i, ['duplex', 'mf', 'mixed']) & (lot >= 5000) & (vacant | tear | np.isin(uc.values, [1, 8]))
-sigm = (fcb * 1 | fnb * 2 | tdb * 16 | code5 * 32 | dperm * 64 | code_open * 128 | (absz | oos) * 256 | vacant * 512 | dup * 2048 | tear * 16384).astype(np.uint16)   # 2 published foreclosure notice, 32 code case 5y, 64 distress permit 24 mo, 128 open code case
+sigm = (fcb * 1 | fnb * 2 | lpb * 4 | tdb * 16 | code5 * 32 | dperm * 64 | code_open * 128 | (absz | oos) * 256 | vacant * 512 | dup * 2048 | tear * 16384).astype(np.uint16)   # 2 published foreclosure notice, 32 code case 5y, 64 distress permit 24 mo, 128 open code case
 dsum = ['; '.join(x for x in (a, b) if x) for a, b in zip(fc_txt, td_txt)]
 nsum = fn_txt
 
@@ -337,8 +356,8 @@ nsum = fn_txt
 s_abs = np.where(oos, 6, np.where(absz, 4, 0)); s_long = np.where(yrs >= 20, 5, np.where(yrs >= 10, 2, 0))
 s_tear = np.where(tear, 6, np.where((bv == 0) & (landv > 0) & (lot > 0) & ~corp_gov, 3, 0)); s_nohs = np.where(~homestead & ~corp_gov, 3, 0)
 soft = np.minimum(20, s_abs + s_long + s_tear + s_nohs)
-dsig = (fnb * (1 << 1)) | (code_uns * (1 << 5)) | ((code_open & ~code_uns) * (1 << 7)) | (est * (1 << 10)) | ((s_abs > 0) << 12) | ((s_long >= 5) << 13) | (tear << 14) | ((s_nohs > 0) << 15)
-dhard = np.where(est, 15, 0) + np.where(fcb, 25, 0) + np.where(tdb, 30, 0) + np.where(fnb & ~fcb, 25, 0) + np.where(code_uns, 22, np.where(code_open, 8, 0)) + np.where(dperm_hi, 8, np.where(dperm, 4, 0))   # same points as Miami-Dade LP 25 / US 22 / CC 8; distress permits 8 (demolition / unsafe / fire / structural) or 4 (roof, other repair)
+dsig = ((fnb | lpb) * (1 << 1)) | (code_uns * (1 << 5)) | ((code_open & ~code_uns) * (1 << 7)) | (est * (1 << 10)) | ((s_abs > 0) << 12) | ((s_long >= 5) << 13) | (tear << 14) | ((s_nohs > 0) << 15)
+dhard = np.where(est, 15, 0) + np.where(fcb, 25, 0) + np.where(tdb, 30, 0) + np.where((fnb | lpb) & ~fcb, 25, 0) + np.where(code_uns, 22, np.where(code_open, 8, 0)) + np.where(dperm_hi, 8, np.where(dperm, 4, 0))   # same points as Miami-Dade LP 25 / US 22 / CC 8; distress permits 8 (demolition / unsafe / fire / structural) or 4 (roof, other repair)
 dscore = np.where(govt, 0, np.minimum(100, dhard + soft)); dsig = np.where(govt, 0, dsig)
 na = ~homestead & (absz | oos) & ~corp_gov & (bv > 0)
 vsig = (na << 0) | ((yrs >= 20) << 6) | (tear << 7) | (est << 9)
@@ -359,7 +378,7 @@ book = [f'{b}-{p}' if b.strip('0 ') else '' for b, p in zip(S('OR_BOOK1'), S('OR
 str_main = {'folio': list(df.FOLIO), 'addr': addr, 'owner': list(o1)}
 cols_det = {'assd': u32(N('AV_SD')), 'taxable': u32(N('TV_NSD')), 'sd2': u16(sd2), 'sale2': u32(N('SALE_PRC2')), 'sq2': u8(qf('QUAL_CD2')), 'sd3': z(np.uint16), 'sale3': z(np.uint32), 'bcount': u16(N('NO_BULDNG')),
             'lperm': lperm_a, 'pn5': pn5_a, 'cn_open': cn_open_a, 'cn5': cn5_a, 'clast': clast_a}
-str_det = {'mail': mail, 'legal': legal, 'psum': psum_a, 'csum': csum_a, 'nsum': nsum, 'grantor': [''] * n, 'book': book, 'reasons': reasons, 'rogo_txt': [''] * n, 'zinfo': zinfo, 'dsum': dsum}
+str_det = {'mail': mail, 'legal': legal, 'psum': psum_a, 'csum': csum_a, 'nsum': nsum, 'lsum': ls_txt, 'grantor': [''] * n, 'book': book, 'reasons': reasons, 'rogo_txt': [''] * n, 'zinfo': zinfo, 'dsum': dsum}
 cols_geo = {'lat': np.where(lat != 0, (lat - GEO0[0]) * 1e6, 0).clip(0, 4e9).astype(np.uint32), 'lon': np.where(lon != 0, (lon - GEO0[1]) * 1e6, 0).clip(0, 4e9).astype(np.uint32)}
 def write_pack(path, rows, cols, strs):
     blobs, hdr_cols, off = [], [], 0
@@ -399,7 +418,7 @@ print('comps', len(crow))
 last_sale = int(max(sd1.max(), 0))
 meta = {'ver': ver, 'county': 'broward', 'ownerKind': 'owner_kind.py (Python twin of app orgName)', 'total': int(n), 'built': dt.datetime.now().strftime('%m/%d/%Y'), 'rollYear': int(pd.to_numeric(df.ASMNT_YR, errors='coerce').max()), 'salesThrough': (DAY0 + dt.timedelta(days=last_sale)).strftime('%m/%Y'),
         'geoOrigin': list(GEO0), 'stats': stats, 'packs': packs, 'distress': None, 'owners': owner_stats, 'vacancy': {'ge40': int((vscore >= 40).sum()), 'ge60': int((vscore >= 60).sum())}, 'permitCov': None, 'ownersFile': 'owners.json.gz', 'distressFile': None,
-        'flood': fstats, 'absentee': absentee_stats, 'auctions': auc_stats, 'permits': perm_stats, 'fcNotices': fpn_stats,
+        'flood': fstats, 'absentee': absentee_stats, 'auctions': auc_stats, 'permits': perm_stats, 'fcNotices': fpn_stats, 'lisPendens': blp_stats,
         'enrich': {'zoning_by_jur': cnt_z, 'zoning_city_or_bmsd': int((zsrc == 1).sum()), 'land_use_plan_only': int((zsrc == 2).sum()), 'no_layer': int((zsrc == 0).sum()), 'bld_green': int((bld == 1).sum()), 'bld_yellow': int((bld == 2).sum()), 'bld_red': int((bld == 3).sum()),
                    'vacant': int(vacant.sum()), 'teardown': int(tear.sum()), 'dup_zoning': int(dup.sum())},
         'screening': 'Buildability is a screening tool built from public map layers (city zoning where published, the county land use plan, FEMA flood) and the property roll. It is not a determination - confirm with the city / Broward County planning department.',

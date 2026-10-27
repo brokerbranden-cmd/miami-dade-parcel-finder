@@ -46,6 +46,20 @@ with sync_playwright() as pw:
             pg.keyboard.press('Escape'); pg.wait_for_timeout(400); sheet()
         if k == 'code_open': check(got[k] <= got['code'], f"open code cases {got[k]} <= code cases {got['code']}")
         pg.click('#clrMr'); pg.wait_for_timeout(900); check(cnt(pg) == n0, f'clear after {k} restores {n0}')
+    # recorded lis pendens (AcclaimWeb exports, sigm bit 4): own chip, also counts as the distress LP signal, drawer shows the case + match confidence
+    lm = meta.get('lisPendens') or {}
+    if lm.get('lp_docs'):
+        check(lm.get('matched', 0) == lm.get('matched_high', 0) + lm.get('matched_medium', 0) and lm['matched'] + lm.get('unmatched', 0) == lm['lp_docs'], f"meta.lisPendens adds up: {lm.get('lp_docs')} docs = {lm.get('matched')} matched + {lm.get('unmatched')} unmatched")
+        exp = pg.evaluate(PACKCOUNT, 4)
+        check('sig:lp_rec' in chips and 0 < exp <= lm['matched'], f'chip sig:lp_rec present; {exp} parcels carry bit 4 (<= {lm["matched"]} matched docs)')
+        pg.click('#mrSig .chip[data-mr="sig:lp_rec"]'); pg.wait_for_timeout(1200); k4 = cnt(pg); sm = pg.evaluate(SAMPLE, 4)
+        check(0 < k4 <= exp and sm['all'] and pg.eval_on_selector_all('#cards .card', 'n=>n.length>0 && n.every(c=>/Lis pendens \\(recorded\\)/.test(c.innerText))'), f'filter lp_rec: {k4} parcels, every card says "Lis pendens (recorded)"')
+        shut(); pg.click('#cards .card h3'); pg.wait_for_selector('.drawer', timeout=30000); pg.wait_for_timeout(800)
+        t = pg.evaluate("document.querySelector('.drawer').textContent")
+        check('Lis pendens recorded' in t and re.search(r'(CACE|COCE|CONO|COSO|COWE|CACV)-\d{2}-\d{6}', t) is not None and re.search(r'match (high|medium)', t) is not None, 'drawer shows the recorded lis pendens with case number and match confidence')
+        pg.keyboard.press('Escape'); pg.wait_for_timeout(400); sheet(); pg.click('#clrMr'); pg.wait_for_timeout(900)
+        sc = pg.evaluate("""()=>{ let n=0,bad=0; for(const p of PF.PACKS){ if(!p||!p.c.dsig) continue; for(let i=0;i<p.n;i++) if(p.c.sigm[i]&4){ n++; if(!(p.c.dsig[i]&2)) bad++; } } return {n,bad}; }""")
+        check(sc['bad'] == 0, f"every recorded-LP parcel carries the distress LP bit ({sc['n']} checked)")
     # AND with city: code cases in Pembroke Pines only
     pg.goto(URL + '?county=broward#msig=code'); pg.wait_for_selector('#cards .card', timeout=180000); pg.wait_for_timeout(2000); sheet()
     check(pg.eval_on_selector_all('#mrSig .chip.on', 'n=>n.map(x=>x.dataset.mr)') == ['sig:code'], 'code filter restored from the URL')

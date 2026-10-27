@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
-<link rel="preload" href="data/meta.json" as="fetch" crossorigin>
+<script>/* preload the active county's meta.json only (counties never share data) */(function(){try{var q=new URLSearchParams(location.search),c=q.get('county')||localStorage.getItem('pf.county')||'miami-dade',d={'miami-dade':'data/','broward':'data/broward/','monroe':'data/monroe/'}[c];if(c==='pr')d='data/pr/'+(q.get('muni')||localStorage.getItem('pf.pr.muni')||'san-juan').replace(/[^a-z0-9-]/g,'')+'/';if(d){var l=document.createElement('link');l.rel='preload';l.as='fetch';l.crossOrigin='anonymous';l.href=d+'meta.json';document.head.appendChild(l);}}catch(e){}})();</script>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="ui.css">
 <link rel="manifest" href="manifest.webmanifest">

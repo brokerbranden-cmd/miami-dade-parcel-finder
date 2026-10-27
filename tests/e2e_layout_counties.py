@@ -12,7 +12,7 @@ def check(ok, msg): print(('ok   ' if ok else 'FAIL ') + msg); ok or fails.appen
 FIRST = "(()=>{ const c=document.querySelector('#cards .card'); if(!c) return null; const r=c.getBoundingClientRect(); return {top:Math.round(r.top), bottom:Math.round(r.bottom), vh:Math.min(innerHeight, VPH), sw:document.documentElement.scrollWidth}; })()"
 with sync_playwright() as pw:
     b = pw.chromium.launch(args=['--js-flags=--max-old-space-size=1024'])
-    for c in ('miami-dade', 'monroe', 'broward'):
+    for c in ('miami-dade', 'monroe', 'broward', 'pr'):
         vp = {'width': 390, 'height': 844} if MOB else {'width': 1280, 'height': 800}
         ctx = b.new_context(viewport=vp, service_workers='block', is_mobile=MOB, has_touch=MOB); pg = ctx.new_page(); pg.set_default_timeout(240000)
         pg.on('pageerror', lambda e: errs.append(str(e)))

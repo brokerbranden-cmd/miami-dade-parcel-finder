@@ -5,6 +5,7 @@ import json, os, sys, time, urllib.request, urllib.parse
 B = "https://sigejp.pr.gov/server/rest/services"
 L = {
  "parcels": (B + "/crim/crim_feb_2025/MapServer/0", "OBJECTID,NUM_CATASTRO,INSIDE_X,INSIDE_Y,TIPO,Shape.STArea()", 2000),
+ "polys": (B + "/crim/crim_feb_2025/MapServer/0", "OBJECTID,NUM_CATASTRO,TIPO", 1000),   # parcel outlines (waterfront / assemblages)
  "zoning": (B + "/calificacion/cali_vige/MapServer/0", "OBJECTID,num_catast,cali,descrip,clasi,municipio,barrio,cuerdas,cali_2021,id_playa,id_riesgo,id_hist,id_agric,id_res_nat", 500),
 }
 def get(u, p):
@@ -30,10 +31,10 @@ def main():
     while lo <= mx:
         hi = lo + n - 1; fn = f"{out}/{kind}_{lo:09d}.jsonl"
         if not os.path.exists(fn):
-            d = get(url + "/query", {"where": f"OBJECTID>={lo} AND OBJECTID<={hi}", "outFields": fields, "returnGeometry": "false", "f": "json"})
+            d = get(url + "/query", {"where": f"OBJECTID>={lo} AND OBJECTID<={hi}", "outFields": fields, "f": "json", **({"returnGeometry": "true", "outSR": "4326", "geometryPrecision": "6", "maxAllowableOffset": "0.000005"} if kind == "polys" else {"returnGeometry": "false"})})
             if d.get("exceededTransferLimit"): raise SystemExit("page truncated at %d - lower the page size" % lo)
             with open(fn + ".tmp", "w") as f:
-                for ft in d.get("features", []): f.write(json.dumps(ft["attributes"]) + "\n")
+                for ft in d.get("features", []): f.write(json.dumps(dict(ft["attributes"], **({"rings": (ft.get("geometry") or {}).get("rings")} if kind == "polys" else {}))) + "\n")
             os.rename(fn + ".tmp", fn)
             print(kind, lo, len(d.get("features", [])), flush=True)
         lo = hi + 1

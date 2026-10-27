@@ -105,3 +105,13 @@ Miami-Dade sources in the weekly run: `permits` (City of Miami + County Building
 Broward probe details: `BROWARD_PROBE.md` (2026-10-22). Broward permits / code cases join to parcels by the 12-character BCPA folio (EnerGov `MainParcel`, FTL `PARCELID`); scoring and filters in `scripts/counties/broward/broward_permit_lib.py` + `build_broward.py`.
 
 Broward auctions (`broward_auctions`, weekly since 2026-10-22): `fetch_auctions_fl.py broward https://broward.realforeclose.com https://broward.realtaxdeed.com`. Checked 2026-10-22: both sites return 403 to plain curl and to a bare `Mozilla/5.0` User-Agent but 200 to the full browser User-Agent the script sends; `www.broward.realtaxdeed.com` fails with an SSL hostname mismatch, so the hosts are used without `www.` (tax-deed sales had been silently missing).
+
+## Puerto Rico (4th county, one data folder per municipio: data/pr/<municipio>/)
+Built by `scripts/counties/pr/` (fetch_pr_layers.py parcels|zoning|polys, fetch_pr_flood.py, fetch_pr_water.py, then build_pr.py).
+- Available: CRIM parcel map (feb 2025, every parcel + catastro number + lot size), Junta de Planificacion zoning (calificacion vigente,
+  with RC-2023-E minimum lot / density where the district is in the Reglamento Conjunto), buildability screen, FEMA NFHL flood zone,
+  waterfront (CRIM outlines vs OSM coastline / lakes / rivers + CRIM water parcels + Junta beach overlay), assemblages (adjoining lots
+  under the district minimum, same district), exports (Florida columns unchanged, PR columns last), skip trace, saved lists (per municipio).
+- Not public in PR (greyed in the "Puerto Rico data coverage" panel): owner / mailing / assessed values (CRIM, token-gated; bulk
+  request drafted), sales and comps (Registro, paid), lis pendens / foreclosure and judicial sales (Rama Judicial per case, edictos),
+  tax certificates (no such system), code violations (per municipio), probate / deaths, permits (JP layer token-gated), utility shut-offs.

@@ -270,7 +270,7 @@ const cpCom=lu=>lu>=1000&&lu<5000, CP_FAM=c=>{ const d=Math.floor(c/100); return
 const cpMiles=(la1,lo1,la2,lo2)=>{ const dy=(la2-la1)*69.05, dx=(lo2-lo1)*69.05*Math.cos(la1*Math.PI/180); return Math.sqrt(dx*dx+dy*dy); };
 const quant=(a,q)=>{ const x=(a.length-1)*q, b=Math.floor(x); return a[b]+(a[Math.min(b+1,a.length-1)]-a[b])*(x-b); };
 function compsOf(p,i){
-  if(!CP||!p.geo) return null; const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!isFinite(la)||la<20) return null;
+  if(!CP||!p.geo) return null; const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!isFinite(la)||la<10) return null;
   const c=p.c, lu=LU_CODE?LU_CODE[c.landuse[i]]:parseInt(D.landuse[c.landuse[i]],10), sf=c.sqft[i], lot=c.lot[i], useB=sf>0, size=useB?sf:lot; if(!(size>0)||!(lu>0)) return null;
   const com=cpCom(lu), fam=com?CP_FAM(lu):'', STEPS=com?CP_STEPS_C:CP_STEPS, G=com?8:3;
   const me=getStr(p,'folio',i), cn=p.cn?p.cn[i]:0, la5=la*1e5, lo5=lo*1e5, cx=Math.floor(la5/1000), cy=Math.floor(lo5/1000), cand=[];
@@ -310,18 +310,19 @@ function asmIndexPack(p){ if(!p||!ASM||p.asmG) return; const f=strCol(p,'folio')
 const asmOf=(p,i)=>ASM&&p.asmG&&p.asmG[i]>=0?ASM.groups[p.asmG[i]]:null;
 async function ensureAsm(){ if(!HAS('asm')){ S.asm=false; return; } if(!S.asm||ASM) return; $('asmSrc').textContent='Loading assemblage groups…'; try{ await loadAsm(); }catch(e){ toast('Assemblage data did not load: '+e.message); S.asm=false; } renderAsmSrc(); }
 function renderAsmSrc(){ if(ASM) $('asmSrc').textContent=`${fmt.format(ASM.meta.groups)} groups (${fmt.format(ASM.meta.members)} parcels), ${fmt.format(ASM.meta.upside)} with a combined-site upside. Built ${ASM.meta.built}.`; }
+const asmOwn=g=>PFC.id==='pr'?'owners not public (CRIM)':g.owners+' owners';
 function asmMotText(b){ return ASM.mot.filter(([m])=>(b&m)&&!(m===2&&(b&1))).map(x=>x[1]); }
 function asmMix(g){ const sb=new Array(g.owners).fill(0), cnt={}; for(const [,b,sl] of g.mem) sb[sl]|=b; let rec=0; sb.forEach(b=>{ asmMotText(b).forEach(t=>cnt[t]=(cnt[t]||0)+1); if(b&256) rec++; });
   const ord=Object.fromEntries(ASM.mot.map((m,x)=>[m[1],x])); const out=Object.entries(cnt).sort((x,y)=>y[1]-x[1]||ord[x[0]]-ord[y[0]]); if(rec) out.push(['recent buyer',rec]); return out; }
 function asmReason(g){ const n=g.mem.length, fi=v=>fmt.format(Math.round(v));
   const where=g.streets.length===1?`${n} lots side by side on ${g.streets[0]}`:g.streets.length>1?`${n} adjoining lots on ${g.streets.join(' & ')}`:`${n} adjoining lots`;
-  const parts=[`${g.owners} owners, ${where} (${g.zone}, ${fi(g.lot)} sf combined).`];
+  const parts=[`${asmOwn(g)}, ${where} (${g.zone}, ${fi(g.lot)} sf combined).`];
   if(g.unlock) parts.push(`${g.below} of the lots ${g.below===1?'is':'are'} under the ${fi(g.minSize)} sf zone minimum on ${g.below===1?'its':'their'} own; together they clear it.`);
   if(!g.meets) parts.push(`Even combined, the site is under the ${fi(g.minSize)} sf zone minimum.`);
   else if(g.units!=null) parts.push(g.gain>0?`Combined site allows ${fi(g.units)} units vs ${fi(g.partsB)} building the lots separately (+${fi(g.gain)}).`:`Combined site allows ${fi(g.units)} units, the same as separately: the play is one larger site.`);
   else if(g.sqft!=null) parts.push(`Combined site allows ~${fi(g.sqft)} sf buildable${g.sqftGain>=2500?` (+${fi(g.sqftGain)} vs separately)`:''}.`);
-  parts.push('Owners: '+asmMix(g).map(x=>x[1]+' '+x[0]).join(', ')+'.'); return parts.join(' '); }
-function asmBadge(p,i){ const g=asmOf(p,i); return g?`<button type="button" class="asmb" data-asmshow="${g.id}" title="${esc(asmReason(g))}">Assemblage #${g.id} · ${g.mem.length} lots · ${g.owners} owners · score ${g.score}${g.upside?' · upside':''}</button>`:''; }
+  if(PFC.id==='pr') parts.push('Reasons: '+asmMix(g).map(x=>x[1]+' '+x[0]).join(', ')+'. Owner names are not public in Puerto Rico (CRIM); confirm each lot before contacting.'); else parts.push('Owners: '+asmMix(g).map(x=>x[1]+' '+x[0]).join(', ')+'.'); return parts.join(' '); }
+function asmBadge(p,i){ const g=asmOf(p,i); return g?`<button type="button" class="asmb" data-asmshow="${g.id}" title="${esc(asmReason(g))}">Assemblage #${g.id} · ${g.mem.length} lots · ${asmOwn(g)} · score ${g.score}${g.upside?' · upside':''}</button>`:''; }
 function asmHTML(p,i){ const g=asmOf(p,i); if(!g) return '';
   const ids=folioIds(g.mem.map(m=>m[0]));
   const li=g.mem.map(([f,b])=>{ const id=ids.get(f); const a=id!=null?getStr(P(id),'addr',I(id))||'No street address':f; return `<li>${id!=null?`<button type="button" class="lnk" data-asmone="${id}">${esc(a)}</button>`:esc(a)} <small>${esc(asmMotText(b).join(', '))}</small></li>`; }).join('');
@@ -841,9 +842,9 @@ function cardHTML(id){
     ${HAS('mscreen')?`<div class="line"><span class="k">Zoning</span><span class="v">${MZ[c.mz[i]]?mzHTML(c.mz[i]):esc(nice(zn)||'Not listed')}</span></div>`:''}
     <div class="line uline"><span class="k">Use</span><span class="v" title="${esc(lu)}">${esc(luNice(lu))}</span></div>
     <div class="line"><span class="k">Sold</span><span class="v">${sale}</span></div>
-    <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])}</span></div>
+    <div class="line"><span class="k">Owner</span><span class="v">${esc(getStr(p,'owner',i).split(' | ')[0])||(PFC.id==='pr'?'<span class="note">Not public in PR (CRIM)</span>':'')}</span></div>
     ${HAS('mscreen')?mrCardLine(c,i):''}${HAS('mtax')?mtCardLine(c,i):''}${upLine(p,i)}
-    ${compsLine(id)}${cmLine(folio)}${auLine(folio)}${PFEQ.line(folio)}${outLine(folio)}${folderLine(folio)}${SKU.noteSite(folio,getStr(p,'addr',i),D.city[c.city[i]])}${SKU.cardLine(folio)}
+    ${HAS('comps')?compsLine(id):''}${cmLine(folio)}${auLine(folio)}${PFEQ.line(folio)}${outLine(folio)}${folderLine(folio)}${SKU.noteSite(folio,getStr(p,'addr',i),D.city[c.city[i]])}${SKU.cardLine(folio)}
     <div class="sendline">${sendBtns(folio)}${sentBadges(folio)}${p.ap&&p.ap[i]?'<span class="hot apb" title="Adverse possession claim noted in the Property Appraiser legal description">Adverse possession</span>':''}</div>
     <div class="ob">${dueBadge(folio)}${clerkBadges(folio)}${PFEQ.badge(folio)}${cmBadges(folio)}${c.og[i]&&OWN?`<span class="pf" title="Same owner (name or mailing address) across the county">Owner has ${fmt.format(OWN.n[c.og[i]])}${OWN.nd[c.og[i]]?' · '+fmt.format(OWN.nd[c.og[i]])+' distressed':''}</span>`:''}${asmBadge(p,i)}${vacBadge(c,i)}${sigBadges(c.dsig[i])}${ownerBadges(c.flags[i]&~(c.dsig[i]&1024?64:0))}</div>
   </article>`;
@@ -1218,7 +1219,7 @@ async function openOwner(g,backId){
     const dark=matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme!=='light';
     OGMAP=L.map('ogMap',{zoomControl:true,attributionControl:true,preferCanvas:true});
     L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${dark?'Dark':'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,{maxZoom:20,maxNativeZoom:16,attribution:'Esri'}).addTo(OGMAP);
-    const pts=[]; for(const id of ids.slice(0,5000)){ const p=P(id), g2=p.geo, i=I(id); if(!g2||!(g2.lat[i]>20)) continue; const ll=[g2.lat[i],g2.lon[i]]; pts.push(ll);
+    const pts=[]; for(const id of ids.slice(0,5000)){ const p=P(id), g2=p.geo, i=I(id); if(!g2||!(g2.lat[i]>10)) continue; const ll=[g2.lat[i],g2.lon[i]]; pts.push(ll);
       L.circleMarker(ll,{radius:5,weight:1,color:'#0C0E10',fillColor:SC_RGB[scIdx(p.c.dscore[i])].css,fillOpacity:.9}).bindTooltip(esc(getStr(p,'addr',i)||'No street address')).on('click',()=>openDrawer(id,{backOwner:g})).addTo(OGMAP); }
     if(pts.length) OGMAP.fitBounds(pts,{padding:[18,18],maxZoom:16}); else OGMAP.setView(PFC.cfg.center,10);
   }catch(e){ const m=$('ogMap'); if(m) m.textContent='The map did not load.'; }
@@ -1237,10 +1238,10 @@ function savedCSV(folio){ const x=SV.get(folio); return x?['Y',csvq(x.status),x.
    (mostly vacant land), use the street of the nearest parcel that has one (geo pack), else a short legal description. */
 let ADDR_GRID=null;
 function addrGrid(){ if(ADDR_GRID) return ADDR_GRID; if(PACKS.some(p=>p&&!p.geo)) return null; const g=new Map();
-  for(const p of PACKS){ if(!p) continue; for(let i=0;i<p.n;i++){ const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!(la>20)) continue; const a=getStr(p,'addr',i); if(!a||!/^\d+[A-Z]?\s+\S/.test(a)) continue;
+  for(const p of PACKS){ if(!p) continue; for(let i=0;i<p.n;i++){ const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!(la>10)) continue; const a=getStr(p,'addr',i); if(!a||!/^\d+[A-Z]?\s+\S/.test(a)) continue;
     const k=Math.floor(la*200)*100000+Math.floor(-lo*200); let b=g.get(k); if(!b) g.set(k,b=[]); b.push(la,lo,p.idx*16777216+i); } }
   return ADDR_GRID=g; }
-function nearStreet(p,i){ const g=addrGrid(); if(!g) return ''; const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!(la>20)) return '';
+function nearStreet(p,i){ const g=addrGrid(); if(!g) return ''; const la=p.geo.lat[i], lo=p.geo.lon[i]; if(!(la>10)) return '';
   const cx=Math.floor(la*200), cy=Math.floor(-lo*200); let best=1e9, id=-1;
   for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){ const b=g.get((cx+dx)*100000+cy+dy); if(!b) continue; for(let k=0;k<b.length;k+=3){ const d=(b[k]-la)**2+((b[k+1]-lo)*0.9)**2; if(d<best){ best=d; id=b[k+2]; } } }
   return id<0?'':getStr(P(id),'addr',I(id)).replace(/^\d+[A-Z]?(-\d+)?\s+/,''); }
@@ -1273,8 +1274,8 @@ const PR_GAPS=[['ok','Parcels and map','CRIM parcel map (Feb 2025), every parcel
  ['na','Lis pendens / foreclosures','Not public in PR in bulk: Rama Judicial has a one-case-at-a-time search only'],['na','Auctions (judicial sales)','Not public in PR in bulk: published as court edictos / newspaper notices'],
  ['na','Tax delinquent / tax certificates','Not public in PR: no tax-certificate system; CRIM debt is per parcel behind a login'],['na','Code violations / unsafe / liens','Not public in PR: kept by each of the 78 municipios, no shared data'],
  ['na','Probate / estates and deaths','Not public in PR: no probate court like Florida; death records are restricted'],['na','Permits','Not public in PR: the Junta permits layer needs a token; OGPe searches one case at a time'],
- ['na','Water / power shut-offs','Not public in PR: AAA and LUMA publish area outage maps only'],['na','Waterfront','Not in this release: needs CRIM water polygons + coastline join (planned)'],
- ['na','Assemblages','Not in this release: needs parcel polygons (planned)'],['na','Flood zone','Not in this release: FEMA / Junta flood layers planned']];
+ ['na','Water / power shut-offs','Not public in PR: AAA and LUMA publish area outage maps only'],['ok','Waterfront / oceanfront','CRIM parcel outlines vs OpenStreetMap coastline, bays, lakes and rivers, plus the Junta beach (playa) overlay'],
+ ['ok','Assemblages','Adjoining CRIM parcels in the same zoning that are under the zone minimum alone (owner check not possible: owner data is not public)'],['ok','FEMA flood zone','FEMA National Flood Hazard Layer for Puerto Rico (zone and base flood elevation)']];
 function prGaps(){ const u=$('prGaps'); if(!u) return; u.innerHTML=PR_GAPS.map(([s,l,n])=>`<li class="${s==='ok'?'prok':'prna'}"${s==='ok'?'':' aria-disabled="true"'}><b>${esc(l)}</b><small>${s==='ok'?'Available':'Not available'} · ${esc(n)}</small></li>`).join(''); }
 const PR_CSV_HEAD=',Municipio,Barrio,Zoning Code,Zoning District,Zoning Overlays,Lot Sq Ft';
 function prCSV(p,i){ const c=p.c, z=MZ[c.mz[i]]; return ','+[csvq(META.municipio||''),csvq(D.city[c.city[i]]||''),csvq(z?z[0]:''),csvq(z?z[2]:''),csvq(p.det?getStr(p,'zinfo',i):''),c.lot[i]||''].join(','); }
@@ -1561,10 +1562,10 @@ function drawDots(layer){
   }
   SN=n; UT_VIS=-1;
   if(MAP_UT&&PFUT.data&&PFUT.hasList()){ const col=getComputedStyle(document.documentElement).getPropertyValue('--t-water').trim()||'#0e7bd6'; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=2.5; ctx.strokeStyle=col; UT_VIS=0;   // 'Utility shut off' layer: ring every result on a shutoff list
-    for(let j=0;j<n;j++){ const id=results[j], p=P(id); if(!p.ut) PFUT.index(p); const i=I(id); if(!p.utd||!p.utd[i]) continue; const g=p.geo; if(!g||!(g.lat[i]>20)) continue; const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; if(x<-10||y<-10||x>W+10||y>H+10) continue; UT_VIS++; ctx.beginPath(); ctx.arc(x,y,z>=14?8:6,0,6.2832); ctx.stroke(); } }
+    for(let j=0;j<n;j++){ const id=results[j], p=P(id); if(!p.ut) PFUT.index(p); const i=I(id); if(!p.utd||!p.utd[i]) continue; const g=p.geo; if(!g||!(g.lat[i]>10)) continue; const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; if(x<-10||y<-10||x>W+10||y>H+10) continue; UT_VIS++; ctx.beginPath(); ctx.arc(x,y,z>=14?8:6,0,6.2832); ctx.stroke(); } }
   if(SV.count()){ const ids=savedIdx(), brand=getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()||'#FC4C02'; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=2.5; ctx.strokeStyle=brand;
-    for(const id of ids.values()){ const p=P(id), g=p&&p.geo, i=I(id); if(!g||!(g.lat[i]>20)) continue; const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; if(x<-10||y<-10||x>W+10||y>H+10) continue; ctx.beginPath(); ctx.arc(x,y,z>=14?9:7,0,6.2832); ctx.stroke(); } }
-  if(MAP_SEL>=0){ const p=P(MAP_SEL), g=p&&p.geo, i=I(MAP_SEL); if(g&&g.lat[i]>20){ const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=3; ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--danger').trim()||'#c00'; ctx.beginPath(); ctx.arc(x,y,11,0,6.2832); ctx.stroke(); } }
+    for(const id of ids.values()){ const p=P(id), g=p&&p.geo, i=I(id); if(!g||!(g.lat[i]>10)) continue; const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; if(x<-10||y<-10||x>W+10||y>H+10) continue; ctx.beginPath(); ctx.arc(x,y,z>=14?9:7,0,6.2832); ctx.stroke(); } }
+  if(MAP_SEL>=0){ const p=P(MAP_SEL), g=p&&p.geo, i=I(MAP_SEL); if(g&&g.lat[i]>10){ const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=3; ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--danger').trim()||'#c00'; ctx.beginPath(); ctx.arc(x,y,11,0,6.2832); ctx.stroke(); } }
   $('mapHint').textContent = (!n ? 'Nothing matches these filters.' : `${fmt.format(n)} on the map${vis<n?' · '+fmt.format(vis)+' in view':''}${nogeo?' · loading points…':''}${MAP_UT&&PFUT.data?'':' · click a dot for details'}`) + (MAP_UT&&PFUT.data ? (PFUT.hasList()?` · ${fmt.format(Math.max(0,UT_VIS))} utility shut off in view`:' · '+PFUT.NOLIST) : '');
 }
 function nearest(pt,rad){
@@ -1611,7 +1612,7 @@ function fitResults(force){
   let key=n, x=0; for(let j=0;j<n;j++){ x=(x+results[j])%2147483647; } key=n+':'+x;
   if(!force && (key===lastFitKey || MAP_NOFIT)){ MAP_NOFIT=false; lastFitKey=key; return; } lastFitKey=key;
   const step=Math.max(1,Math.floor(n/60000)), la=[], lo=[];
-  for(let j=0;j<n;j+=step){ const id=results[j], g=P(id).geo, i=I(id); if(g&&g.lat[i]>20){ la.push(g.lat[i]); lo.push(g.lon[i]); } }
+  for(let j=0;j<n;j+=step){ const id=results[j], g=P(id).geo, i=I(id); if(g&&g.lat[i]>10){ la.push(g.lat[i]); lo.push(g.lon[i]); } }
   if(!la.length) return; la.sort((a,b)=>a-b); lo.sort((a,b)=>a-b);
   const q=a=>a.length>40?[a[Math.floor(a.length*0.005)],a[Math.ceil(a.length*0.995)-1]]:[a[0],a[a.length-1]];
   const [y0,y1]=q(la), [x0,x1]=q(lo);
@@ -1625,7 +1626,7 @@ async function showMap(reset){
   if(PACKS.some(p=>p&&!p.geo)){ $('mapHint').textContent='Loading map points…'; try{ await ensureGeo(); }catch(e){ $('mapHint').textContent='Map points did not load. Try again.'; return; } }
   if(S.view!=='map') return;
   LMAP.invalidateSize({animate:false});
-  if(MAP_FOCUS>=0){ const id=MAP_FOCUS; MAP_FOCUS=-1; const p=P(id), g=p&&p.geo, i=I(id); if(g&&g.lat[i]>20){ lastFitKey=''; LMAP.setView([g.lat[i],g.lon[i]],18,{animate:false}); mapLayer.redraw(); return; } }
+  if(MAP_FOCUS>=0){ const id=MAP_FOCUS; MAP_FOCUS=-1; const p=P(id), g=p&&p.geo, i=I(id); if(g&&g.lat[i]>10){ lastFitKey=''; LMAP.setView([g.lat[i],g.lon[i]],18,{animate:false}); mapLayer.redraw(); return; } }
   if(reset && !(S.asm&&S.asmGroup)) fitResults(false);
   mapLayer.redraw(); drawAsmOutlines();
 }
@@ -2030,7 +2031,7 @@ async function boot(){
     $('srcCount').textContent=fmt.format(META.total); if(PFC.id!==PFC.DEFAULT){ $('srcLine').firstChild.nodeValue=`Every property on the ${PFC.cfg.roll}, `; const cl=document.querySelector('label[for="cra"]'); if(cl&&HAS('flood')) cl.textContent='FEMA flood zone'; } PFC.applyLayers(); $('srcDate').textContent=META.salesThrough||META.built;
     $('srcLine').title=`Downloaded from ${PFC.cfg.source} on ${META.built}. Newest recorded sale on the roll: ${META.salesThrough}. ${META.rollYear} values.`;
     $('footData').textContent=PFC.id==='pr'?`Pulled ${META.built}; ${META.municipio}: ${fmt.format(META.total)} CRIM parcels (road and water polygons left out).`:`Pulled ${META.built}; ${fmt.format(META.stats.farmland_removed)} farm parcels and ${fmt.format(META.stats.reference_removed)} reference-only folios left out.`;
-    if(PFC.id==='pr'){ const sl=$('srcLine'); sl.innerHTML=`Every parcel on the CRIM parcel map in <b>${esc(META.municipio)}</b> (owner, address and value data are not public), <b>updated <span id="srcDate">${esc(META.built)}</span></b>. <b id="srcCount">${fmt.format(META.total)}</b> parcels.`; const mn=$('mrNote'); if(mn) mn.innerHTML='<b>Screening tool, not a determination.</b> Always confirm with the Junta de Planificacion or OGPe.'; prGaps(); }
+    if(PFC.id==='pr'){ const sl=$('srcLine'); sl.innerHTML=`Every parcel on the CRIM parcel map in <b>${esc(META.municipio)}</b> (owner, address and value data are not public), <b>updated <span id="srcDate">${esc(META.built)}</span></b>. <b id="srcCount">${fmt.format(META.total)}</b> parcels.`; const mn=$('mrNote'); if(mn) mn.innerHTML='<b>Screening tool, not a determination.</b> Always confirm with the Junta de Planificacion or OGPe.'; const an=document.querySelector('#asmGrp > .note'); if(an) an.textContent='Adjoining parcels in the same zoning where the lots are under the zone minimum on their own. Owner names are not public in Puerto Rico, so groups are not filtered by owner.'; prGaps(); }
     D.city.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('city').appendChild(o); });
     D.cra.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('cra').appendChild(o); });
     $('vsMin').innerHTML=VS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');

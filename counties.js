@@ -41,10 +41,10 @@
     ,'pr': { id:'pr', name:'Puerto Rico', label:'Puerto Rico', state:'PR', dataDir:'data/pr/san-juan/', storeSuffix:'.pr.san-juan', muni:'san-juan',
       nameOrder:'first-last',
       center:[18.22,-66.45], bounds:[[17.85,-67.95],[18.55,-65.20]],
-      layers: ['mzoning','mscreen','pr'],
+      layers: ['mzoning','mscreen','pr','flood','asm'],
       area:'Puerto Rico',
       planning:{ who:'the Junta de Planificacion (787-723-6200) or OGPe permits office', rateY:'Overlay (coast, hazard, historic) to clear', rateR:'Conservation / preservation or public land' },
-      source:'CRIM parcelario (feb 2025) via Junta de Planificacion GIS, Junta de Planificacion calificacion vigente', roll:'CRIM parcel map (owner and value data are not public)',
+      source:'CRIM parcelario (feb 2025) via Junta de Planificacion GIS, Junta de Planificacion calificacion vigente, FEMA NFHL flood, OpenStreetMap water', roll:'CRIM parcel map (owner and value data are not public)',
       paUrl:f=>`https://catastro.crimpr.net/cdprpc/`, auctionHost:'', searchHint:'Search a catastro number (e.g. 060-000-001-01)' }
     // 'palm-beach': {...}   (add when its packs exist)
   };

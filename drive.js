@@ -12,10 +12,11 @@
     return pref === 'on' || (pref !== 'off' && !HASH0 && matchMedia('(max-width: 600px)').matches); };
 
   /* spatial grid over the main pack (cell ~ 0.002 deg = ~200 m) for fast "what's near here" */
-  const G0LA = 24.4, G0LO = -81.0, CELL = 0.002, GW = 900, GH = 900;
+  const PRX = window.PFCounty && window.PFCounty.id === 'pr';   // Puerto Rico sits south / east of the Florida grid
+  const G0LA = PRX ? 17.8 : 24.4, G0LO = PRX ? -67.95 : -81.0, CELL = 0.002, GW = PRX ? 1400 : 900, GH = 900;
   function buildGrid(p){
     const g = p.geo, n = p.n, cell = new Int32Array(n), cnt = new Uint32Array(GW * GH + 1);
-    for(let i = 0; i < n; i++){ const la = g.lat[i], lo = g.lon[i]; if(!(la > 20)){ cell[i] = -1; continue; }
+    for(let i = 0; i < n; i++){ const la = g.lat[i], lo = g.lon[i]; if(!(la > 10)){ cell[i] = -1; continue; }
       const cx = Math.floor((lo - G0LO) / CELL), cy = Math.floor((la - G0LA) / CELL);
       if(cx < 0 || cy < 0 || cx >= GW || cy >= GH){ cell[i] = -1; continue; } cell[i] = cy * GW + cx; cnt[cell[i] + 1]++; }
     for(let k = 1; k <= GW * GH; k++) cnt[k] += cnt[k - 1];

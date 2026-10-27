@@ -603,7 +603,7 @@ function run(){ const h0=RUN_H; requestAnimationFrame(()=>{ const h=location.has
   results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,wfc,utc,apN,pfN,pbN,asmGroups:asmSeen?asmSeen.size:0};
   if(S.saved){ const ids=savedIdx(), r=[]; for(const x of SV.list()){ const id=ids.get(x.folio); if(id!=null && (!S.svSt.size||S.svSt.has(x.status)) && (!SVF.cur||x.folders.includes(SVF.cur))) r.push(id); } results=Uint32Array.from(r); }
   renderSavedUI();
-  doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderResults(true); RUN_N++;
+  doSort(); renderChips(); renderSummary(); renderAdvCount(st); renderActive(); renderResults(true); RUN_N++;
 }
 let RUN_N=0;
 
@@ -695,10 +695,106 @@ function renderSummary(){
   if(S.asm&&ASM) bits.push(`in <b>${fmt.format(facet.asmGroups||0)}</b> assemblage groups`);
   $('summary').innerHTML=bits.join(' · ');
 }
+/* Active filters bar: one chip per filter in effect (plain-language label + value), × removes just that filter, Clear all resets.
+   Built from readState() so every control that changes the search is covered; groups whose data layer the county lacks (data-need) never show. */
+const AF={list:[]};
+const AF_RULE={exclude_corp_years:'skip companies that bought ≤ # yrs ago',min_land_share:'land ≥ #%',max_year_built:'built ≤ #',min_unit_multiple:'units ≥ #×',min_sqft_multiple:'sq ft ≥ #×',min_story_multiple:'stories ≥ #×',lot_split_factor:'split at #× min lot'};
+const afRange=(a,b,f=v=>fmt.format(v))=>a!=null&&b!=null?(a===b?f(a):f(a)+'–'+f(b)):a!=null?f(a)+'+':b!=null?'up to '+f(b):'';
+const afMoney=v=>money(v).replace(/K$/,'k');
+const afSel=(id,v)=>{ const el=$(id); if(!el) return String(v); const o=[...el.options].find(o=>o.value===String(v)); return o?o.textContent.trim():String(v); };
+const afList=(a,lab)=>{ const x=[...a].map(lab); return x.length>4?x.slice(0,4).join(', ')+' +'+(x.length-4)+' more':x.join(', '); };
+const afNeed=id=>{ const el=$(id), g=el&&el.closest('[data-need]'); return !g||g.dataset.need.split(/\s+/).every(n=>HAS(n)); };
+function afChips(st){
+  const L=[], add=(k,label,rm)=>L.push({k,label,rm});
+  const lab=(a,k)=>{ const x=a.find(y=>y[0]===k); return x?x[1]:String(k); };
+  if(st.q) add('q',(st.qScope==='mail'?'Mailing address':st.qScope==='legal'?'Legal description':'Search')+': “'+st.q+'”',s=>{ s.q=''; });
+  else if(st.qScope&&st.qScope!=='ao') add('qScope','Search box looks in: '+afSel('qScope',st.qScope),s=>{ s.qScope='ao'; });
+  if(st.city) add('city','City: '+afSel('city',st.city),s=>{ s.city=''; });
+  if(st.zips.trim()) add('zips','ZIP: '+st.zips.trim(),s=>{ s.zips=''; });
+  if(st.bbox) add('bbox','Map area you picked',s=>{ s.bbox=null; });
+  if(st.dsig.length) add('dsig','Distress: '+afList(st.dsig,k=>lab(DSIG,k)),s=>{ s.dsig=[]; });
+  if(st.dsMin) add('dsMin','Distress score ≥ '+st.dsMin,s=>{ s.dsMin=0; });
+  if(st.pf) add('pf','Pre-foreclosure (open lis pendens)',s=>{ s.pf=false; });
+  if(st.pb) add('pb','Probate filed: '+(st.pb==='h'?'high match':'high + medium match'),s=>{ s.pb=''; });
+  if(st.cm) add('cm','Commercial distress: '+afSel('cmMin',st.cm),s=>{ s.cm=0; });
+  if(st.cgas) add('cgas','Closed gas station',s=>{ s.cgas=false; });
+  if(st.cent) add('cent','Owner entity: '+afSel('centSel',st.cent),s=>{ s.cent=''; });
+  if(st.pcs.length) add('pcs','Permits & code: '+afList(st.pcs,k=>lab(PCS,k)),s=>{ s.pcs=[]; });
+  if(st.vsig.length) add('vsig','Vacancy: '+afList(st.vsig,k=>lab(VSIG,k)),s=>{ s.vsig=[]; });
+  if(st.vsMin) add('vsMin','Vacancy hint ≥ '+st.vsMin,s=>{ s.vsMin=0; });
+  if(st.vsMine) add('vsMine','Marked “looks vacant / damaged”',s=>{ s.vsMine=false; });
+  if(HAS('mscreen')&&st.mr){ const m=st.mr, g=(k,t,arr,f)=>{ if(m[k]&&m[k].length) add('mr_'+k,t+': '+afList(m[k],f||(x=>lab(arr,x))),s=>{ s.mr={...s.mr,[k]:[]}; }); };
+    g('rate','Buildability',MR_RATE); if(HAS('rogo')){ g('tier','County Tier',MR_TIER); g('rogo','ROGO',MR_ROGO); } g('zt','Zoning type (map)',MR_ZT); g('sig','Show only',MR_SIG); g('avoid','Leave out',MR_AVOID);
+    if(HAS('mtax')){ g('tax','Unpaid taxes',MT_CHIPS); if(m.txmin) add('mr_txmin','Unpaid balance: '+lab(MT_MIN,m.txmin),s=>{ s.mr={...s.mr,txmin:0}; }); } }
+  if(st.types.length) add('types','Property: '+afList(st.types,k=>TYPE_LABEL[k]||k),s=>{ s.types=[]; });
+  if(st.wf) add('wf','Waterfront: '+lab(PFWF.OPTS,st.wf),s=>{ s.wf=''; });
+  if(st.ut) add('ut','Power / water cut: '+lab(PFUT.OPTS,st.ut),s=>{ s.ut=''; });
+  if(afNeed('mzq')){ const t=mzTokens(st.mzq); if(t.length) add('mzq','Zoning: '+afList(t,x=>x),s=>{ s.mzq=''; });
+    if(st.mzSel.length) add('mzSel','Zoning by city: '+afList(st.mzSel,x=>{ const [j,k]=String(x).split('|'); return k+' ('+(j==='Miami-Dade County'?'unincorporated':j)+')'; }),s=>{ s.mzSel=[]; }); }
+  if(afNeed('zones')){ if(st.zones.length) add('zones','Zoning type: '+afList(st.zones,k=>ZONE_LABEL[k]||k),s=>{ s.zones=[]; });
+    if(st.lotz.length) add('lotz','Lot: '+afList(st.lotz,k=>lab(LOTZ,k)),s=>{ s.lotz=[]; }); }
+  if(st.asm) add('asm','Assemblage parcels',s=>{ s.asm=false; s.asmUp=false; s.asmGroup=0; });
+  if(st.asmUp) add('asmUp','Assemblages with combined-site upside',s=>{ s.asmUp=false; });
+  if(st.asmGroup) add('asmGroup',($('asmLabel').textContent||'Assemblage #'+st.asmGroup).replace(/^Only /,''),s=>{ s.asmGroup=0; });
+  if(st.tier!=='any') add('tier',st.tier==='strong'?'Strong teardown':'Teardown',s=>{ s.tier='any'; });
+  if(!rulesDefault()){ const D0=TD.DEFAULT_RULES, ch=RULE_IDS.filter(([,k])=>S.rules[k]!==D0[k]).map(([id,k,mul])=>(AF_RULE[k]||k).replace('#',Math.round(S.rules[k]*mul*100)/100)); if(S.rules.enforce_min_lot!==D0.enforce_min_lot) ch.push(S.rules.enforce_min_lot?'lot under minimum can’t be strong':'lot under minimum can be strong');
+    add('rules','Teardown rules: '+afList(ch,x=>x),s=>{ s.rules={...TD.DEFAULT_RULES}; }); }
+  if(st.owner!=='all') add('owner','Owner: '+lab(OWNER_KINDS,st.owner)+' only',s=>{ s.owner='all'; });
+  if(st.ogf) add('ogf',$('ogLabel').textContent||'One owner’s parcels',s=>{ s.ogf=''; });
+  if(st.ogMin) add('ogMin','Owner holds '+st.ogMin+'+ properties',s=>{ s.ogMin=0; });
+  if(st.ogDist) add('ogDist','Owner has 2+ distressed parcels',s=>{ s.ogDist=false; });
+  if(st.ogInst&&(st.ogMin||st.ogDist)) add('ogInst','Including banks, government & institutions',s=>{ s.ogInst=false; });
+  if(HAS('equity')){ if(st.eqMin) add('eqMin','Est. equity '+st.eqMin+'%+',s=>{ s.eqMin=0; }); if(st.eqFC) add('eqFC','Free & clear (est.)',s=>{ s.eqFC=false; }); }
+  if(st.lotMin!=null||st.lotMax!=null) add('lot','Lot: '+afRange(st.lotMin,st.lotMax)+' sq ft',s=>{ s.lotMin=s.lotMax=null; });
+  if(st.mvMin||st.mvMax) add('mv','Price: '+afRange(st.mvMin||null,st.mvMax||null,afMoney),s=>{ s.mvMin=s.mvMax=null; });
+  if(!st.hideGov) add('hideGov','Government-owned shown',s=>{ s.hideGov=true; });
+  if(afNeed('cnChips')&&st.cons.length) add('cons','Construction: '+afList(st.cons,k=>CN_LABEL[k]||k),s=>{ s.cons=[]; });
+  if(st.ap) add('ap','Adverse possession claim',s=>{ s.ap=false; });
+  if(st.due) add('due','Follow-up due',s=>{ s.due=false; });
+  if(st.stage) add('stage','Stage: '+st.stage,s=>{ s.stage=''; });
+  if(st.send.length) add('send','Tagged for: '+afList(st.send,k=>(teamOf(k)||{}).label||k),s=>{ s.send=[]; });
+  if(st.cont) add('cont','Already contacted',s=>{ s.cont=false; });
+  if(st.hideSent) add('hideSent','Hide already sent',s=>{ s.hideSent=false; });
+  if(st.hasPhone) add('hasPhone','Has phone',s=>{ s.hasPhone=false; });
+  if(st.traced) add('traced',st.traced==='y'?'Skip traced':'Not skip traced yet',s=>{ s.traced=''; });
+  OWNER_ROWS.forEach(([k,l])=>{ const v=st.flags[k]; if(v&&v!=='any') add('fl_'+k,(v==='yes'?'Only: ':'Hide: ')+l,s=>{ s.flags={...s.flags,[k]:'any'}; }); });
+  FX_ROWS.forEach(([k,l])=>{ const v=st.fx[k]; if(fxAvail(k)&&v&&v!=='any') add('fx_'+k,(v==='yes'?'':'Hide: ')+l,s=>{ s.fx={...s.fx,[k]:'any'}; }); });
+  const rg=(k,a,b,t,f,u='')=>{ if(st[a]!=null||st[b]!=null) add(k,t+': '+afRange(st[a],st[b],f)+u,s=>{ s[a]=s[b]=null; }); };
+  rg('hd','hdMin','hdMax','Years since last sale',v=>String(v)); rg('sp','spMin','spMax','Last sale',afMoney);
+  if(st.qualOnly) add('qualOnly','Only real market sales',s=>{ s.qualOnly=false; });
+  rg('yb','ybMin','ybMax','Year built',v=>String(v)); rg('sf','sfMin','sfMax','Living area',undefined,' sq ft');
+  if(st.noBldg) add('noBldg','Land with no building',s=>{ s.noBldg=false; });
+  rg('un','unMin','unMax','Units',undefined);
+  if(st.bdMin!=null) add('bd','Bedrooms ≥ '+st.bdMin,s=>{ s.bdMin=null; });
+  if(st.stMax!=null) add('stx','Stories ≤ '+st.stMax,s=>{ s.stMax=null; });
+  rg('ls','lsMin','lsMax','Land share',v=>v+'%');
+  if(st.cra) add('cra','CRA: '+afSel('cra',st.cra),s=>{ s.cra=''; });
+  if(st.exZ.length) add('exZ','Exact zoning: '+afList(st.exZ,x=>x),s=>{ s.exZ=[]; });
+  if(st.exL.length) add('exL','Exact land use: '+afList(st.exL,x=>luNice(x)||x),s=>{ s.exL=[]; });
+  return L;
+}
+function renderActive(){
+  const bar=$('afBar'); if(!bar) return; const st=readState(), L=S.saved?[]:afChips(st); AF.list=L;
+  if(!L.length){ bar.hidden=true; bar.innerHTML=''; return; }
+  const idea=document.querySelector('#ideas .chip.on'), x='<span class="afx" aria-hidden="true">×</span>';
+  const head=[`<span class="afchip afinfo" data-af="county">County: ${esc(PFC.cfg.name)}</span>`];
+  if(idea) head.push(`<button type="button" class="afchip afpre" data-af="preset" title="Undo this preset">Preset: ${esc(idea.textContent.replace(/^[^\w]+/u,'').trim())}${x}</button>`);
+  const so=SORT_MAP[S.sort]; head.push(S.sort!=='lot_d'?`<button type="button" class="afchip afsort" data-af="sort" title="Back to the default sort">Sort: ${esc(so[1])}${x}</button>`:`<span class="afchip afinfo afsort" data-af="sort">Sort: ${esc(so[1])}</span>`);
+  bar.innerHTML=`<span class="aflab"><b id="afN">${fmt.format(results.length)}</b> match · ${L.length} filter${L.length===1?'':'s'}</span><div class="afrow" role="list">`+head.join('')+L.map((c,i)=>`<button type="button" class="afchip" role="listitem" data-af="${esc(c.k)}" data-afi="${i}" aria-label="Remove filter ${esc(c.label)}">${esc(c.label)}${x}</button>`).join('')+`<button type="button" class="afclear" id="afClear">Clear all</button></div>`;
+  bar.hidden=false;
+}
+function afWire(){ const bar=$('afBar'); if(!bar) return;
+  bar.addEventListener('click',async e=>{ const b=e.target.closest('button'); if(!b) return;
+    if(b.id==='afClear'){ $('resetBtn').click(); return; }
+    const k=b.dataset.af;
+    if(k==='preset'){ applyState({...BLANK(), view:S.view}); clearIdea(); run(); return; }
+    if(k==='sort'){ const st=readState(); st.sort='lot_d'; applyState(st); run(); return; }
+    const c=AF.list[+b.dataset.afi]; if(!c) return; const st=readState(); c.rm(st);
+    applyState(st); clearIdea(); run(); }); }
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.hasPhone?1:0)+(st.traced?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+mrCount()+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.wf?1:0)+(S.ut?1:0)+(S.utd?1:0)+(S.pf?1:0)+(S.eqMin||S.eqFC?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
+  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.hasPhone?1:0)+(st.traced?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+mrCount()+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.wf?1:0)+(S.ut?1:0)+(S.utd?1:0)+(S.pf?1:0)+(S.eqMin||S.eqFC?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1)+FX_ROWS.filter(([k])=>fxAvail(k)&&S.fx[k]&&S.fx[k]!=='any').length;
   let badBox=0; HASH_NUM.forEach(id=>{ const el=$(id), v=el.value.trim(), bad=!!v && parseAmt(v)==null; if(bad) badBox++; if(bad) { el.setAttribute('aria-invalid','true'); el.title='Not a number. Try 500k, 1.2m or 750000'; } else if(el.hasAttribute('aria-invalid')){ el.removeAttribute('aria-invalid'); el.title=''; } });
   const tot=k+main; $('onCount').hidden=!tot; $('resetBtn').disabled=!tot&&!badBox; $('onCount').textContent=tot+(tot===1?' filter on':' filters on');
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
@@ -1863,9 +1959,10 @@ function wire(){
   askRenderHelp(); window.PFAskRun=askRun;
   const askPend=()=>{ let t=''; try{ t=sessionStorage.getItem(ASK_PENDING)||''; sessionStorage.removeItem(ASK_PENDING); }catch(e){} if(t) setTimeout(()=>askRun(t),300); };
   if(window.PF_READY) askPend(); else document.addEventListener('pf:ready',askPend,{once:true});
-  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); requestAnimationFrame(scrollResultsTop); clearIdea(); b.classList.add('on'); });
+  $('ideas').addEventListener('click',async e=>{ const b=e.target.closest('.chip'); if(!b) return; applyState({...IDEAS[+b.dataset.i][1](), view:S.view, bbox:S.bbox}); await ensureAsm(); await ensureCondo(); await ensureOg(); run(); requestAnimationFrame(scrollResultsTop); clearIdea(); b.classList.add('on'); renderActive(); });
   $('toResults').onclick=()=>{ const r=$('results'); const y=r.getBoundingClientRect().top+window.scrollY-($('stickybar').offsetHeight+16); window.scrollTo({top:y,behavior:'smooth'}); };
   if(HAS('mscreen')) mrWire();
+  afWire();
   $('resetBtn').onclick=()=>{ applyState({...BLANK(), view:S.view}); clearIdea(); run(); };
   $('sortSel').addEventListener('change',async()=>{ S.sort=$('sortSel').value; if(S.sort.startsWith('og')) await ensureOg(); doSort(); save(); renderResults(true); });
   $('vCards').onclick=()=>{ S.view='cards'; save(); renderResults(true); };

@@ -554,3 +554,23 @@ input[aria-invalid="true"]{border-color:var(--danger)!important;box-shadow:0 0 0
 .tt.ut{color:#8a4b00;background:#fff1de}.tt.ut1,.tt.ut2{color:#9b1c1c;background:#fde5e5}.tt.ut8{color:#6b5a3a;background:#f3efe6}
 .maptools .mapchk{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none}.maptools .mapchk input{margin:0;accent-color:#0e7bd6}
 .maplegend i.utring{border-color:#0e7bd6}.maplegend .utnone{font-style:italic}
+/* active filters bar (above Cards / Table / Map) */
+.afbar{display:flex;align-items:center;gap:8px 12px;margin-top:12px;padding:9px 12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;background:var(--surface)}
+.afbar[hidden]{display:none}
+.aflab{font-size:12.5px;color:var(--muted);white-space:nowrap;flex:none}.aflab b{color:var(--accent);font-family:var(--f-mono)}
+.afrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.afchip{font:inherit;font-size:13px;line-height:1.2;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--ink);border-radius:999px;padding:4px 6px 4px 11px;cursor:pointer;white-space:nowrap;max-width:100%}
+.afchip:hover{background:var(--accent);color:var(--accent-ink)}
+.afchip .afx{font-size:15px;line-height:1;width:18px;height:18px;display:inline-grid;place-items:center;border-radius:50%;color:var(--accent)}
+.afchip:hover .afx{color:var(--accent-ink)}
+.afchip.afinfo{cursor:default;border-color:var(--line);background:var(--sunk);color:var(--muted);padding-right:11px}
+.afchip.afinfo:hover{background:var(--sunk);color:var(--muted)}
+.afchip.afpre{border-color:var(--amber);background:var(--amber-soft)}.afchip.afpre .afx{color:var(--amber)}
+.afclear{font:inherit;font-size:13px;font-weight:600;color:var(--accent);background:none;border:0;cursor:pointer;padding:4px 6px;white-space:nowrap;text-decoration:underline}
+@media (max-width:700px){
+  .afbar{flex-direction:row;align-items:center;gap:8px;margin-top:8px;padding:6px 8px}
+  .aflab{font-size:12px}
+  .afrow{flex:1 1 auto;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+  .afrow::-webkit-scrollbar{display:none}
+  .afchip{font-size:12.5px;padding:3px 5px 3px 9px;flex:none}
+}

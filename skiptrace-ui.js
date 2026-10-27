@@ -45,12 +45,14 @@
   /* ---------- email owners from your own Outlook (this site never sends mail) ---------- */
   const TPL_KEY = 'pf.emailtpl.v1';
   const TPL_DEF = { mode: 'web', to_addr: 'Branden@prop-hunters.com', my_name: 'Branden', my_phone: '(305) 812-9445', subject: 'Question about {property_address}',
-    body: "Hey {first_name},\n\nMy name is Branden with Prop Hunters. I'm an investor/buyer and wanted to see if you'd consider an offer on {property_address}.\nif you're open to a quick conversation, you can reach me at (305) 812-9445.\n\nThanks,\nBranden" };
+    body: "Hey {first_name}, how are you?\n\nI own a property nearby and was reaching out to owners in the area to see if there's any interest in selling in the near future. I'm here locally in {city} and would love to have a conversation about it if you're open to it. I'd buy as-is.\n\nYou can reach me at (305) 812-9445.\n\nThanks,\nBranden" };
+  /* the previous default (Oct 2026): an unedited saved copy moves to the new default too */
+  const TPL_PREV_BODY = "Hey {first_name},\n\nMy name is Branden with Prop Hunters. I'm an investor/buyer and wanted to see if you'd consider an offer on {property_address}.\nif you're open to a quick conversation, you can reach me at (305) 812-9445.\n\nThanks,\nBranden";
   /* the earlier default body: a saved template that still equals it moves to the new default; edited ones are kept */
   const TPL_OLD_BODY = "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know.";
   // Branden removed this line everywhere: stripped (with its blank line) from any saved template, edited or not
   const OPT_OUT_RE = /(?:\r?\n[ \t]*)*[ \t]*If you[’']d rather not hear from me, just reply and let me know\.[ \t]*(?=\r?\n|$)/g;
-  function tplGet() { let o = {}; try { o = JSON.parse(localStorage.getItem(TPL_KEY) || '{}') || {}; } catch (e) {} const t = { ...TPL_DEF }; if (o.body === TPL_OLD_BODY) delete o.body; if (typeof o.body === 'string') o.body = o.body.replace(OPT_OUT_RE, ''); for (const k in TPL_DEF) if (typeof o[k] === 'string') t[k] = o[k]; if (t.mode !== 'mailto') t.mode = 'web'; return t; }
+  function tplGet() { let o = {}; try { o = JSON.parse(localStorage.getItem(TPL_KEY) || '{}') || {}; } catch (e) {} const t = { ...TPL_DEF }; if (o.body === TPL_OLD_BODY || o.body === TPL_PREV_BODY) delete o.body; if (typeof o.body === 'string') o.body = o.body.replace(OPT_OUT_RE, ''); for (const k in TPL_DEF) if (typeof o[k] === 'string') t[k] = o[k]; if (t.mode !== 'mailto') t.mode = 'web'; return t; }
   function tplSet(t) { try { localStorage.setItem(TPL_KEY, JSON.stringify(t)); return true; } catch (e) { return false; } }
   const titleCase = s => String(s || '').toLowerCase().replace(/(^|[\s\-'\/(])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Llc|Inc|Lp|Llp|Pa|Pllc|Ltd|Ii|Iii|Iv)\b/g, w => w.toUpperCase()).replace(/\bMc([a-z])/g, (m, a) => 'Mc' + a.toUpperCase());
   const addrCase = s => titleCase(s).replace(/\b(Nw|Ne|Sw|Se)\b/g, w => w.toUpperCase());
@@ -68,7 +70,8 @@
   function emailVars(B, id, folio) {
     const t = tplGet(); let info = null; try { if (id != null && id >= 0) info = B.info(id); } catch (e) {}
     const r = ST.get(folio) || {}; const on = ownerNames(info ? info.owner : (r.n || ''), B.order, info && info.gov);
-    return { owner_first: on.first, owner_name: on.name, property_address: addrCase(info ? info.addr : ''), city: titleCase(info ? info.city : ''), my_name: t.my_name, my_phone: t.my_phone };
+    return { owner_first: on.first, owner_name: on.name, property_address: addrCase(info ? info.addr : ''), city: titleCase(info ? info.city : '') || 'South Florida',   // no city: "I'm here locally in South Florida"
+      my_name: t.my_name, my_phone: t.my_phone };
   }
   /* Email owner: one message, To = your own address, BCC = the owner's skip-traced emails (deduped, valid only, max BCC_MAX) */
   const BCC_MAX = 5, EMAIL_RE = /^[^\s@<>(),;:"'\[\]\\]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i;

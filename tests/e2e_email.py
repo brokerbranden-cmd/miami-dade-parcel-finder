@@ -37,14 +37,15 @@ with sync_playwright() as pw:
     def pick(pattern, n=300):
         rows = pg.evaluate(f'PF.sample({n})')['rows']; rx = re.compile(pattern)
         return [r for r in rows if rx.match(r['owner'].strip()) and r['addr'].strip()]
-    def check_url(u, to, first, addr, tag):
+    def check_url(u, to, first, addr, tag, city=None):
+        city = tc(city) if city else 'South Florida'
         ok(u.startswith(DEEP), f'{tag}: opens the Outlook on the web compose deeplink ({u[:60]})')
         qs = u.split('?', 1)[1]; ok(' ' not in u and '\n' not in u and '%40' in qs and '%20' in qs, f'{tag}: to/subject/body are URL-encoded')
         q = parse_qs(urlsplit(u).query); g = lambda k: (q.get(k) or [''])[0]
         ok(g('to') == to, f'{tag}: to={g("to")}')
         ok(g('subject') == f'Question about {addr}', f'{tag}: subject "{g("subject")}" (expected "Question about {addr}")')
         body = g('body'); ok(body.startswith(f'Hey {first},'), f'{tag}: body greets "{body[:30]}" (expected Hey {first},)')
-        exp = f"Hey {first},\n\nMy name is Branden with Prop Hunters. I'm an investor/buyer and wanted to see if you'd consider an offer on {addr}.\nif you're open to a quick conversation, you can reach me at (305) 812-9445.\n\nThanks,\nBranden"
+        exp = f"Hey {first}, how are you?\n\nI own a property nearby and was reaching out to owners in the area to see if there's any interest in selling in the near future. I'm here locally in {city} and would love to have a conversation about it if you're open to it. I'd buy as-is.\n\nYou can reach me at (305) 812-9445.\n\nThanks,\nBranden"
         ok(body == exp, f'{tag}: body is exactly Branden\'s template with first name + title-cased address filled' + ('' if body == exp else f' GOT {body!r}'))
         ok('{' not in body and 'http' not in body.lower() and '<' not in body, f'{tag}: plain text, no leftover placeholders or links')
 
@@ -62,7 +63,7 @@ with sync_playwright() as pw:
     n0 = opened(); pg.click(btn); pg.wait_for_timeout(800)
     ok(opened() == n0 + 1, 'card: Email opens one compose window'); ok(not pg.query_selector('.drawer.open, #drawer.open') or True, 'card click did not need the drawer')
     fa = tc(A['owner'].split()[0]); ad = ac(A['addr'].strip())
-    check_url(last(), 'owner.a@example.com', fa, ad, 'Miami-Dade first-last')
+    check_url(last(), 'owner.a@example.com', fa, ad, 'Miami-Dade first-last', A.get('city'))
     sent = json.loads(pg.evaluate(f"localStorage.getItem({json.dumps(sendkey('miami-dade'))})") or '{}').get('sent', {})
     em = (sent.get(A['folio']) or {}).get('em') or {}
     ok(em.get('addr') == 'owner.a@example.com' and re.match(r'\d{4}-\d\d-\d\d$', em.get('d', '')), f'marked contacted by email with date + address: {em}')
@@ -77,7 +78,7 @@ with sync_playwright() as pw:
     aid = pg.get_attribute(f'.card[data-folio="{A["folio"]}"]', 'data-id'); pg.evaluate(f"PF.openDrawer({aid})"); pg.wait_for_selector('.stdraw [data-stemail="alt.a@example.com"]', timeout=60000)
     n2 = opened(); pg.click('.stdraw [data-stemail="alt.a@example.com"]'); pg.wait_for_timeout(600)
     ok(opened() == n2 + 1 and not pg.query_selector('#stEmAgain'), 'drawer: second address opens without a repeat warning')
-    check_url(last(), 'alt.a@example.com', fa, ad, 'drawer')
+    check_url(last(), 'alt.a@example.com', fa, ad, 'drawer', A.get('city'))
     ok(pg.query_selector('#drawerHost .emb') is not None, 'drawer shows the Emailed badge')
     pg.keyboard.press('Escape'); pg.wait_for_timeout(500)
     # filters: Already contacted / Hide already sent
@@ -86,12 +87,12 @@ with sync_playwright() as pw:
     # LLC owner -> "there"
     go(f'q={C["folio"]}&hg=0'); pg.wait_for_selector(f'.card[data-folio="{C["folio"]}"] [data-stemail]', timeout=60000)
     pg.click(f'.card[data-folio="{C["folio"]}"] [data-stemail]'); pg.wait_for_timeout(500)
-    ok((parse_qs(urlsplit(last()).query).get('body') or [''])[0].startswith('Hey there,'), f'LLC owner ({C["owner"]}) falls back to "Hey there,"')
+    ok((parse_qs(urlsplit(last()).query).get('body') or [''])[0].startswith('Hey there,'), f'LLC owner ({C["owner"]}) falls back to "Hey there,"'); ok((parse_qs(urlsplit(last()).query).get('body') or [''])[0].startswith('Hey there, how are you?'), 'no first name -> "Hey there, how are you?"')
     # Saved list: Email works there and logs an outreach activity
     pg.evaluate(f"PF.SV.add({json.dumps(A2['folio'])}, {{addr:{json.dumps(A2['addr'])}, city:{json.dumps(A2['city'])}, zip:{json.dumps(A2['zip'])}, pack:'main'}})")
     go('saved=1&hg=0'); pg.wait_for_selector(f'.card[data-folio="{A2["folio"]}"] [data-stemail]', timeout=60000)
     pg.click(f'.card[data-folio="{A2["folio"]}"] [data-stemail]'); pg.wait_for_timeout(800)
-    check_url(last(), 'owner.b@example.com', tc(A2['owner'].split()[0]), ac(A2['addr'].strip()), 'Saved list')
+    check_url(last(), 'owner.b@example.com', tc(A2['owner'].split()[0]), ac(A2['addr'].strip()), 'Saved list', A2.get('city'))
     it = pg.evaluate(f"PF.SV.get({json.dumps(A2['folio'])})") or {}
     ok(it.get('acts') and it['acts'][0]['type'] == 'email' and 'owner.b@example.com' in it['acts'][0]['note'] and it.get('stage') == 'Contacted', 'Saved: email activity logged, stage Contacted')
     # Email owner: one message, To = Branden, BCC = owner's emails (deduped, invalid skipped, max 5), repeat warning lists the emailed ones
@@ -141,6 +142,9 @@ with sync_playwright() as pw:
     OLD = "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know."
     pg.evaluate(f"localStorage.setItem('pf.emailtpl.v1', JSON.stringify({{mode:'web', my_name:'Branden', my_phone:'(305) 812-9445', subject:'Question about {{property_address}}', body:{json.dumps(OLD)}}}))")
     ok(pg.evaluate("PFSkipUI.tplGet().body").startswith('Hey {first_name},'), 'saved copy of the old default migrates to the new template')
+    PREV = "Hey {first_name},\n\nMy name is Branden with Prop Hunters. I'm an investor/buyer and wanted to see if you'd consider an offer on {property_address}.\nif you're open to a quick conversation, you can reach me at (305) 812-9445.\n\nThanks,\nBranden"
+    pg.evaluate(f"localStorage.setItem('pf.emailtpl.v1', JSON.stringify({{body:{json.dumps(PREV)}}}))")
+    ok(pg.evaluate("PFSkipUI.tplGet().body").startswith('Hey {first_name}, how are you?') and pg.evaluate("PFSkipUI.tplGet().subject") == 'Question about {property_address}', 'saved copy of the previous default migrates; subject stays Question about <street address>')
     pg.evaluate("localStorage.setItem('pf.emailtpl.v1', JSON.stringify({body:'Hello {first_name}, custom'}))")
     ok(pg.evaluate("PFSkipUI.tplGet().body") == 'Hello {first_name}, custom', 'an edited template is kept')
     EDITED = "Hello {first_name},\nCustom line about {property_address}.\n\nIf you'd rather not hear from me, just reply and let me know.\n\nBest,\nB"
@@ -165,7 +169,7 @@ with sync_playwright() as pw:
         W = bp[0]; seed('broward', {W['folio']: {'a': '2026-10-19', 's': 'test', 'n': '', 'p': [], 'e': ['bw.owner@example.com']}})
         go(f'q={W["folio"]}&hg=0'); pg.wait_for_selector(f'.card[data-folio="{W["folio"]}"] [data-stemail]', timeout=60000)
         pg.click(f'.card[data-folio="{W["folio"]}"] [data-stemail]'); pg.wait_for_timeout(800)
-        check_url(last(), 'bw.owner@example.com', tc(W['owner'].split()[1]), ac(W['addr'].strip()), f'Broward last-first ({W["owner"]})')
+        check_url(last(), 'bw.owner@example.com', tc(W['owner'].split()[1]), ac(W['addr'].strip()), f'Broward last-first ({W["owner"]})', W.get('city'))
         ok(pg.query_selector(f'.card[data-folio="{W["folio"]}"] .emb') is not None, 'Broward card shows Emailed')
         md = json.loads(pg.evaluate("localStorage.getItem('pf.send.v1')") or '{}').get('sent', {})
         ok(W['folio'] not in md, 'Broward email tracking is per county')

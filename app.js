@@ -831,7 +831,7 @@ function cardHTML(id){
   return `<article class="card ${sv?'is-saved':''}${id===DEEP_ID?' flash':''}" data-id="${id}" data-folio="${folio}" tabindex="0" aria-label="${esc(addr)}. Open details">
     <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span>${HAS('zoning')?`<span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span>`:''}${floodTag(c,i)}${PFWF.tag(p.wf?p.wf[i]:0)}${p.ut&&p.ut[i]?PFUT.tag(folio):''}${tdTag(p,i)}${HAS('mscreen')?mrBadge(c,i):''}${HAS('mtax')?mtBadge(c,i):''}<span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
     ${sv?`<div class="svline"><span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span>${sv.vacant?'<span class="spill vmine" title="You marked it as looking vacant / damaged">Looks vacant (you)</span>':''}<span class="svd">Saved ${svDate(sv.savedAt)}</span>${sv.note||sv.cond?`<span class="svn" title="${esc([sv.note,sv.cond].filter(Boolean).join(' · '))}">${esc(sv.note||sv.cond)}</span>`:''}</div>`:''}
-    <div><h3>${esc(addr)}</h3><div class="city">${esc(D.city[c.city[i]])}, FL ${D.zip[c.zip[i]]}</div></div>
+    <div><h3>${esc(addr)}</h3><div class="city">${esc(prCity(c.city[i]))}, ${PFC.cfg.state} ${D.zip[c.zip[i]]}</div></div>
     <div class="facts">
       <div><div class="k">Lot</div><div class="v">${!lot?'–':lot>=100000?acres(lot):fmt.format(lot)+' sf'}</div><div class="s">${!lot?'Shared lot':lot>=100000?short(lot)+' sq ft':acres(lot)}</div></div>
       <div><div class="k">Building</div><div class="v">${sf?fmt.format(sf)+' sf':'None'}</div><div class="s">${esc(bldgS)}</div></div>
@@ -1074,7 +1074,7 @@ async function openDrawer(id,opts){
   const p=P(id), i=I(id), c=p.c, folio=getStr(p,'folio',i), addr=getStr(p,'addr',i)||'No street address';
   const city=D.city[c.city[i]], zip=D.zip[c.zip[i]], fl=c.flags[i], mv=c.mkt[i], zn=D.zoning[c.zoning[i]], lu=D.landuse[c.landuse[i]];
   const rows=pairs=>pairs.filter(x=>x[1]!==''&&x[1]!=null).map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join('');
-  const gq=encodeURIComponent(addr+', '+city+', FL '+zip);
+  const gq=encodeURIComponent(addr+', '+city+', '+PFC.cfg.state+' '+zip);
   const owner=[]; OWNER_ROWS.forEach(([k,l])=>{ if(fl&FLAG[k]) owner.push(l); }); if(fl&32) owner.push('Government owner');
   const g=p.geo, la=g?g.lat[i]:NaN, lo=g?g.lon[i]:NaN, hasG=isFinite(la)&&la>20;
   const oname=getStr(p,'owner',i).split(' | ')[0], og=c.og[i];
@@ -1085,7 +1085,7 @@ async function openDrawer(id,opts){
   $('drawerHost').innerHTML=`<div class="scrim" id="scrim"></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="Property details">
     <button class="btn" id="closeD" type="button" style="float:right">Close</button>
     <div class="note" style="font-family:var(--f-mono)">Folio ${folioFmt(folio)}</div>
-    <h2>${esc(addr)}</h2><div class="sub">${esc(city)}, FL ${zip}</div>
+    <h2>${esc(addr)}</h2><div class="sub">${esc(city)}, ${PFC.cfg.state} ${zip}</div>
     <div class="links">
       <a href="${PFC.cfg.paUrl(folio)}" target="_blank" rel="noopener">Property Appraiser page ↗</a>
       <a href="https://www.google.com/maps/search/?api=1&query=${hasG&&!getStr(p,'addr',i)?la.toFixed(6)+','+lo.toFixed(6):gq}" target="_blank" rel="noopener">Google Maps ↗</a>
@@ -1244,7 +1244,7 @@ function nearStreet(p,i){ const g=addrGrid(); if(!g) return ''; const la=p.geo.l
   const cx=Math.floor(la*200), cy=Math.floor(-lo*200); let best=1e9, id=-1;
   for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){ const b=g.get((cx+dx)*100000+cy+dy); if(!b) continue; for(let k=0;k<b.length;k+=3){ const d=(b[k]-la)**2+((b[k+1]-lo)*0.9)**2; if(d<best){ best=d; id=b[k+2]; } } }
   return id<0?'':getStr(P(id),'addr',I(id)).replace(/^\d+[A-Z]?(-\d+)?\s+/,''); }
-const folio13=f=>{ if(PFC.id==='broward') return String(f||'').toUpperCase(); const d=String(f||'').replace(/\D/g,''); if(!d) return ''; if(PFC.id!==PFC.DEFAULT) return d.length===14?d.slice(0,8)+'-'+d.slice(8):d; return folioFmt(d.padStart(13,'0')); };
+const folio13=f=>{ if(PFC.id==='pr') return String(f||'').trim(); if(PFC.id==='broward') return String(f||'').toUpperCase(); const d=String(f||'').replace(/\D/g,''); if(!d) return ''; if(PFC.id!==PFC.DEFAULT) return d.length===14?d.slice(0,8)+'-'+d.slice(8):d; return folioFmt(d.padStart(13,'0')); };
 const EXPSTAT={real:0,near:0,legal:0,use:0};
 function exportAddr(p,i){ const a=getStr(p,'addr',i).trim(); if(a){ EXPSTAT.real++; return a; }
   const use=TYPE_LABEL[LU_T[p.c.landuse[i]]]||'Parcel', st=nearStreet(p,i); if(st){ EXPSTAT.near++; return `No site address – ${use}, near ${st}`; }
@@ -1262,19 +1262,35 @@ function splitMail(s){ s=String(s||'').replace(/\s+/g,' ').trim(); if(!s) return
   return [pt.slice(0,-2).join(', '),city,st,z+(m[3]?'-'+m[3]:'')]; }
 const propZip=z=>{ z=String(z||'').trim(); return /^\d{5}(-\d{4})?$/.test(z)?z:''; };
 // columns: Owner Name, Property Address, Property City, Property State, Property Zip, Property County, Mailing Address, Mailing City, Mailing State, Mailing Zip, Folio
-function contactRow(owner,addr,city,zip,mail,folio){ return [csvq(owner),csvq(addr),csvq(city),'FL',propZip(zip),csvq(PFC.cfg.name),...splitMail(mail).map(csvq),folio].join(','); }
-function exportRow(p,i){ const c=p.c; return contactRow(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; '),exportAddr(p,i),D.city[c.city[i]]||'',D.zip[c.zip[i]]||'',getStr(p,'mail',i),folio13(getStr(p,'folio',i))); }
+function contactRow(owner,addr,city,zip,mail,folio){ return [csvq(owner),csvq(addr),csvq(city),PFC.cfg.state,propZip(zip),csvq(PFC.cfg.name),...splitMail(mail).map(csvq),folio].join(','); }
+function exportRow(p,i){ const c=p.c; return contactRow(getStr(p,'owner',i).split(' | ').filter(Boolean).join('; '),exportAddr(p,i),PFC.id==='pr'?(META.municipio||''):(D.city[c.city[i]]||''),D.zip[c.zip[i]]||'',getStr(p,'mail',i),folio13(getStr(p,'folio',i))); }
+/* Puerto Rico coverage: every feature the Florida counties have, with its PR status. Greyed rows are features PR does not publish (see PR_FEASIBILITY.md). */
+const PR_GAPS=[['ok','Parcels and map','CRIM parcel map (Feb 2025), every parcel with its catastro number and lot size'],['ok','Zoning filters and plain-language zoning','Junta de Planificacion calificacion vigente, with an English gloss of each district'],
+ ['ok','Buildability screen','Zoning type and overlays (coast, hazard, historic, agricultural, natural reserve)'],['ok','Exports and skip trace','Same export columns, PR-only columns appended last'],
+ ['na','Owner name, mailing address, assessed values','Not public in PR: CRIM keeps the roll behind a login / token. A bulk-data request to CRIM is being prepared.'],
+ ['na','Owner portfolio and company-owner exclusion','Not public in PR: needs owner names (CRIM)'],['na','Sales and comps','Not public in PR: no public sales feed (Registro de la Propiedad is paid)'],
+ ['na','Start with an idea (owner / sale based ideas)','Shown greyed in the idea list: they need owner or sale data'],
+ ['na','Lis pendens / foreclosures','Not public in PR in bulk: Rama Judicial has a one-case-at-a-time search only'],['na','Auctions (judicial sales)','Not public in PR in bulk: published as court edictos / newspaper notices'],
+ ['na','Tax delinquent / tax certificates','Not public in PR: no tax-certificate system; CRIM debt is per parcel behind a login'],['na','Code violations / unsafe / liens','Not public in PR: kept by each of the 78 municipios, no shared data'],
+ ['na','Probate / estates and deaths','Not public in PR: no probate court like Florida; death records are restricted'],['na','Permits','Not public in PR: the Junta permits layer needs a token; OGPe searches one case at a time'],
+ ['na','Water / power shut-offs','Not public in PR: AAA and LUMA publish area outage maps only'],['na','Waterfront','Not in this release: needs CRIM water polygons + coastline join (planned)'],
+ ['na','Assemblages','Not in this release: needs parcel polygons (planned)'],['na','Flood zone','Not in this release: FEMA / Junta flood layers planned']];
+function prGaps(){ const u=$('prGaps'); if(!u) return; u.innerHTML=PR_GAPS.map(([s,l,n])=>`<li class="${s==='ok'?'prok':'prna'}"${s==='ok'?'':' aria-disabled="true"'}><b>${esc(l)}</b><small>${s==='ok'?'Available':'Not available'} · ${esc(n)}</small></li>`).join(''); }
+const PR_CSV_HEAD=',Municipio,Barrio,Zoning Code,Zoning District,Zoning Overlays,Lot Sq Ft';
+function prCSV(p,i){ const c=p.c, z=MZ[c.mz[i]]; return ','+[csvq(META.municipio||''),csvq(D.city[c.city[i]]||''),csvq(z?z[0]:''),csvq(z?z[2]:''),csvq(p.det?getStr(p,'zinfo',i):''),c.lot[i]||''].join(','); }
+const prCity=k=>PFC.id==='pr'?((D.city[k]&&D.city[k]!==META.municipio?D.city[k]+', ':'')+(META.municipio||'')):D.city[k];
 const EXP_HEAD='Owner Name,Property Address,Property City,Property State,Property Zip,Property County,Mailing Address,Mailing City,Mailing State,Mailing Zip,Folio\n';
 function buildCSV(ids=results,opts){
   // export = contact list (main export and Send to lists): see EXP_HEAD. Main export (not Send to lists) appends the
   // estimated-equity columns AFTER the fixed contact columns (Miami-Dade only).
   const eqc=!(opts&&opts.team)&&HAS('equity')&&!!PFEQ.data;
-  const utc=!(opts&&opts.team)&&!!PFUT.data;   // power / water cut column: appended last (all counties); Waterfront stays before it
+  const utc=!(opts&&opts.team)&&!!PFUT.data;   // power / water cut column: appended after Waterfront (all counties)
   const wfc=!(opts&&opts.team)&&(!!PFWF.data||utc);   // waterfront column: appended after everything else (all counties)
-  const parts=[(eqc||wfc)?EXP_HEAD.trim()+(eqc?PFEQ.CSV_HEAD:'')+(wfc?PFWF.CSV_HEAD:'')+(utc?PFUT.CSV_HEAD:'')+'\n':EXP_HEAD]; let buf=''; for(const k in EXPSTAT) EXPSTAT[k]=0;
+  const prc=!(opts&&opts.team)&&PFC.id==='pr';   // Puerto Rico-only columns: appended last, after every Florida column
+  const parts=[(eqc||wfc||prc)?EXP_HEAD.trim()+(eqc?PFEQ.CSV_HEAD:'')+(wfc?PFWF.CSV_HEAD:'')+(utc?PFUT.CSV_HEAD:'')+(prc?PR_CSV_HEAD:'')+'\n':EXP_HEAD]; let buf=''; for(const k in EXPSTAT) EXPSTAT[k]=0;
   for(let j=0;j<ids.length;j++){
     const id=ids[j], p=P(id), i=I(id);
-    buf+=exportRow(p,i)+(eqc?PFEQ.csv(getStr(p,'folio',i)):'')+(wfc?PFWF.csv(getStr(p,'folio',i)):'')+(utc?PFUT.csv(getStr(p,'folio',i)):'')+'\n';
+    buf+=exportRow(p,i)+(eqc?PFEQ.csv(getStr(p,'folio',i)):'')+(wfc?PFWF.csv(getStr(p,'folio',i)):'')+(utc?PFUT.csv(getStr(p,'folio',i)):'')+(prc?prCSV(p,i):'')+'\n';
     if(buf.length>1e6){ parts.push(buf); buf=''; }
   }
   parts.push(buf); return new Blob(parts,{type:'text/csv'});
@@ -1412,7 +1428,7 @@ function mrHTML(p,i){ const c=p.c, b=c.bld?c.bld[i]:0; if(!b) return ''; const t
   const jur=MZ[c.mz[i]]?MZ[c.mz[i]][1]:D.city[c.city[i]];
   return `<h3>Buildability screen</h3>
   <div class="mrhead"><span class="mrb ${t} big">${l[1]} · ${l[2]}</span></div>
-  <div class="mrnote"><b>Screening tool, not a determination.</b> Built from public map layers (${PFC.id==='broward'?'city zoning where published, the county land use plan and FEMA flood':'zoning, ROGO / Tier, conservation lands, wetlands, habitat, CBRS, FEMA flood'}) and the property roll. <b>Confirm with ${PFC.cfg.planning.who.replace(/&/g,'&amp;')}</b> before you rely on it.</div>
+  <div class="mrnote"><b>Screening tool, not a determination.</b> Built from public map layers (${PFC.id==='pr'?'the Junta de Planificacion calificacion (zoning) map':PFC.id==='broward'?'city zoning where published, the county land use plan and FEMA flood':'zoning, ROGO / Tier, conservation lands, wetlands, habitat, CBRS, FEMA flood'}) and the property roll. <b>Confirm with ${PFC.cfg.planning.who.replace(/&/g,'&amp;')}</b> before you rely on it.</div>
   <ul class="mrlist">${items.map(([s,x])=>`<li class="mr-${s}"><span class="mri" title="${LAB[s]}">${ICON[s]}</span><span>${esc(x)}</span></li>`).join('')||'<li class="mr-i"><span class="mri">·</span><span>Reasons load with the property details.</span></li>'}</ul>
   <div class="dl">${rows2(HAS('rogo')?[['Tier',c.tier[i]?['','Tier I (Natural Area)','Tier II (Big Pine Key / No Name Key)','Tier III (infill)','Tier III-A (Special Protection Area)','Military'][c.tier[i]]:'City (no county Tier) or not mapped'],['ROGO / allocation',rt?esc(rt):(c.rogo[i]?esc(MR_ROGO.find(x=>x[0]===c.rogo[i])[1]):'No allocation record')],
     ['Environment',MR_ENVL.filter(([bt])=>c.env[i]&bt).map(x=>x[1]).join(', ')],['Zoning notes',esc(zi)],['Planning contact',jur==='Key West'?'<a href="https://www.cityofkeywest-fl.gov/Departments/Planning" target="_blank" rel="noopener">City of Key West Planning</a>':jur==='Marathon'?'<a href="https://www.cityofmarathonfl.gov/planning" target="_blank" rel="noopener">City of Marathon Planning</a>':jur==='Islamorada'?'<a href="https://www.islamorada.fl.us/305/Planning-Development-Services" target="_blank" rel="noopener">Islamorada Planning</a>':'<a href="https://www.monroecounty-fl.gov/186/Planning-Environmental-Resources" target="_blank" rel="noopener">Monroe County Planning &amp; Environmental Resources</a> · <a href="https://www.monroecounty-fl.gov/1024/ROGO-NROGO" target="_blank" rel="noopener">ROGO / NROGO</a>']]:[['Zoning source',esc(zi)],['Planning contact','<a href="https://www.broward.org/Planning/Pages/Default.aspx" target="_blank" rel="noopener">Broward County Planning</a> · city planning / zoning department for '+esc(D.city[c.city[i]]||'this city')]])}</div>`; }
@@ -1929,6 +1945,7 @@ function wire(){
   const ASK_RECENT='pf.ask.recent.v1', ASK_PENDING='pf.ask.pending';
   const ASK_EX={'miami-dade':['Hialeah teardowns under 500k owned 20+ years by individuals','recert overdue in Little Havana','vacant lots over 10,000 sqft','lis pendens in Miami Gardens','properties owned by John Smith'],
     monroe:['vacant lots in Key West','tax delinquent 2+ years','Marathon houses under 900k owned 20+ years','ROGO'],
+    pr:['vacant lots over 10,000 sqft','commercial zoning'],
     broward:['tax delinquent 2+ years in Pembroke Pines','Fort Lauderdale houses under 400k owned 20+ years','foreclosure in Hollywood','vacant lots over 10,000 sqft']}[PFC.id]||[];
   if(ASK_EX[0]) $('askQ').placeholder='Ask: '+ASK_EX[0];   // the static placeholder names a Miami-Dade city
   let ASKP=null;
@@ -2012,7 +2029,8 @@ async function boot(){
     MZ=D.mzone||[null]; MZ_UP=MZ.map(e=>e?String(e[0]).toUpperCase():''); LU_T=D.landuse.map(luType); Z_G=D.zoning.map(zGroup);
     $('srcCount').textContent=fmt.format(META.total); if(PFC.id!==PFC.DEFAULT){ $('srcLine').firstChild.nodeValue=`Every property on the ${PFC.cfg.roll}, `; const cl=document.querySelector('label[for="cra"]'); if(cl&&HAS('flood')) cl.textContent='FEMA flood zone'; } PFC.applyLayers(); $('srcDate').textContent=META.salesThrough||META.built;
     $('srcLine').title=`Downloaded from ${PFC.cfg.source} on ${META.built}. Newest recorded sale on the roll: ${META.salesThrough}. ${META.rollYear} values.`;
-    $('footData').textContent=`Pulled ${META.built}; ${fmt.format(META.stats.farmland_removed)} farm parcels and ${fmt.format(META.stats.reference_removed)} reference-only folios left out.`;
+    $('footData').textContent=PFC.id==='pr'?`Pulled ${META.built}; ${META.municipio}: ${fmt.format(META.total)} CRIM parcels (road and water polygons left out).`:`Pulled ${META.built}; ${fmt.format(META.stats.farmland_removed)} farm parcels and ${fmt.format(META.stats.reference_removed)} reference-only folios left out.`;
+    if(PFC.id==='pr'){ const sl=$('srcLine'); sl.innerHTML=`Every parcel on the CRIM parcel map in <b>${esc(META.municipio)}</b> (owner, address and value data are not public), <b>updated <span id="srcDate">${esc(META.built)}</span></b>. <b id="srcCount">${fmt.format(META.total)}</b> parcels.`; const mn=$('mrNote'); if(mn) mn.innerHTML='<b>Screening tool, not a determination.</b> Always confirm with the Junta de Planificacion or OGPe.'; prGaps(); }
     D.city.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('city').appendChild(o); });
     D.cra.filter(Boolean).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; $('cra').appendChild(o); });
     $('vsMin').innerHTML=VS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');

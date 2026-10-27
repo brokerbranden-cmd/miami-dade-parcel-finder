@@ -36,6 +36,16 @@
       // BCPA record page keyed by the 12-digit folio
       paUrl:f=>`https://bcpa.net/RecInfo.asp?URL_Folio=${String(f).replace(/[^0-9A-Za-z]/g,'').toUpperCase()}`,
       auctionHost:'https://www.broward.realforeclose.com', searchHint:'Search an address, owner name or folio number' }
+    // Puerto Rico: one data folder per municipio (data/pr/<slug>/, list in data/pr/index.json) so a page load is ~5k-100k parcels, not the island's 1.44M.
+    // Public PR data has parcels + zoning only (no owner / value / address: CRIM keeps those behind a token), so most Florida layers are listed as not public (PR_GAPS).
+    ,'pr': { id:'pr', name:'Puerto Rico', label:'Puerto Rico', state:'PR', dataDir:'data/pr/san-juan/', storeSuffix:'.pr.san-juan', muni:'san-juan',
+      nameOrder:'first-last',
+      center:[18.22,-66.45], bounds:[[17.85,-67.95],[18.55,-65.20]],
+      layers: ['mzoning','mscreen','pr'],
+      area:'Puerto Rico',
+      planning:{ who:'the Junta de Planificacion (787-723-6200) or OGPe permits office', rateY:'Overlay (coast, hazard, historic) to clear', rateR:'Conservation / preservation or public land' },
+      source:'CRIM parcelario (feb 2025) via Junta de Planificacion GIS, Junta de Planificacion calificacion vigente', roll:'CRIM parcel map (owner and value data are not public)',
+      paUrl:f=>`https://catastro.crimpr.net/cdprpc/`, auctionHost:'', searchHint:'Search a catastro number (e.g. 060-000-001-01)' }
     // 'palm-beach': {...}   (add when its packs exist)
   };
   const DEF = 'miami-dade';
@@ -45,14 +55,18 @@
   if(!id) id = DEF;
   try{ localStorage.setItem('pf.county', id); }catch(e){}
   const cfg = COUNTIES[id];
+  // Puerto Rico municipio: ?muni=<slug>, else the last one picked (localStorage pf.pr.muni), else San Juan. Each municipio is its own data folder + storage namespace.
+  if(id === 'pr'){ let m = null; try{ m = new URLSearchParams(location.search).get('muni') || localStorage.getItem('pf.pr.muni'); }catch(e){}
+    m = /^[a-z0-9-]{2,40}$/.test(m||'') ? m : 'san-juan'; try{ localStorage.setItem('pf.pr.muni', m); }catch(e){}
+    cfg.muni = m; cfg.dataDir = 'data/pr/' + m + '/'; cfg.storeSuffix = '.pr.' + m; }
   const has = l => cfg.layers.includes(l);
   // per-county storage key: Miami-Dade keeps the original key names
   const key = k => k + cfg.storeSuffix;
   // the URL for a county: keeps ?county= in the address bar (so copied links carry it), drops the hash (filters are county-specific)
-  const urlFor = c => { const u = new URL(location.href); u.hash = ''; u.searchParams.set('county', c); u.searchParams.delete('folio'); return u.toString(); };
+  const urlFor = c => { const u = new URL(location.href); u.hash = ''; u.searchParams.set('county', c); u.searchParams.delete('folio'); if(c !== 'pr') u.searchParams.delete('muni'); else if(c === id) u.searchParams.set('muni', cfg.muni); return u.toString(); };
   function sw(c){ if(!COUNTIES[c] || c === id) return; try{ localStorage.setItem('pf.county', c); }catch(e){} location.assign(urlFor(c)); }
   // make sure the current URL names the county, so "Copy link" / shared links reopen in it
-  try{ const u = new URL(location.href); if(u.searchParams.get('county') !== id){ u.searchParams.set('county', id); history.replaceState(history.state, '', u.toString()); } }catch(e){}
+  try{ const u = new URL(location.href); const wantM = id === 'pr' ? cfg.muni : null; if(u.searchParams.get('county') !== id || (wantM && u.searchParams.get('muni') !== wantM)){ u.searchParams.set('county', id); if(wantM) u.searchParams.set('muni', wantM); history.replaceState(history.state, '', u.toString()); } }catch(e){}
   // hide UI that needs a layer this county lacks (runs on DOMContentLoaded and again by app.js after it builds dynamic UI)
   const NEED = { '.grp.distress':'distress', '.grp.permits':'permits', '.grp.vacancy':'vacancy', '#asmGrp':'asm', '#tdGrp':'teardown',
     '[data-need]':null };
@@ -68,13 +82,23 @@
     const h1 = document.querySelector('header.top h1'); if(h1 && !document.getElementById('countySel')){
       h1.firstChild.nodeValue = cfg.name + ' ';
       const s = document.createElement('select'); s.id = 'countySel'; s.className = 'countysel'; s.setAttribute('aria-label', 'County');
-      s.innerHTML = Object.values(COUNTIES).map(c => `<option value="${c.id}" ${c.id===id?'selected':''}>${c.name} County</option>`).join('');
+      s.innerHTML = Object.values(COUNTIES).map(c => `<option value="${c.id}" ${c.id===id?'selected':''}>${c.label || c.name + ' County'}</option>`).join('');
       s.addEventListener('change', () => sw(s.value));
       h1.parentNode.insertBefore(s, h1.nextSibling);
+      if(id === 'pr') muniPicker(s);
     }
     const q = document.getElementById('q'); if(q) q.placeholder = cfg.searchHint;
     document.title = document.title.replace(/Miami-Dade/, cfg.name);
     applyLayers();
+  }
+  // municipio picker (Puerto Rico only), filled from data/pr/index.json
+  function muniPicker(after){
+    const m = document.createElement('select'); m.id = 'muniSel'; m.className = 'countysel'; m.setAttribute('aria-label', 'Municipio');
+    m.innerHTML = `<option value="${cfg.muni}" selected>${cfg.muni}</option>`; after.parentNode.insertBefore(m, after.nextSibling);
+    m.addEventListener('change', () => { if(m.value === cfg.muni) return; try{ localStorage.setItem('pf.pr.muni', m.value); }catch(e){}
+      const u = new URL(location.href); u.hash = ''; u.searchParams.set('county', 'pr'); u.searchParams.set('muni', m.value); u.searchParams.delete('folio'); location.assign(u.toString()); });
+    fetch('data/pr/index.json').then(r => r.json()).then(ix => { window.PFPRIndex = ix;
+      m.innerHTML = ix.municipios.map(r => `<option value="${r.slug}" ${r.slug===cfg.muni?'selected':''}>${r.name} (${r.n.toLocaleString()})</option>`).join(''); }).catch(() => {});
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', header); else header();
   window.PFCounty = { id, cfg, list: Object.values(COUNTIES), has, key, dp: cfg.dataDir, switchTo: sw, urlFor, applyLayers, DEFAULT: DEF };

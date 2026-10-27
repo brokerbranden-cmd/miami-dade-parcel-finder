@@ -250,3 +250,10 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .phg{font-size:11px;font-weight:700;border-radius:4px;padding:0 5px;margin-left:4px;color:#fff;background:#6b7280}
 .phg.gap{background:#065f46}.phg.ga{background:#0a7a3f}.phg.gb{background:#2563eb}.phg.gc{background:#b45309}.phg.gf{background:#991b1b}
 .stph.gF{opacity:.6}.stres{margin-left:6px;font-size:12px}
+
+/* Puerto Rico coverage list */
+.prgap{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:6px}
+.prgap li{display:flex;flex-direction:column;padding:6px 8px;border:1px solid #e3ddd2;border-radius:8px}
+.prgap li small{font-size:12px;color:#6b6257}
+.prgap li.prna{opacity:.55;background:#f4f1ec}
+.prgap li.prna b{text-decoration:none;color:#6b6257}

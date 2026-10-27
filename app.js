@@ -731,7 +731,7 @@ function cardHTML(id){
   const bldgS = sf? [yb?'Built '+yb:'', un>1?un+' units':bd?bd+' bd / '+(c.baths[i]/10)+' ba':''].filter(Boolean).join(' · ') : 'Land only';
   const sale = c.sd1[i]? `${monYr(c.sd1[i])}${c.sale1[i]>100?' for '+money(c.sale1[i]):''} · owned ${Math.max(0,Math.floor((today-c.sd1[i])/365.25))} yrs` : 'No sale on record';
   const folio=getStr(p,'folio',i), sv=SV.get(folio);
-  return `<article class="card ${sv?'is-saved':''}" data-id="${id}" data-folio="${folio}" tabindex="0" aria-label="${esc(addr)}. Open details">
+  return `<article class="card ${sv?'is-saved':''}${id===DEEP_ID?' flash':''}" data-id="${id}" data-folio="${folio}" tabindex="0" aria-label="${esc(addr)}. Open details">
     <div class="tags"><span class="tt ${TYPE_TONE[t]}">${TYPE_LABEL[t]}</span>${HAS('zoning')?`<span class="tt ${ZONE_TONE[zg]}">Zoned ${ZONE_LABEL[zg].toLowerCase()}</span>`:''}${floodTag(c,i)}${PFWF.tag(p.wf?p.wf[i]:0)}${p.ut&&p.ut[i]?PFUT.tag(folio):''}${tdTag(p,i)}${HAS('mscreen')?mrBadge(c,i):''}${HAS('mtax')?mtBadge(c,i):''}<span class="tr">${c.dscore[i]?scoreBadge(c.dscore[i]):''}${starHTML(id,folio)}</span></div>
     ${sv?`<div class="svline"><span class="spill st-${stKey(sv.status)}">${esc(sv.status)}</span>${sv.vacant?'<span class="spill vmine" title="You marked it as looking vacant / damaged">Looks vacant (you)</span>':''}<span class="svd">Saved ${svDate(sv.savedAt)}</span>${sv.note||sv.cond?`<span class="svn" title="${esc([sv.note,sv.cond].filter(Boolean).join(' · '))}">${esc(sv.note||sv.cond)}</span>`:''}</div>`:''}
     <div><h3>${esc(addr)}</h3><div class="city">${esc(D.city[c.city[i]])}, FL ${D.zip[c.zip[i]]}</div></div>
@@ -1518,12 +1518,13 @@ const BLANK=()=>({hideGov:true,sort:'lot_d',flags:{},owner:'all'});
 /* folio deep links: ?folio=0131130310040 or #folio=01-3113-031-0040 opens that property's card + details */
 function deepFolio(){ const m=/[?&#]folio=([\w\-\s%]+)/i.exec(location.search+location.hash); if(!m) return ''; const d=decodeURIComponent(m[1]).replace(PFC.id==='broward'?/[^0-9A-Za-z]/g:/\D/g,'').toUpperCase(); return d.length>=4?d:''; }
 const folioLink=f=>location.origin+location.pathname+'?folio='+f;
+let DEEP_ID=-1;   /* the deep-linked card keeps its highlight when a late data layer re-renders the list */
 async function openDeep(f){
   const find=()=>{ for(let j=0;j<results.length;j++){ const id=results[j]; if((PFC.id==='broward'?getStr(P(id),'folio',I(id)).toUpperCase()===f:getStr(P(id),'folio',I(id)).replace(/\D/g,'').endsWith(f.length>=13?f:f.padStart(13,'0')))) return id; } return results.length===1?results[0]:-1; };
   let id=find(); if(id<0 && !S.types.has('condo')){ S.types=new Set(['condo']); await ensureCondo(); run(); id=find(); }
   if(id<0){ toast('Folio '+f+' was not found in this roll.'); return; }
   S.view='cards'; renderResults(true);
-  const card=document.querySelector('.card[data-id="'+id+'"]'); if(card){ card.scrollIntoView({block:'center'}); card.classList.add('flash'); }
+  const card=document.querySelector('.card[data-id="'+id+'"]'); DEEP_ID=id; if(card){ card.scrollIntoView({block:'center'}); card.classList.add('flash'); }
   openDrawer(id);
 }
 /* commercial presets by Property Appraiser DOR land use family (see CP_FAM) */

@@ -15,14 +15,17 @@
   // grade badge (A+ / A / B / C / F) + Reached owner / Wrong # buttons (drawer only); g = grade from SK.gradeOf (computed when not given)
   const gradeBadge = g => `<span class="phg g${g === 'A+' ? 'ap' : g.toLowerCase()}" title="${esc(SK.GRADE_TIP[g])}">${g}</span>`;
   // WhatsApp click-to-chat: wa.me/<E.164 digits>. Stored numbers are 10-digit NANP (US, PR 787/939), so prefix country code 1.
-  // Text + WhatsApp prefill: "Hi! I am trying to reach the owner or relative of <site address, city>" (app.js notes each folio's site address).
-  const waURL = (n, msg) => { let d = String(n || '').replace(/\D/g, ''); if (d.length === 10) d = '1' + d; return 'https://wa.me/' + d + (msg ? '?text=' + encodeURIComponent(msg) : ''); };
+  // Text prefill: "Hi! I am trying to reach the owner or relative of <site address, city>"; WhatsApp prefill: WA_MSG(<site address, city>) (app.js notes each folio's site address).
+  // waURL encodes strictly (RFC 3986: also ' ( ) ! *) so the apostrophe in "it's" can never break the link.
+  const waURL = (n, msg) => { let d = String(n || '').replace(/\D/g, ''); if (d.length === 10) d = '1' + d; return 'https://wa.me/' + d + (msg ? '?text=' + encodeURIComponent(msg).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase()) : ''); };
   SK.waURL = waURL;
   const smsURL = (n, msg) => { let d = String(n || '').replace(/\D/g, ''); if (d.length === 10) d = '1' + d; return 'sms:+' + d + (msg ? '?&body=' + encodeURIComponent(msg) : ''); };   // ?&body= works on iOS, Android and Phone Link
   SK.smsURL = smsURL;
   const SITE = new Map(), MSG_PRE = 'Hi! I am trying to reach the owner or relative of ';
   const noteSite = (folio, addr, city) => { addr = String(addr || '').trim(); if (folio && addr) SITE.set(String(folio), addrCase(addr) + (city ? ', ' + titleCase(city) : '')); return ''; };
   const textMsg = folio => { const a = folio != null && SITE.get(String(folio)); return a ? MSG_PRE + a : ''; };
+  const WA_MSG = a => `Hey, my name is Branden. I have a property and I think it's near yours at ${a}. Just wanted to see if you would be open to selling?`;
+  const waMsg = folio => { const a = folio != null && SITE.get(String(folio)); return a ? WA_MSG(a) : ''; };
   function phoneHTML(q, g, ctl, folio) {
     const n = q[0], t = q[1];   // DNC / litigator flags stay stored in q[2] but are not shown as text (Branden's call); they lower the grade to C
     if (!g) g = SK.gradeOf(q, 0, SK.callResult(n));
@@ -30,7 +33,7 @@
     const res = SK.callResult(n);
     const btns = ctl ? `<button type="button" class="lnk stres" data-stres="${n}" data-v="${res === 'reached' ? '' : 'reached'}" title="${res === 'reached' ? 'Undo Reached owner' : 'You reached the owner on this number: grade A+, moves to the top'}">${res === 'reached' ? 'Undo reached' : 'Reached owner'}</button><button type="button" class="lnk stres" data-stres="${n}" data-v="${res === 'wrong' ? '' : 'wrong'}" title="${res === 'wrong' ? 'Undo Wrong number' : 'Wrong number: grade F, hidden from cards'}">${res === 'wrong' ? 'Undo wrong #' : 'Wrong #'}</button>` : '';
     if (g === 'F') return `<span class="stph gF"><s class="stnum">${SK.fmtPhone(n)}</s>${badges}${btns}</span>`;
-    return `<span class="stph"><b class="stnum">${SK.fmtPhone(n)}</b>${badges}<a class="stl" href="tel:+1${n}" title="Call ${SK.fmtPhone(n)}">Call</a><a class="stl" href="${esc(smsURL(n, textMsg(folio)))}" title="Text ${SK.fmtPhone(n)}">Text</a><a class="stl stwa" href="${esc(waURL(n, textMsg(folio)))}" target="_blank" rel="noopener" title="WhatsApp ${SK.fmtPhone(n)}">WhatsApp</a>${btns}</span>`;
+    return `<span class="stph"><b class="stnum">${SK.fmtPhone(n)}</b>${badges}<a class="stl" href="tel:+1${n}" title="Call ${SK.fmtPhone(n)}">Call</a><a class="stl" href="${esc(smsURL(n, textMsg(folio)))}" title="Text ${SK.fmtPhone(n)}">Text</a><a class="stl stwa" href="${esc(waURL(n, waMsg(folio)))}" target="_blank" rel="noopener" title="WhatsApp ${SK.fmtPhone(n)}">WhatsApp</a>${btns}</span>`;
   }
   const shown = r => SK.graded(r).filter(x => x.g !== 'F');   // cards / table: F hidden, best grade first
   const topPhones = (r, k, folio) => { const a = shown(r); return { html: a.slice(0, k).map(x => phoneHTML(x.q, x.g, false, folio)).join(''), more: Math.max(0, a.length - k) }; };
@@ -550,7 +553,7 @@
     ST.onChange(refreshPanel); refreshPanel();
     window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.openApi = () => apiModal(B); window.PFSkipUI.traceOne = (id, folio) => traceOne(B, id, folio); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text); window.PFSkipUI.openTemplate = () => templateModal(B); window.PFSkipUI.emailUrlFor = (id, folio, to) => emailUrl(to, emailVars(B, id, folio));
   }
-  window.PFSkipUI = { noteSite, textMsg, gradeBadge, shown, cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, BCC_MAX, isBad, setBad, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
+  window.PFSkipUI = { noteSite, textMsg, waMsg, gradeBadge, shown, cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, BCC_MAX, isBad, setBad, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
   const start = () => wire(window.PF.skBridge);
   if (window.PF_READY && window.PF) start(); else document.addEventListener('pf:ready', start, { once: true });
 })();

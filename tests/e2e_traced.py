@@ -51,12 +51,19 @@ with sync_playwright() as pw:
     site = pg.evaluate(f"PFSkipUI.textMsg({json.dumps(A['folio'])})")
     ok(site.startswith('Hi! I am trying to reach the owner or relative of ') and A['addr'].strip().split()[0] in site and ', ' in site, f'prefill message has the site address + city: "{site}"')
     exp = quote(site, safe="-_.!~*'()")
-    ok(pg.get_attribute(f'[data-trow="{A["folio"]}"] a.stwa', 'href') == 'https://wa.me/13055550101?text=' + exp, 'WhatsApp href = wa.me/1<num>?text=<encoded message>')
+    wsite = site[len('Hi! I am trying to reach the owner or relative of '):]
+    wmsg = pg.evaluate(f"PFSkipUI.waMsg({json.dumps(A['folio'])})")
+    ok(wmsg == f"Hey, my name is Branden. I have a property and I think it's near yours at {wsite}. Just wanted to see if you would be open to selling?", f'WhatsApp message is the exact new text with the site address + city: "{wmsg}"')
+    wexp = quote(wmsg, safe="-_.~")
+    wh = pg.get_attribute(f'[data-trow="{A["folio"]}"] a.stwa', 'href')
+    ok(wh == 'https://wa.me/13055550101?text=' + wexp and "'" not in wh and 'it%27s%20near%20yours%20at%20' in wh, f'WhatsApp href = wa.me/1<num>?text=<strictly encoded new message> ({wh})')
+    from urllib.parse import urlparse, parse_qs
+    ok(parse_qs(urlparse(wh).query)['text'] == [wmsg], 'WhatsApp text decodes back to the exact message')
     ok(pg.get_attribute(f'[data-trow="{A["folio"]}"] a[href^="sms:"]', 'href') == 'sms:+13055550101?&body=' + exp, 'Text href = sms:+1<num>?&body=<encoded message>')
     ok(pg.evaluate("PFSkip.smsURL('3055551234', 'A & B?')") == 'sms:+13055551234?&body=A%20%26%20B%3F' and pg.evaluate("PFSkip.smsURL('3055551234')") == 'sms:+13055551234', 'smsURL encodes the body; no body without a message')
     sty = pg.evaluate(f"""(()=>{{const a=getComputedStyle(document.querySelector('[data-trow="{A["folio"]}"] a[href^="sms:+13055550101?&body="]')), w=getComputedStyle(document.querySelector('[data-trow="{A["folio"]}"] a.stwa')); return [a.borderRadius===w.borderRadius, a.fontWeight===w.fontWeight, a.color===w.color, a.minHeight===w.minHeight]}})()""")
     ok(all(sty), f'WhatsApp matches the Text button styling {sty}')
-    ok(pg.evaluate("[PFSkip.waURL('7875551234'), PFSkip.waURL('9395551234'), PFSkip.waURL('17875551234'), PFSkip.waURL('3055551234', 'Hi there & you?')]") == ['https://wa.me/17875551234', 'https://wa.me/19395551234', 'https://wa.me/17875551234', 'https://wa.me/13055551234?text=Hi%20there%20%26%20you%3F'], 'waURL: E.164 digits (US / PR 787 / 939 get 1), optional url-encoded text')
+    ok(pg.evaluate("""[PFSkip.waURL('7875551234'), PFSkip.waURL('9395551234'), PFSkip.waURL('17875551234'), PFSkip.waURL('3055551234', 'Hi there & you?'), PFSkip.waURL('3055551234', "it's (ok)!*")]""") == ['https://wa.me/17875551234', 'https://wa.me/19395551234', 'https://wa.me/17875551234', 'https://wa.me/13055551234?text=Hi%20there%20%26%20you%3F', 'https://wa.me/13055551234?text=it%27s%20%28ok%29%21%2A'], 'waURL: E.164 digits (US / PR 787 / 939 get 1), optional url-encoded text')
     ok('Not contacted' in txt, 'status: Not contacted before emailing')
     # Email from the view
     pg.click(f'[data-trow="{A["folio"]}"] [data-stemail]'); pg.wait_for_timeout(900)

@@ -115,7 +115,7 @@ const luNice = s => nice('X - '+s.replace(/^\S+\s*-\s*/,'').split(':')[0]);
 /* data */
 let META=null; const PACKS=[]; let D=null, LU_T=null, Z_G=null;
 let results=new Uint32Array(0);
-const S = { mr:{rate:new Set(),tier:new Set(),rogo:new Set(),sig:new Set(),avoid:new Set(),zt:new Set()}, cont:false, hideSent:false, hasPhone:false, traced:'', cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', eqMin:0, eqFC:false, asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, wf:'', ut:'', send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, fx:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
+const S = { mr:{rate:new Set(),tier:new Set(),rogo:new Set(),sig:new Set(),avoid:new Set(),zt:new Set()}, cont:false, hideSent:false, hasPhone:false, traced:'', cm:0, cgas:false, cent:'', due:false, stage:'', pf:false, pb:'', eqMin:0, eqFC:false, asm:false, asmUp:false, asmGroup:0, tier:'any', rules:{...window.PFTeardown.DEFAULT_RULES}, lotz:new Set(), cons:new Set(), ap:false, wf:'', ut:'', utd:0, send:new Set(), mzSel:new Set(), mzOpen:new Set(['Miami','Miami-Dade County']), og:0, ogf:'', saved:false, pcs:new Set(), vsig:new Set(), svSt:new Set(), dsig:new Set(), types:new Set(), zones:new Set(), exZ:new Set(), exL:new Set(), flags:{}, fx:{}, owner:'all', sort:'lot_d', view:'cards', bbox:null };
 S.mt={tax:new Set(),min:0};   // Monroe unpaid-tax filter (chips + minimum balance)
 let facet = {lc:null, zc:null, mc:null, kc:null, dc:null};
 let MZ=null, MZ_UP=null;
@@ -470,14 +470,14 @@ function readState(){
   st.mzq=$('mzq').value.trim(); st.q=$('q').value.trim(); st.qScope=$('qScope').value; st.city=$('city').value; st.zips=$('zips').value; st.cra=$('cra').value;
   st.hideGov=$('hideGov').checked; st.noBldg=$('noBldg').checked; st.qualOnly=$('qualOnly').checked;
   st.types=[...S.types]; st.zones=[...S.zones]; st.exZ=[...S.exZ].map(i=>D.zoning[i]); st.exL=[...S.exL].map(i=>D.landuse[i]);
-  st.cont=S.cont; st.hideSent=S.hideSent; st.hasPhone=S.hasPhone; st.traced=S.traced; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.fx={...S.fx}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.wf=S.wf; st.ut=S.ut; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; st.eqMin=S.eqMin; st.eqFC=S.eqFC; st.mr=mrRead(); return st;
+  st.cont=S.cont; st.hideSent=S.hideSent; st.hasPhone=S.hasPhone; st.traced=S.traced; st.cm=S.cm; st.cgas=S.cgas; st.cent=S.cent; st.dsig=[...S.dsig]; st.dsMin=+$('dsMin').value||0; st.flags={...S.flags}; st.fx={...S.fx}; st.owner=S.owner; st.sort=S.sort; st.view=S.view; st.bbox=S.bbox; st.saved=S.saved; st.svSt=[...S.svSt]; st.ogMin=+$('ogMin').value||0; st.ogDist=$('ogDist').checked; st.ogInst=$('ogInst').checked; st.ogf=S.ogf; st.vsig=[...S.vsig]; st.pcs=[...S.pcs]; st.vsMin=+$('vsMin').value||0; st.vsMine=$('vsMine').checked; st.tier=S.tier; st.rules={...S.rules}; st.lotz=[...S.lotz]; st.cons=[...S.cons]; st.ap=S.ap; st.wf=S.wf; st.ut=S.ut; st.utd=S.utd; st.pf=S.pf; st.pb=S.pb; st.due=S.due; st.stage=S.stage; st.send=[...S.send]; st.asm=S.asm; st.asmUp=S.asmUp; st.asmGroup=S.asmGroup; st.mzSel=[...S.mzSel]; st.eqMin=S.eqMin; st.eqFC=S.eqFC; st.mr=mrRead(); return st;
 }
 function save(){ const st=readState(); try{ localStorage.setItem(PFC.key('mdpf.v2'),JSON.stringify(st)); }catch(e){} writeHash(st); }
 function applyState(st){
   NUM_IDS.forEach(id=>$(id).value=st[id]==null?'':(MONEY_IDS.has(id)?fmtAmt(st[id]):st[id]));
   $('mvMin').value=st.mvMin?fmtAmt(st.mvMin):''; $('mvMax').value=st.mvMax?fmtAmt(st.mvMax):'';
   S.cont=!!st.cont; S.hideSent=!!st.hideSent; S.hasPhone=!!st.hasPhone; S.traced=['y','n'].includes(st.traced)?st.traced:''; S.cm=[1,20,35,50].includes(+st.cm)?+st.cm:0; S.cgas=!!st.cgas; S.cent=['in','dis'].includes(st.cent)?st.cent:'';
-  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.wf=PFWF.MASK[st.wf]?st.wf:''; S.ut=PFUT.MASK[st.ut]?st.ut:''; S.due=!!st.due; S.stage=SV.STAGES.includes(st.stage)?st.stage:''; S.pf=!!st.pf; S.eqMin=[30,50,70,90].includes(+st.eqMin)?+st.eqMin:0; S.eqFC=!!st.eqFC; S.pb=['hm','h'].includes(st.pb)?st.pb:''; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.asm=!!st.asm; S.asmUp=!!st.asmUp; S.asmGroup=+st.asmGroup||0; S.mzSel=new Set(st.mzSel||[]); renderRules();
+  S.tier=['basic','strong'].includes(st.tier)?st.tier:'any'; if(st.rules&&typeof st.rules==='object') S.rules=sanRules(st.rules); S.lotz=new Set((st.lotz||[]).filter(k=>LOTZ.some(x=>x[0]===k))); S.cons=new Set((st.cons||[]).map(Number).filter(k=>k in CN_LABEL)); S.ap=!!st.ap; S.wf=PFWF.MASK[st.wf]?st.wf:''; S.ut=PFUT.MASK[st.ut]?st.ut:''; S.utd=PFUT.DAYS.some(([d])=>d&&d===+st.utd)?+st.utd:0; S.due=!!st.due; S.stage=SV.STAGES.includes(st.stage)?st.stage:''; S.pf=!!st.pf; S.eqMin=[30,50,70,90].includes(+st.eqMin)?+st.eqMin:0; S.eqFC=!!st.eqFC; S.pb=['hm','h'].includes(st.pb)?st.pb:''; S.send=new Set((st.send||[]).filter(k=>teamOf(k))); S.asm=!!st.asm; S.asmUp=!!st.asmUp; S.asmGroup=+st.asmGroup||0; S.mzSel=new Set(st.mzSel||[]); renderRules();
   $('mzq').value=st.mzq||''; $('q').value=st.q||''; $('qScope').value=st.qScope||'ao'; $('city').value=st.city||''; $('zips').value=st.zips||''; $('cra').value=st.cra||'';
   $('hideGov').checked=st.hideGov!==false; $('noBldg').checked=!!st.noBldg; $('qualOnly').checked=!!st.qualOnly;
   S.types=new Set(st.types||[]); S.zones=new Set(st.zones||[]); S.dsig=new Set((st.dsig||[]).filter(k=>k in DBIT)); $('dsMin').value=DS_STEPS.some(x=>x[0]===+st.dsMin)?String(+st.dsMin):'0';
@@ -540,12 +540,12 @@ function run(){ const h0=RUN_H; requestAnimationFrame(()=>{ const h=location.has
   const asmOn=S.asm&&!!ASM, asmUp=S.asmUp, asmJ=S.asmGroup&&ASM?ASM.byId.get(S.asmGroup):undefined, asmSeen=asmOn?new Set():null;
   const MRs=HAS('mscreen')?mrPrep():null;
   const wfMask=S.wf?PFWF.MASK[S.wf]||0:0, wfc=new Uint32Array(16); if(wfMask&&!PFWF.data) ensureWf().then(()=>{ if(PFWF.data) run(); });
-  const utMask=S.ut?PFUT.MASK[S.ut]||0:0, utc=new Uint32Array(16); if(utMask&&!PFUT.data) ensureUt().then(()=>{ if(PFUT.data) run(); });
+  const utMask=S.ut?PFUT.MASK[S.ut]||0:0, utc=new Uint32Array(16), utCut=S.utd?PFUT.today()-S.utd:0; if((utMask||S.utd)&&!PFUT.data) ensureUt().then(()=>{ if(PFUT.data) run(); });
   const fxF=S.fx, wantRel=fxF.fam!=='any'||fxF.famoos!=='any', wantLife=fxF.life!=='any', wantDeath=fxF.death!=='any'&&HAS('distress'), fxOn=wantRel||wantLife||wantDeath, DCB=1<<DBIT.DC;
   let out=new Uint32Array(1<<20), m=0;
   for(const p of PACKS){
     if(!p || (p.name==='condo' && !incCondo && !ogF && !mine)) continue;
-    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), SGa=(sigIndexPack(p),p.sg||new Uint8Array(p.n)), EQa=eqOn?(PFEQ.index(p),p.eq||new Uint8Array(p.n)):null, CMa=(cmIndexPack(p),p.cm||new Uint8Array(p.n)), CXa=p.cx||new Uint8Array(p.n), FO=sendSet||outSet||cSet||phoneSet||trSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null; PFWF.index(p); const WFa=p.wf||null; PFUT.index(p); const UTa=p.ut||null;
+    prepPack(p); tierPack(p); const TDc=p.td, TT=TDc?TDc.tier:new Uint8Array(p.n), TS=TDc?TDc.split:new Int8Array(p.n), TB=TDc?TDc.below:new Int8Array(p.n), CNa=p.cn||new Uint8Array(p.n), APa=p.ap||new Uint8Array(p.n), SGa=(sigIndexPack(p),p.sg||new Uint8Array(p.n)), EQa=eqOn?(PFEQ.index(p),p.eq||new Uint8Array(p.n)):null, CMa=(cmIndexPack(p),p.cm||new Uint8Array(p.n)), CXa=p.cx||new Uint8Array(p.n), FO=sendSet||outSet||cSet||phoneSet||trSet?strCol(p,'folio'):null; if(ASM) asmIndexPack(p); const AGa=p.asmG||null; PFWF.index(p); const WFa=p.wf||null; PFUT.index(p); const UTa=p.ut||null, UTD=p.utd||null;
     let REL=null, LIF=null; if(wantRel){ REL=fxRel(p); if(!REL) continue; } if(wantLife) LIF=fxLife(p);
     const c=p.c, n=p.n, base=p.idx*16777216, hits=tm?tm(p):null, gl=bb&&p.geo?p.geo:null, VS=c.vscore||new Uint8Array(n), VG=c.vsig||new Uint16Array(n), PG=c.pcs||new Uint16Array(n);
     if(bb && !gl) continue;
@@ -589,15 +589,15 @@ function run(){ const h0=RUN_H; requestAnimationFrame(()=>{ const h=location.has
       const fu=lA&&!lA[li]?1:0, fz=zA&&!zA[zi]?1:0, fm=mA&&!mA[mi]?1:0;
       const kind = fl&8 ? 1 : fl&16 ? 2 : fl&32 ? 3 : 0, fk = wantK>=0 && kind!==wantK ? 1:0;
       const tv=TT[i], ft=tierW&&tv<tierW?1:0, lsp=TS[i]===1, lok=TB[i]===0, lbl=TB[i]===1, flz=lzSel.size&&!((lzSel.has('split')&&lsp)||(lzSel.has('minok')&&lok)||(lzSel.has('below')&&lbl))?1:0, cv=CNa[i], fcn=cnSel.size&&!cnSel.has(cv)?1:0;
-      const wv=WFa?WFa[i]:0, fwf=wfMask&&!(wv&wfMask)?1:0, uv=UTa?UTa[i]:0, fut=utMask&&!(uv&utMask)?1:0;
-      const nf=fu+fz+fm+fk+ft+flz+fcn+fwf+fut;
+      const wv=WFa?WFa[i]:0, fwf=wfMask&&!(wv&wfMask)?1:0, uv=UTa?UTa[i]:0, fut=utMask&&!(uv&utMask)?1:0, fud=utCut&&!(UTD&&UTD[i]&&UTD[i]>=utCut)?1:0;   // 'Shut off within' = on a shutoff list dated in the last N days
+      const nf=fu+fz+fm+fk+ft+flz+fcn+fwf+fut+fud;
       const vg=VG[i], fvs=vsMask&&!(vg&vsMask)?1:0, pg=PG[i], fpc=pcMask&&!(pg&pcMask)?1:0;
       if(nf===0 && !fvs && sg&4095){ for(let b=0;b<12;b++) if(sg&(1<<b)) dc[b]++; if(!fsg) dc[12]++; }
       if(nf===0 && !fsg && vg){ for(let b=0;b<VSIG.length;b++) if(vg&(1<<b)) vc[b]++; }
       if(nf===0 && !fsg && !fvs && pg){ for(let b=0;b<PCS.length;b++) if(pg&(1<<b)) pcc[b]++; }
       if(fsg||fvs||fpc) continue;
       if(nf===0){ wfc[wv]++; utc[uv]++; kc[kind]++; lc[li]++; zc[zi]++; mc[mi]++; tcn[tv]++; if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; cnc[cv]++; if(APa[i]) apN++; if(SGa[i]&1) pfN++; if(SGa[i]&6) pbN++; if(asmSeen) asmSeen.add(AGa[i]); if(m===out.length){const o2=new Uint32Array(m*2);o2.set(out);out=o2;} out[m++]=base+i; }
-      else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else if(ft) tcn[tv]++; else if(flz){ if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; } else if(fcn) cnc[cv]++; else if(fwf) wfc[wv]++; else if(fut) utc[uv]++; else kc[kind]++; }
+      else if(nf===1){ if(fu) lc[li]++; else if(fz) zc[zi]++; else if(fm) mc[mi]++; else if(ft) tcn[tv]++; else if(flz){ if(lsp) lzc.split++; if(lok) lzc.minok++; if(lbl) lzc.below++; } else if(fcn) cnc[cv]++; else if(fwf) wfc[wv]++; else if(fut) utc[uv]++; else if(fud){} else kc[kind]++; }
     }
   }
   results=out.subarray(0,m); facet={lc,zc,kc,mc,dc,vc,pcc,tcn,lzc,cnc,wfc,utc,apN,pfN,pbN,asmGroups:asmSeen?asmSeen.size:0};
@@ -698,7 +698,7 @@ function renderSummary(){
 function renderAdvCount(st){
   const k=ADV_IDS.filter(id=>st[id]!=null).length + (st.noBldg?1:0) + (st.qualOnly?1:0) + (st.cra?1:0) + (st.qScope!=='ao'?1:0) + S.exZ.size + S.exL.size + Object.values(S.flags).filter(v=>v!=='any').length;
   $('advCount').hidden=!k; $('advCount').textContent=k+' on';
-  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.hasPhone?1:0)+(st.traced?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+mrCount()+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.wf?1:0)+(S.ut?1:0)+(S.pf?1:0)+(S.eqMin||S.eqFC?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
+  const main=(st.cont?1:0)+(st.hideSent?1:0)+(st.hasPhone?1:0)+(st.traced?1:0)+(st.cm?1:0)+(st.cgas?1:0)+(st.cent?1:0)+(st.bbox?1:0)+(st.q?1:0)+(st.city?1:0)+(st.zips.trim()?1:0)+(st.mzq?1:0)+S.types.size+S.zones.size+(st.lotMin!=null||st.lotMax!=null?1:0)+(st.mvMin||st.mvMax?1:0)+(S.owner!=='all'?1:0)+S.dsig.size+(st.dsMin?1:0)+S.vsig.size+S.pcs.size+(st.vsMin?1:0)+(st.vsMine?1:0)+(S.ogf?1:0)+(st.ogMin?1:0)+(st.ogDist?1:0)+(S.tier!=='any'?1:0)+mrCount()+S.lotz.size+S.cons.size+(S.ap?1:0)+(S.wf?1:0)+(S.ut?1:0)+(S.utd?1:0)+(S.pf?1:0)+(S.eqMin||S.eqFC?1:0)+(S.pb?1:0)+(S.due?1:0)+(S.stage?1:0)+(S.asm?1:0)+(S.asmUp?1:0)+S.send.size+S.mzSel.size+(rulesDefault()?0:1);
   let badBox=0; HASH_NUM.forEach(id=>{ const el=$(id), v=el.value.trim(), bad=!!v && parseAmt(v)==null; if(bad) badBox++; if(bad) { el.setAttribute('aria-invalid','true'); el.title='Not a number. Try 500k, 1.2m or 750000'; } else if(el.hasAttribute('aria-invalid')){ el.removeAttribute('aria-invalid'); el.title=''; } });
   const tot=k+main; $('onCount').hidden=!tot; $('resetBtn').disabled=!tot&&!badBox; $('onCount').textContent=tot+(tot===1?' filter on':' filters on');
   if(S.saved){ $('onCount').hidden=false; $('onCount').textContent='Saved list · filters paused'; }
@@ -1220,7 +1220,7 @@ function writeHash(st){
     if(st.sort&&st.sort!=='lot_d') h.set('sort',st.sort); if(st.view&&st.view!=='cards') h.set('view',st.view);
     if(st.bbox) h.set('area',st.bbox.join(',')); mrHashWrite(h,st);
     if(st.ogf) h.set('ogf',st.ogf); if(st.ogMin) h.set('ogn',st.ogMin); if(st.ogDist) h.set('ogd','1'); if(st.ogInst) h.set('ogi','1');
-    if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.wf) h.set('wf',st.wf); if(st.ut) h.set('ut',st.ut); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';')); if(st.asm) h.set('asm','1'); if(st.asmUp) h.set('asmup','1'); if(st.asmGroup) h.set('asmg',st.asmGroup);
+    if(st.tier&&st.tier!=='any') h.set('td',st.tier); if(st.lotz&&st.lotz.length) h.set('lotz',st.lotz.join(',')); if(st.cons&&st.cons.length) h.set('cn',st.cons.join(',')); if(st.ap) h.set('ap','1'); if(st.wf) h.set('wf',st.wf); if(st.ut) h.set('ut',st.ut); if(st.utd) h.set('utd',st.utd); if(st.send&&st.send.length) h.set('send',st.send.join(',')); if(st.mzSel&&st.mzSel.length) h.set('mzs',st.mzSel.join(';')); if(st.asm) h.set('asm','1'); if(st.asmUp) h.set('asmup','1'); if(st.asmGroup) h.set('asmg',st.asmGroup);
     if(st.rules&&!RULE_KEYS.every(k=>st.rules[k]===TD.DEFAULT_RULES[k])) h.set('tdr',RULE_KEYS.map(k=>k==='enforce_min_lot'?(st.rules[k]?1:0):st.rules[k]).join(','));
     if(st.due) h.set('due','1'); if(st.stage) h.set('stage',st.stage); if(st.pf) h.set('pf','1'); if(st.eqMin) h.set('eq',String(st.eqMin)); if(st.eqFC) h.set('fc','1'); if(st.cm) h.set('cm',String(st.cm)); if(st.cont) h.set('cont','1'); if(st.hideSent) h.set('hs','1'); if(st.hasPhone) h.set('ph','1'); if(st.traced) h.set('trc',st.traced); if(st.cgas) h.set('cgas','1'); if(st.cent) h.set('cent',st.cent); if(st.pb) h.set('pb',st.pb); if(st.saved) h.set('saved','1'); if(st.saved&&st.svSt&&st.svSt.length) h.set('sst',st.svSt.join(','));
     const str=h.toString(), want=str?'#'+str:'';
@@ -1246,7 +1246,7 @@ function parseHash(){
   st.sort=h.get('sort')||'lot_d'; st.view=h.get('view')||'cards';
   st.ogf=(h.get('ogf')||'').replace(/\D/g,''); st.ogMin=+h.get('ogn')||0; st.ogDist=h.get('ogd')==='1'; st.ogInst=h.get('ogi')==='1';
   st.saved=h.get('saved')==='1'; st.svSt=list('sst');
-  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.wf=h.get('wf')||''; st.ut=h.get('ut')||''; st.due=h.get('due')==='1'; st.stage=h.get('stage')||''; st.pf=h.get('pf')==='1'; st.eqMin=+h.get('eq')||0; st.eqFC=h.get('fc')==='1'; st.cm=+h.get('cm')||0; st.cont=h.get('cont')==='1'; st.hideSent=h.get('hs')==='1'; st.hasPhone=h.get('ph')==='1'; st.traced=['y','n'].includes(h.get('trc'))?h.get('trc'):''; st.cgas=h.get('cgas')==='1'; st.cent=h.get('cent')||''; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
+  st.tier=h.get('td')||'any'; st.lotz=list('lotz'); st.cons=list('cn').map(Number); st.ap=h.get('ap')==='1'; st.wf=h.get('wf')||''; st.ut=h.get('ut')||''; st.utd=+h.get('utd')||0; st.due=h.get('due')==='1'; st.stage=h.get('stage')||''; st.pf=h.get('pf')==='1'; st.eqMin=+h.get('eq')||0; st.eqFC=h.get('fc')==='1'; st.cm=+h.get('cm')||0; st.cont=h.get('cont')==='1'; st.hideSent=h.get('hs')==='1'; st.hasPhone=h.get('ph')==='1'; st.traced=['y','n'].includes(h.get('trc'))?h.get('trc'):''; st.cgas=h.get('cgas')==='1'; st.cent=h.get('cent')||''; st.pb=h.get('pb')||''; st.send=list('send'); st.mzSel=(h.get('mzs')||'').split(';').filter(Boolean); st.asm=h.get('asm')==='1'; st.asmUp=h.get('asmup')==='1'; st.asmGroup=+h.get('asmg')||0;
   const tr=(h.get('tdr')||'').split(','); if(tr.length===RULE_KEYS.length||tr.length===RULE_KEYS.length-1){ st.rules={}; RULE_KEYS.forEach((k,j)=>{ if(j>=tr.length) st.rules[k]=TD.DEFAULT_RULES[k]; else st.rules[k]=k==='enforce_min_lot'?tr[j]==='1':+tr[j]; }); }
   const a=list('area').map(Number); st.bbox=a.length===4&&a.every(Number.isFinite)?a:null; mrHashRead(h,st,list);
   return st;
@@ -1401,7 +1401,7 @@ const TONES=[['vacant','Vacant land'],['res','Homes & condos'],['multi','Multifa
 let TONE_RGB=null, LU_TONE=null, MAP_COLOR='type', SC_RGB=null;
 const SC_TONES=[['s0','No signals'],['s1','1–19'],['s2','20–34'],['s3','35–49'],['s4','50+']];
 const scIdx=v=>v>=50?4:v>=35?3:v>=20?2:v>0?1:0;
-function legendSetup(){ if(!TONE_RGB) return; $('mapLegend').innerHTML = (MAP_COLOR==='score' ? '<span class="lt">Distress score</span>'+SC_TONES.map(([t,l],k)=>`<span><i style="background:${SC_RGB[k].css}"></i>${l}</span>`).join('') : TONES.map(([t,l],k)=>`<span><i style="background:${TONE_RGB[k].css}"></i>${l}</span>`).join('')) + (SV.count()?'<span><i class="svring"></i>Saved</span>':''); }
+function legendSetup(){ if(!TONE_RGB) return; $('mapLegend').innerHTML = (MAP_COLOR==='score' ? '<span class="lt">Distress score</span>'+SC_TONES.map(([t,l],k)=>`<span><i style="background:${SC_RGB[k].css}"></i>${l}</span>`).join('') : TONES.map(([t,l],k)=>`<span><i style="background:${TONE_RGB[k].css}"></i>${l}</span>`).join('')) + (SV.count()?'<span><i class="svring"></i>Saved</span>':'') + (MAP_UT?(PFUT.data&&!PFUT.hasList()?`<span class="utnone">${PFUT.NOLIST}</span>`:'<span><i class="svring utring"></i>Utility shut off</span>'):''); }
 function toneSetup(){
   const cs=getComputedStyle(document.documentElement);
   TONE_RGB=TONES.map(([t])=>{ const hex=(cs.getPropertyValue('--t-'+t).trim()||'#888888').replace('#',''); const v=parseInt(hex.length===3?hex.split('').map(x=>x+x).join(''):hex,16); return {css:'#'+hex, r:(v>>16)&255, g:(v>>8)&255, b:v&255}; });
@@ -1418,6 +1418,8 @@ function makeDotLayer(){
     redraw(){ if(this._map) drawDots(this); return this; }
   });
 }
+let MAP_UT=false, UT_VIS=-1;
+function utMapUi(){ const b=$('mapUt'); if(!b) return; b.checked=MAP_UT; const lb=b.closest('label'); if(lb) lb.title=PFUT.data&&!PFUT.hasList()?PFUT.NOLIST:'Ring every result that is on a city utility shutoff / cut list (open liens are not ringed)'; }
 function drawDots(layer){
   const map=layer._map, c=layer._c, size=map.getSize(), dpr=Math.min(2,window.devicePixelRatio||1);
   L.DomUtil.setPosition(c,map.containerPointToLayerPoint([0,0]));
@@ -1444,11 +1446,13 @@ function drawDots(layer){
       const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; SX[j]=x; SY[j]=y; if(!(x>=-8&&y>=-8&&x<W+8&&y<H+8)) continue; vis++;
       ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fillStyle=byS?SC_RGB[scIdx(p.c.dscore[i])].css:TONE_RGB[LU_TONE[p.c.landuse[i]]].css; ctx.fill(); if(r>=4) ctx.stroke(); }
   }
-  SN=n;
+  SN=n; UT_VIS=-1;
+  if(MAP_UT&&PFUT.data&&PFUT.hasList()){ const col=getComputedStyle(document.documentElement).getPropertyValue('--t-water').trim()||'#0e7bd6'; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=2.5; ctx.strokeStyle=col; UT_VIS=0;   // 'Utility shut off' layer: ring every result on a shutoff list
+    for(let j=0;j<n;j++){ const id=results[j], p=P(id); if(!p.ut) PFUT.index(p); const i=I(id); if(!p.utd||!p.utd[i]) continue; const g=p.geo; if(!g||!(g.lat[i]>20)) continue; const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; if(x<-10||y<-10||x>W+10||y>H+10) continue; UT_VIS++; ctx.beginPath(); ctx.arc(x,y,z>=14?8:6,0,6.2832); ctx.stroke(); } }
   if(SV.count()){ const ids=savedIdx(), brand=getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()||'#FC4C02'; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=2.5; ctx.strokeStyle=brand;
     for(const id of ids.values()){ const p=P(id), g=p&&p.geo, i=I(id); if(!g||!(g.lat[i]>20)) continue; const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; if(x<-10||y<-10||x>W+10||y>H+10) continue; ctx.beginPath(); ctx.arc(x,y,z>=14?9:7,0,6.2832); ctx.stroke(); } }
   if(MAP_SEL>=0){ const p=P(MAP_SEL), g=p&&p.geo, i=I(MAP_SEL); if(g&&g.lat[i]>20){ const x=g.mx[i]*scale-ox, y=g.my[i]*scale-oy; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=3; ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--danger').trim()||'#c00'; ctx.beginPath(); ctx.arc(x,y,11,0,6.2832); ctx.stroke(); } }
-  $('mapHint').textContent = !n ? 'Nothing matches these filters.' : `${fmt.format(n)} on the map${vis<n?' · '+fmt.format(vis)+' in view':''}${nogeo?' · loading points…':''} · click a dot for details`;
+  $('mapHint').textContent = (!n ? 'Nothing matches these filters.' : `${fmt.format(n)} on the map${vis<n?' · '+fmt.format(vis)+' in view':''}${nogeo?' · loading points…':''}${MAP_UT&&PFUT.data?'':' · click a dot for details'}`) + (MAP_UT&&PFUT.data ? (PFUT.hasList()?` · ${fmt.format(Math.max(0,UT_VIS))} utility shut off in view`:' · '+PFUT.NOLIST) : '');
 }
 function nearest(pt,rad){
   let best=-1, bd=rad*rad; for(let j=0;j<SN;j++){ const dx=SX[j]-pt.x, dy=SY[j]-pt.y, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=j; } }
@@ -1720,12 +1724,15 @@ function renderWf(){ const sel=$('wfSel'); if(!sel) return; const f=facet.wfc, d
   const nt=$('wfNote'); if(nt&&d){ const miss=[['ocean','Oceanfront / open water'],['bay','Bay / Intracoastal'],['canal','Canal'],['lake','Lake or other water']].filter(([k])=>!(d.counts||{})[k]).map(x=>x[1]);
     nt.hidden=!miss.length; nt.textContent=miss.length?`${miss.join(', ')}: none mapped in ${PFC.cfg.name}${(d.notes&&d.notes.length)?' ('+d.notes.join(' ')+')':' (no water of that kind next to parcels in the map sources)'}.`:''; } }
 /* power / water cut layer (every county): data/<county>/utility.json.gz, folio-keyed, indexed into p.ut per pack */
-let utTried=0; const UT_VER='3';
+let utTried=0; const UT_VER='4';
 async function ensureUt(){ if(PFUT.data) return; if(utTried>2) return; try{ await PFUT.load({fetchJSON:n=>gzJSON(DP+n+'?v='+META.ver+'-u'+UT_VER), folioCol:p=>strCol(p,'folio'), packs:PACKS}); renderUt(); }catch(e){ utTried++; const s=$('utSrc'); if(s) s.textContent='Power / water data did not load ('+PFUT.err+').'; } }
 function renderUt(){ const sel=$('utSel'); if(!sel) return; const f=facet.utc, d=PFUT.data;
   if(sel.options.length!==PFUT.OPTS.length) sel.innerHTML=PFUT.OPTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
   PFUT.OPTS.forEach(([v,l],k)=>{ let n=''; if(v&&d&&f){ const m=PFUT.MASK[v]; let t=0; for(let b=1;b<16;b++) if(b&m) t+=f[b]; n=' ('+fmt.format(t)+')'; } sel.options[k].textContent=l+n; });
-  sel.value=S.ut||''; const src=$('utSrc');
+  sel.value=S.ut||''; const src=$('utSrc'), ds=$('utDays');
+  if(ds){ if(ds.options.length!==PFUT.DAYS.length) ds.innerHTML=PFUT.DAYS.map(([v,l])=>`<option value="${v||''}">${l}</option>`).join(''); ds.value=S.utd?String(S.utd):''; ds.disabled=!!d&&!PFUT.hasList(); }
+  const ln=$('utListNote'); if(ln&&d){ const L=(d.lists||[]).filter(x=>x.matched); ln.textContent=PFUT.hasList()?'Utility shutoff lists on file: '+L.map(x=>`${x.short||PFUT.place(x.source)} ${x.date_from===x.date_to?x.date_from:x.date_from+' to '+x.date_to} (${fmt.format(x.parcels||x.matched)} parcels${x.date_meaning?', date = '+x.date_meaning:''})`).join('; ')+'.':PFUT.NOLIST+' (the date filter and map layer need a city shutoff list).'; }
+  utMapUi();
   if(src&&d){ const c=d.counts||{}; src.textContent=`${fmt.format(c.any||0)} parcels / units with a power or water signal in ${PFC.cfg.name}: ${fmt.format(c.list||0)} on a utility shutoff list / open utility lien, ${fmt.format(c.case||0)} no-water / utility code case (since ${(d.windows||{}).case_from||'-'}), ${fmt.format(c.rc||0)} reconnect / FPL / meter permit (since ${(d.windows||{}).permit_from||'-'}), ${fmt.format(c.uv||0)} open unsafe / vacant case. Built ${d.built}.`; }
   const nt=$('utNote'); if(nt&&d){ const miss=[['list','Utility shutoff list / lien'],['case','No-water / utility code case'],['rc','Recent reconnect permit'],['uv','Unsafe / vacant case']].filter(([k])=>!(d.counts||{})[k]).map(x=>x[1]);
     nt.hidden=!(miss.length||(d.notes||[]).length); nt.textContent=(miss.length?`${miss.join(', ')}: none in ${PFC.cfg.name}. `:'')+(d.notes||[]).join(' '); } }
@@ -1778,7 +1785,9 @@ function wire(){
   $('wfSel').addEventListener('change',async()=>{ S.wf=$('wfSel').value; clearIdea(); await ensureWf(); run(); });
   $('clrWf').addEventListener('click',()=>{ S.wf=''; clearIdea(); run(); });
   $('utSel').addEventListener('change',async()=>{ S.ut=$('utSel').value; clearIdea(); await ensureUt(); run(); });
-  $('clrUt').addEventListener('click',()=>{ S.ut=''; clearIdea(); run(); });
+  $('clrUt').addEventListener('click',()=>{ S.ut=''; S.utd=0; clearIdea(); run(); });
+  $('utDays').addEventListener('change',async()=>{ S.utd=+$('utDays').value||0; clearIdea(); await ensureUt(); run(); });
+  $('mapUt').addEventListener('change',async()=>{ MAP_UT=$('mapUt').checked; try{ localStorage.setItem('mdpf.mapUt',MAP_UT?'1':''); }catch(e){} if(MAP_UT) await ensureUt(); utMapUi(); legendSetup(); if(mapLayer) mapLayer.redraw(); });
   const cmCh=async()=>{ S.cm=+$('cmMin').value||0; S.cgas=$('cgasOnly').checked; S.cent=$('centSel').value; clearIdea(); if((S.cm||S.cgas||S.cent||S.sort==='cm_d')&&!CM){ try{ await loadCommercial(); }catch(e){ toast('Commercial data did not load: '+e.message); } } run(); };
   $('contOnly').addEventListener('change',()=>{ S.cont=$('contOnly').checked; clearIdea(); run(); });
   $('hideSent').addEventListener('change',()=>{ S.hideSent=$('hideSent').checked; clearIdea(); run(); });
@@ -1911,6 +1920,7 @@ async function boot(){
     $('vsMin').innerHTML=VS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
     $('dsMin').innerHTML=DS_STEPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
     try{ MAP_COLOR=localStorage.getItem('mdpf.mapColor')==='score'?'score':'type'; }catch(e){} $('mapColor').value=MAP_COLOR;
+    try{ MAP_UT=localStorage.getItem('mdpf.mapUt')==='1'; }catch(e){} utMapUi(); if(MAP_UT) ensureUt().then(()=>{ legendSetup(); if(mapLayer) mapLayer.redraw(); });
     if(META.distress){ const d=META.distress; $('dsSrc').textContent=`Built ${META.built}. ${fmt.format(d.parcels_with_signals||0)} parcels have at least one record.`; }
     if(META.permitCov){ const pc=META.permitCov, cs=Object.entries(pc.cities).sort((a,b)=>a[1].city.localeCompare(b[1].city));
       const withP=cs.filter(([,c])=>c.permit_level==='full'||c.permit_level==='half').length, withC=cs.filter(([,c])=>c.code_level!=='none').length;
@@ -1935,7 +1945,7 @@ async function boot(){
     applyState(st);
     const ownLoad=loadOwners().catch(()=>null);
     await loadPack(0,'Loading properties…');
-    await ensureSig(); await ensureCm(); await ensureAsm(); await ensureCondo(); if(S.wf) await ensureWf(); else ensureWf().then(()=>{ if(PFWF.data) run(); }); if(S.ut) await ensureUt(); else ensureUt().then(()=>{ if(PFUT.data) run(); }); if(S.saved||S.view==='pipe'||S.due||S.stage||$('vsMine').checked) await ensureSavedPacks(); await ownLoad; await ensureOg();
+    await ensureSig(); await ensureCm(); await ensureAsm(); await ensureCondo(); if(S.wf) await ensureWf(); else ensureWf().then(()=>{ if(PFWF.data) run(); }); if(S.ut||S.utd) await ensureUt(); else ensureUt().then(()=>{ if(PFUT.data) run(); }); if(S.saved||S.view==='pipe'||S.due||S.stage||$('vsMine').checked) await ensureSavedPacks(); await ownLoad; await ensureOg();
     ['results','foot'].forEach(id=>$(id).hidden=false);
     run();
     if(fresh) document.querySelector('#ideas .chip').classList.add('on');

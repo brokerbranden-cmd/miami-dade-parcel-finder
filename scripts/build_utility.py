@@ -67,7 +67,7 @@ for name in ('main', 'condo'):
     k = read_pack(p, {'folio', 'addr', 'zip', 'city'}); FOL += k['folio'][:k['n']]; ADDR += k['addr'][:k['n']]
     CITY += [str(CITYD[z]) if z < len(CITYD) else '' for z in k['city'][:k['n']]] if 'city' in k else [''] * k['n']
     ZIP += [str(ZIPD[z]) if z < len(ZIPD) else '' for z in k['zip'][:k['n']]] if 'zip' in k else [''] * k['n']
-FSET = set(FOL)
+FSET = set(FOL); FCITY = dict(zip(FOL, CITY)); FIDX = {f: i for i, f in enumerate(FOL)}
 def key_md(f): f = re.sub(r'\D', '', str(f or '')); return f if len(f) == 13 else None
 def key_br(f): f = re.sub(r'[^0-9A-Za-z]', '', str(f or '')).upper(); return f if len(f) == 12 else None
 MO_RE = {}
@@ -79,25 +79,66 @@ KEY = {'miami-dade': key_md, 'broward': key_br, 'monroe': key_mo}[C]
 # ---------- address index (for shutoff lists) ----------
 SUF = {'STREET': 'ST', 'AVENUE': 'AVE', 'AV': 'AVE', 'ROAD': 'RD', 'DRIVE': 'DR', 'COURT': 'CT', 'PLACE': 'PL', 'TERRACE': 'TER', 'TERR': 'TER', 'BOULEVARD': 'BLVD',
        'LANE': 'LN', 'CIRCLE': 'CIR', 'HIGHWAY': 'HWY', 'PARKWAY': 'PKWY', 'WAY': 'WAY', 'NORTH': 'N', 'SOUTH': 'S', 'EAST': 'E', 'WEST': 'W', 'NORTHWEST': 'NW',
-       'NORTHEAST': 'NE', 'SOUTHWEST': 'SW', 'SOUTHEAST': 'SE', 'APARTMENT': 'APT', 'UNIT': 'UNIT', '#': 'UNIT', 'TRAIL': 'TRL', 'CAUSEWAY': 'CSWY'}
+       'NORTHEAST': 'NE', 'SOUTHWEST': 'SW', 'SOUTHEAST': 'SE', 'APARTMENT': 'APT', 'UNIT': 'UNIT', '#': 'UNIT', 'TRAIL': 'TRL', 'CAUSEWAY': 'CSWY',
+       'TE': 'TER', 'WY': 'WAY', 'LA': 'LN', 'HY': 'HWY', 'BL': 'BLVD'}   # last four: Pompano Beach work-order abbreviations ('NW 30 TE', 'MOROCCAN WY', 'S DIXIE W HY')
 def norm_addr(a):
     a = re.sub(r'[^A-Z0-9# ]', ' ', str(a or '').upper()); a = a.replace('#', ' # ')
     w = [SUF.get(x, x) for x in a.split()]
     w = [re.sub(r'^(\d+)(ST|ND|RD|TH)$', r'\1', x) for x in w]
-    return ' '.join(w)
+    return re.sub(r' DIXIE ([EW]) HWY\b', r' DIXIE HWY \1', ' '.join(w))   # 'S DIXIE W HY' (Pompano work orders) = roll 'S DIXIE HWY W'
 def street_only(n): return re.sub(r'\s+(APT|UNIT|STE|SUITE|BLDG|#)\s*\S+$', '', n)
 AIDX = {}
+DIRW = {'N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'}
+SUFV = set(SUF.values()) - DIRW - {'UNIT', 'APT'}
+def compact(n): return re.sub(r'[^A-Z0-9]', '', n)
+def ocr_fix(n):
+    # OCR'd scans (meta 'ocr'): '$' read for S, O / I / l inside the house number
+    n = n.replace('$', 'S'); w = n.split()
+    if w and re.fullmatch(r'[0-9OIL]+', w[0]) and re.search(r'\d', w[0]): w[0] = w[0].replace('O', '0').replace('I', '1').replace('L', '1')
+    if len(w) > 2 and w[0].isdigit() and re.fullmatch(r'[0-9OI]{1,3}', w[1]) and re.search(r'[OI]', w[1]): w[:2] = [w[0] + w[1].replace('O', '0').replace('I', '1')]
+    return ' '.join(w)
 def addr_index(city=None):
-    # city (optional, from the list's sidecar <file>.meta.json): only parcels in that city (pack 'city' column) are candidates
-    k = (city or '').upper()
+    # city (optional, from the list's sidecar <file>.meta.json): only parcels in that city (pack 'city' column) are candidates;
+    # a list of cities (meta 'cities') = the utility's service area (e.g. Pompano Beach water also serves Lighthouse Point / LBTS)
+    ks = tuple(sorted(c.upper() for c in city)) if isinstance(city, (list, tuple)) else ((city or '').upper(),) if city else ()
+    k = '|'.join(ks)
     if k not in AIDX:
-        ix = AIDX[k] = collections.defaultdict(list)
+        ix = AIDX[k] = collections.defaultdict(list); kset = set(ks)
         for f, a, z, c in zip(FOL, ADDR, ZIP, CITY or [''] * len(FOL)):
-            if not a or (k and c.upper() != k): continue
+            if not a or (kset and c.upper() not in kset): continue
             n = norm_addr(a); ix[n].append((f, z))
             s = street_only(n)
             if s != n: ix['S:' + s].append((f, z))
+            ix['C:' + compact(s)].append((f, z)); ix['D:' + ' '.join(x for x in s.split() if x not in DIRW)].append((f, z, any(x in DIRW for x in s.split())))
+            mr = re.match(r'^(\d+)-(\d+) (.+)$', s)
+            if mr and int(mr.group(1)) <= int(mr.group(2)): ix['R:' + mr.group(3)].append((int(mr.group(1)), int(mr.group(2)), f, z))
+            hn = s.split()[0] if s.split() and s.split()[0].isdigit() else ''
+            if hn: ix['H:' + hn].append((compact(s), f, z))
     return AIDX[k]
+def fuzzy_hits(idx, n):
+    """fallbacks after the exact / street-only / trailing-unit rules: same address without spaces (OCR drops them), a unique
+    parcel whose address starts with the listed one ('323 NW 39' -> '323 NW 39 ST') or that the listed one starts with plus a
+    short unit tail ('533 S DIXIE HWY W1'), then the same address without direction words when that is unique. Returns (hits, rule, unit)."""
+    c = compact(street_only(n)); h = idx.get('C:' + c)
+    if h: return h, 'compact', ''
+    hn = n.split()[0] if n.split() and n.split()[0].isdigit() else ''
+    if not hn: return [], '', ''
+    cand = idx.get('H:' + hn) or []
+    longer = {k for k, f, z in cand if k.startswith(c) and len(c) >= len(hn) + 3}
+    if len(longer) == 1: return [(f, z) for k, f, z in cand if k in longer], 'prefix', ''
+    shorter = sorted({k for k, f, z in cand if c.startswith(k) and len(c) - len(k) <= 4 and len(k) >= len(hn) + 4}, key=len)
+    if shorter: k = shorter[-1]; return [(f, z) for kk, f, z in cand if kk == k], 'base+unit', c[len(k):]
+    w = street_only(n).split()
+    if len(w) > 3 and re.fullmatch(r'\d{1,2}', w[1]) and not w[2].isdigit() and w[2] not in DIRW and w[2] not in SUFV:   # '405 30 GARDENS DR' (building no.)
+        h = idx.get(' '.join(w[:1] + w[2:])) or idx.get('S:' + ' '.join(w[:1] + w[2:]))
+        if h: return h, 'drop building no.', ''
+    rng = [(f, z) for lo, hi, f, z in idx.get('R:' + ' '.join(w[1:]), []) if lo <= int(hn) <= hi and lo % 2 == int(hn) % 2]
+    if len({f for f, z in rng}) == 1: return rng, 'address range', ''
+    # direction missing on one side only ('1310 FEDERAL HWY' -> '1310 S FEDERAL HWY'); never N vs S
+    hasd = any(x in DIRW for x in w)
+    d = [(f, z) for f, z, pd in idx.get('D:' + ' '.join(x for x in w if x not in DIRW)) or [] if not (hasd and pd)]
+    if len({f for f, z in d}) == 1: return d, 'direction missing', ''
+    return [], '', ''
 def read_rows(fn):
     # CSV or XLSX (first sheet, or meta 'sheet'); header names are stripped (city exports carry trailing spaces)
     if fn.lower().endswith('.xlsx'):
@@ -117,15 +158,16 @@ def list_meta(fn):
 
 # ---------- collect ----------
 best = {}   # folio -> dict(bits, code, date, label, src)
+SHORT = {}  # list source -> short place name for the card badge ('Water shut off 2026-09-09 (Pompano Beach)')
 RANK = {1: 4, 2: 3, 4: 2, 8: 1}
 cnt = collections.Counter(); bysrc = collections.Counter(); notes = []; sources = []
-def add(f, bit, date, label, src):
+def add(f, bit, date, label, src, status=''):
     if not f or f not in FSET: return
     b = best.get(f)
     if b is None: b = best[f] = {'bits': 0, 'code': 0, 'date': '', 'label': '', 'src': ''}
     if not b['bits'] & bit: bysrc[(bit, src)] += 1
     b['bits'] |= bit
-    if RANK[bit] > RANK.get(b['code'], 0) or (bit == b['code'] and date > b['date']): b.update(code=bit, date=date, label=label, src=src)
+    if RANK[bit] > RANK.get(b['code'], 0) or (bit == b['code'] and date > b['date']): b.update(code=bit, date=date, label=label, src=src, st=status)
 def case_label(t):
     w, pw = bool(re.search(r'water', t, re.I)), bool(POWER.search(t))
     if re.search(r'utilit', t, re.I) or (w and pw): return 'No water / power'
@@ -243,11 +285,13 @@ for fn in sorted(glob.glob(os.path.join(UD, '*.csv')) + glob.glob(os.path.join(U
     ca = m.get('address_col') or pick('service address', 'service_address', 'svc addr', 'premise') or pick('address', 'addr', 'location', excl=('mail', 'billing', 'email'))
     cz = pick('zip'); cd = m.get('date_col') or pick('shut', 'disconnect', 'cut', 'off date', 'complete') or pick('date'); cs = pick('service', 'type', excl=('address', 'addr', 'date')); cu = pick('utility', 'provider')
     if not ca: notes.append(f'{os.path.basename(fn)}: no address column found ({hd[:8]})'); continue
-    idx = addr_index(m.get('city')); util = m.get('source') or re.sub(r'[_-]+', ' ', os.path.splitext(os.path.basename(fn))[0])
+    idx = addr_index(m.get('cities') or m.get('city')); util = m.get('source') or re.sub(r'[_-]+', ' ', os.path.splitext(os.path.basename(fn))[0])
+    fuzz = []; cst = pick('status', 'completion'); rules = collections.Counter(); lfol = set(); ldates = []
+    if m.get('short'): SHORT[m.get('source') or util] = m['short']
     for r in rows:
         a0 = str(r.get(ca) or ''); a1, _, a2 = a0.strip().partition('\n')   # multi-line cell 'street \n\n CITY, FL  zip' (Margate lien listing)
         if not a1.strip(): continue
-        nrow += 1; n = norm_addr(a1); z = re.sub(r'\D', '', str(r.get(cz) or ''))[:5] if cz else ''
+        nrow += 1; n = norm_addr(a1.replace('$', 'S') if m.get('ocr') else a1); n = ocr_fix(n) if m.get('ocr') else n; z = re.sub(r'\D', '', str(r.get(cz) or ''))[:5] if cz else ''
         if not z and a2: zm = re.search(r'\b(\d{5})(?:-\d{4})?\s*$', a2.strip()); z = zm.group(1) if zm else ''
         d = d10(r.get(cd)) if cd else ''
         if d and d < C12: nold += 1; continue
@@ -255,19 +299,36 @@ for fn in sorted(glob.glob(os.path.join(UD, '*.csv')) + glob.glob(os.path.join(U
         mu = re.match(r'^(.* (?:ST|AVE|RD|DR|CT|PL|TER|BLVD|LN|CIR|HWY|PKWY|WAY|TRL|MNR|CIRCLE)) ([A-Z]|\d{1,3})$', n)
         if not hits and mu:   # trailing unit / building token without APT/UNIT ('3991 WOODSIDE DR B', '11000 NW 44 ST W'): base street address, max 4 parcels
             hits = idx.get(mu.group(1)) or idx.get('S:' + mu.group(1)) or []
-            if len({h[0] for h in hits}) > 4: hits = []
+        rule = 'exact' if hits else ''; unit = mu.group(2) if mu else ''
+        if not hits:
+            hits, rule, unit2 = fuzzy_hits(idx, n); unit = unit2 or unit
         if z: hits = [h for h in hits if not h[1] or h[1] == z] or []
         fs = sorted({h[0] for h in hits})
-        if not fs or len(fs) > 50: unm.append({'address': a1.strip(), 'normalized': n, 'date': d, 'reason': 'no parcel at this address' if not fs else f'{len(fs)} parcels'}); continue
+        if m.get('cities') and len({FCITY.get(f) for f in fs}) > 1:   # same address in two service-area cities: the utility's own city wins
+            p0 = [f for f in fs if FCITY.get(f, '').upper() == m['cities'][0].upper()]; fs = p0 or fs
+        bldg = len(fs) if (unit and len(fs) > 4) or len(fs) > 50 else 0
+        if bldg: fs = []   # a unit in a condo building: the roll has no unit numbers (legal text too short), so the unit can't be identified
+        if not fs:
+            unm.append({'address': a1.strip(), 'normalized': n, 'date': d, 'status': (r.get(cst) or '').strip() if cst else '',
+                        'reason': f'{bldg} parcels share this street address (condo building; unit not identifiable)' if bldg else 'no parcel at this address in ' + ', '.join(m.get('cities') or [m.get('city') or C])}); continue
+        rules[rule] += 1; lfol.update(fs); d and ldates.append(d)
+        if rule != 'exact' or len(fs) > 1: fuzz.append({'address': a1.strip(), 'rule': rule, 'parcels': len(fs), 'matched_to': ' | '.join(sorted({ADDR[FIDX[f]] for f in fs}))})
         nmatch += 1; sv = (r.get(cs) or '').strip() if cs else ''
         kind = m.get('kind') or ('water' if re.search(r'water|sewer|wasd|aqueduct', sv + ' ' + util, re.I) else 'power' if re.search(r'power|electric|energy', sv + ' ' + util, re.I) else 'service')
         lab = m.get('label') or {'water': 'Water shut off', 'power': 'Power shut off', 'service': 'Service shut off', 'lien': 'Utility lien (open)'}[kind]
         src = m.get('source') or ('Utility shutoff list: ' + ((r.get(cu) or '').strip() if cu else util))
-        for f in fs: add(f, 1, d, lab, src)
+        stv = (r.get(cst) or '').strip() if cst else ''
+        for f in fs: add(f, 1, d, lab, src, stv)
     if unm and not os.environ.get('UT_OUT'):
         os.makedirs(UNM_DIR, exist_ok=True); up = os.path.join(UNM_DIR, os.path.splitext(os.path.basename(fn))[0] + '_unmatched.csv')
-        with open(up, 'w', newline='') as fh: w = csv.DictWriter(fh, ['address', 'normalized', 'date', 'reason']); w.writeheader(); w.writerows(unm)
-    lists.append({'file': os.path.basename(fn), 'source': util, 'rows': nrow, 'matched': nmatch, 'unmatched': len(unm), 'older': nold})
+        with open(up, 'w', newline='') as fh: w = csv.DictWriter(fh, ['address', 'normalized', 'date', 'status', 'reason']); w.writeheader(); w.writerows(unm)
+    if fuzz and not os.environ.get('UT_OUT'):   # audit log: every non-exact or multi-parcel match, for a human check
+        os.makedirs(UNM_DIR, exist_ok=True)
+        with open(os.path.join(UNM_DIR, os.path.splitext(os.path.basename(fn))[0] + '_fuzzy_matches.csv'), 'w', newline='') as fh:
+            w = csv.DictWriter(fh, ['address', 'rule', 'parcels', 'matched_to']); w.writeheader(); w.writerows(fuzz)
+    lists.append({'file': os.path.basename(fn), 'source': util, 'rows': nrow, 'matched': nmatch, 'unmatched': len(unm), 'older': nold,
+                  'parcels': len(lfol), 'short': m.get('short') or m.get('city') or '', 'date_from': min(ldates) if ldates else '', 'date_to': max(ldates) if ldates else '',
+                  'date_meaning': m.get('date_meaning', ''), 'rules': dict(rules), 'skipped_in_parse': m.get('skipped', 0)})
     sources.insert(0, f'{util}: {os.path.basename(fn)} ({nrow:,} rows, {nmatch:,} matched)')
     print(f'LIST {os.path.basename(fn)} rows={nrow} matched_rows={nmatch} unmatched={len(unm)} older_than_12m={nold}', file=sys.stderr)
 if not lists: notes.insert(0, f'No utility shutoff list on file yet for this county (drop CSVs in raw/utility_shutoffs/{C}/).')
@@ -277,9 +338,9 @@ for b in best.values():
         if b['bits'] & bit: cnt[k] += 1
 cnt['any'] = len(best)
 out = {'v': 1, 'county': C, 'built': TD, 'packVer': meta.get('ver'), 'counts': {k: cnt.get(k, 0) for k in ('any', 'list', 'case', 'rc', 'uv')},
-       'by_source': {f'{bit}|{src}': n for (bit, src), n in sorted(bysrc.items())}, 'lists': lists, 'sources': sources, 'notes': notes,
+       'by_source': {f'{bit}|{src}': n for (bit, src), n in sorted(bysrc.items())}, 'lists': lists, 'short': SHORT, 'sources': sources, 'notes': notes,
        'windows': {'case_from': C36, 'permit_from': C24, 'list_from': C12},
-       'rows': {f: [b['bits'], b['code'], b['date'], b['label'], b['src']] for f, b in sorted(best.items())}}
+       'rows': {f: [b['bits'], b['code'], b['date'], b['label'], b['src']] + ([b['st']] if b.get('st') else []) for f, b in sorted(best.items())}}   # 6th = list row status (e.g. work-order code)
 p = os.environ.get('UT_OUT') or os.path.join(DATA, 'utility.json.gz')
 with gzip.open(p, 'wt', encoding='utf-8', compresslevel=9) as fh: json.dump(out, fh, separators=(',', ':'))
 print(C, json.dumps(out['counts']), 'bytes', os.path.getsize(p)); print(json.dumps(out['by_source'], indent=0)); print('\n'.join(notes))

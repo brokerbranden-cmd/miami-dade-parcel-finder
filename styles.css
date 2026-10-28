@@ -552,3 +552,5 @@ input[aria-invalid="true"]{border-color:var(--danger)!important;box-shadow:0 0 0
 .eqrow{flex-wrap:wrap;gap:6px 14px}.eqrow .hint{flex-basis:100%;font-size:12px;color:var(--muted)}
 .tt.wf{color:#0b6aa2;background:#e6f3fb}.tt.wf1{color:#05568a;background:#d6ecfa}
 .tt.ut{color:#8a4b00;background:#fff1de}.tt.ut1,.tt.ut2{color:#9b1c1c;background:#fde5e5}.tt.ut8{color:#6b5a3a;background:#f3efe6}
+.maptools .mapchk{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none}.maptools .mapchk input{margin:0;accent-color:#0e7bd6}
+.maplegend i.utring{border-color:#0e7bd6}.maplegend .utnone{font-style:italic}

@@ -130,6 +130,8 @@
     <div class="grp" id="utGrp">
       <div class="grp-h"><h2>Power / water cut</h2><span class="hint">Signs the utilities are off, most accurate first: a utility's own shutoff list, a code case that says no water / no power / utilities off, a recent reconnect / FPL release / meter permit, then open unsafe or vacant cases (weaker).</span><button class="clr" type="button" id="clrUt">Clear</button></div>
       <div class="mrrow"><span class="mrlab">Utility signal</span><select id="utSel" aria-label="Power / water cut filter"><option value="">Any or none</option></select></div>
+      <div class="mrrow"><span class="mrlab">Shut off within</span><select id="utDays" aria-label="Utility shut off within the last N days"><option value="">Any date</option></select></div>
+      <div class="mrnote" id="utListNote"></div>
       <div class="mrnote" id="utSrc">Power / water data loads with the properties.</div>
       <div class="mrnote" id="utNote" hidden></div>
     </div>
@@ -362,6 +364,7 @@
       <button class="btn" type="button" id="mapArea">Search this map area</button>
       <button class="btn" type="button" id="mapFit">Zoom to results</button>
       <select id="mapColor" aria-label="Color dots by"><option value="type">Color: property type</option><option value="score">Color: distress score</option></select>
+      <label class="btn mapchk"><input type="checkbox" id="mapUt"> Utility shut off</label>
     </div>
     <div class="maplegend" id="mapLegend"></div>
     <div class="maphint" id="mapHint"></div>

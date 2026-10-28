@@ -58,7 +58,7 @@ with sync_playwright() as pw:
         if not MOB:
             with pg.expect_download(timeout=240000) as dl: pg.evaluate("document.querySelector('#exportBtn').click()")
             rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read())))
-            ok(rows[0][:11] == HDR and (rows[0][-1] == 'Waterfront' or rows[0][-2:] == ['Waterfront', 'Power / water cut']), f'{name}: CSV header = 11 fixed columns, Waterfront last (or before Power / water cut) ({rows[0][11:]})')
+            ok(rows[0][:11] == HDR and (rows[0][-1] == 'Waterfront' or rows[0][-4:] == ['Waterfront', 'Power / water cut', 'Utility shut off date', 'Utility shut off source']), f'{name}: CSV header = 11 fixed columns, Waterfront last (or before Power / water cut) ({rows[0][11:]})')
             ok(len(rows) > 1 and all('Oceanfront' in r[rows[0].index('Waterfront')] for r in rows[1:]), f'{name}: every exported row says Oceanfront ({len(rows) - 1:,} rows)')
         # clear
         pg.evaluate("document.getElementById('clrWf').click()"); pg.wait_for_timeout(2500)

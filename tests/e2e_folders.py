@@ -63,7 +63,7 @@ with sync_playwright() as pw:
     tab('Hot leads')
     with pg.expect_download(timeout=120000) as d: pg.click('#svfExport')
     rows = list(csv.reader(io.StringIO(open(d.value.path(), encoding='utf-8').read())))
-    ok(rows[0][:11] == STD and rows[0][11:] in ([], ['Waterfront', 'Power / water cut'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked', 'Waterfront', 'Power / water cut']), f'folder CSV header = standard columns'); ok(sorted(r[10].replace('-', '') for r in rows[1:]) == sorted([F[0], F[1]]), f'folder CSV has only that folder ({len(rows)-1} rows)')
+    ok(rows[0][:11] == STD and rows[0][11:] in ([], ['Waterfront', 'Power / water cut', 'Utility shut off date', 'Utility shut off source'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked', 'Waterfront', 'Power / water cut', 'Utility shut off date', 'Utility shut off source']), f'folder CSV header = standard columns'); ok(sorted(r[10].replace('-', '') for r in rows[1:]) == sorted([F[0], F[1]]), f'folder CSV has only that folder ({len(rows)-1} rows)')
     ok('Hot-leads' in d.value.suggested_filename, f'file name names the folder: {d.value.suggested_filename}')
     # rename
     pg.click('#svfRename'); pg.fill('#svfName', 'Hottest'); pg.click('#svfForm button[type=submit]'); pg.wait_for_timeout(1200)

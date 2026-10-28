@@ -478,3 +478,33 @@ Filter, card tag, drawer line and the last CSV column, "Power / water cut". The 
 4. An open unsafe / vacant case (weaker).
 
 Built weekly by `scripts/build_utility.py` and written to `data/<county>/utility.json.gz`. Its `notes` field lists the per-county source gaps.
+
+### Utility shutoff lists (per-city parsers)
+City shutoff / cut lists (public-records requests) are signal 1. Each city has a parser in `scripts/utility_lists.py` that turns its raw file into
+one common table (`address, city, disconnect_date, service_type, status, source, source_file`) plus a sidecar `.meta.json`:
+
+    python3 scripts/utility_lists.py --list
+    python3 scripts/utility_lists.py broward pompano_beach pompano_beach_cut_list_2026-09 "raw/.../Sep Cut List.xlsx"
+    python3 scripts/utility_lists.py broward deerfield_beach deerfield_beach_cut_list_2026-09 raw/.../DOC09*.pdf
+    python3 scripts/build_utility.py broward
+
+- **Personal data:** only service address, date, service type and the row's status / work-order code are kept. Customer names, account / customer
+  IDs, location IDs, meter numbers, balances and route codes are never written. Keep the original files outside the repo
+  (`raw/utility_shutoffs/_src/<county>/<city>/`; the builder only reads the top level of `raw/utility_shutoffs/<county>/`).
+- **Counties are never mixed:** each parser is registered for one county and refuses another; matching only looks at parcels in the list's
+  service-area cities (`cities` in the meta, first city wins ties).
+- **Matching** (`build_utility.py`): normalized street address (suffix map incl. Pompano work-order forms `TE / WY / LA / HY / BL`), then
+  street-only, a trailing unit / building letter, the same address without spaces (OCR), a unique longer / shorter address, a building number
+  (`405 30 GARDENS DR`), an address-range parcel (`312-384 S MILITARY TRL`), and a direction missing on one side only. A unit in a condo
+  building (5+ parcels at one street address) is left unmatched because the roll has no unit numbers. Every list writes
+  `raw/utility_shutoffs/<county>/unmatched/<file>_unmatched.csv` (with the reason) and `<file>_fuzzy_matches.csv` (every non-exact match, for a
+  human check). Rows older than 12 months are ignored.
+- **App:** card badge `Water shut off <date> (<city> cut list)` (status in the tooltip), drawer line, filter "Utility signal: Utility shutoff list
+  / lien" plus "Shut off within" (last 30 / 60 / 90 / 180 days / 12 months by the list date; link `utd=`; open liens are not shutoffs and are
+  left out), map toggle "Utility shut off" (rings results on a shutoff list), and two export columns after "Power / water cut": "Utility shut off date", "Utility shut off source". A county with no list shows
+  "No utility shutoff data yet for this county".
+- **Distress score:** not changed. The score is baked into the property packs by `build_distress.py`; adding the shutoff list there needs a
+  full pack rebuild, so it is left for the next data refresh.
+- **Current lists (Broward):** Pompano Beach "Sep Cut List" (XLSX work orders; date = work-order close date; completion codes PBF / FNLF are not
+  documented by the city), Deerfield Beach UT521L "Delinquent notice cut list for crewmen" (scanned PDFs, OCR; date = run date; a
+  *scheduled* cut for non-payment, not a confirmed disconnect), Coral Springs PRR-30368 water lock-offs, Margate open utility liens.

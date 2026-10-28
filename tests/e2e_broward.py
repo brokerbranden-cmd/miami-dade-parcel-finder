@@ -84,7 +84,7 @@ with sync_playwright() as pw:
         if m: m.click(); pg.wait_for_timeout(300)
     with pg.expect_download(timeout=240000) as dl: pg.evaluate("document.querySelector('#exportBtn').click()")
     rows = list(csv.reader(io.StringIO(open(dl.value.path(), encoding='utf-8').read())))
-    check(rows[0][:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and rows[0][11:] in ([], ['Waterfront', 'Power / water cut']), 'export header: 11 contact columns')
+    check(rows[0][:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and rows[0][11:] in ([], ['Waterfront', 'Power / water cut', 'Utility shut off date', 'Utility shut off source']), 'export header: 11 contact columns')
     body = rows[1:]; check(len(body) > 1000 and all(len(r) == len(rows[0]) and r[5] == 'Broward' and r[3] == 'FL' and (not r[4] or re.fullmatch(r'\d{5}', r[4])) for r in body) and sum(1 for r in body if r[4]) >= 0.95 * len(body), f'export {len(body)} rows, County column = Broward')
     check(all(re.fullmatch(r'\d{6}[0-9A-Z]{2}\d{4}|\d{12}', r[10]) for r in body), 'export folios are 12 characters')
     check(all(r[1].strip() for r in body), 'export: Address never blank')
@@ -131,7 +131,7 @@ with sync_playwright() as pw:
     p2.goto(URL + '?county=broward#mtax=deed'); p2.wait_for_selector('#cards .card', timeout=180000); p2.wait_for_timeout(2000)
     with p2.expect_download(timeout=240000) as dl2: p2.evaluate("document.getElementById('exportBtn').click()")
     r2 = list(csv.reader(io.StringIO(open(dl2.value.path(), encoding='utf-8-sig').read())))
-    check((r2[0][:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and r2[0][11:] in ([], ['Waterfront', 'Power / water cut'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'] + ['Waterfront', 'Power / water cut'])) and len(r2) > 50 and all(r[5] == 'Broward' for r in r2[1:]), f'export with tax filter keeps the 11 columns ({len(r2)-1} rows)')
+    check((r2[0][:11] == ['Owner Name', 'Property Address', 'Property City', 'Property State', 'Property Zip', 'Property County', 'Mailing Address', 'Mailing City', 'Mailing State', 'Mailing Zip', 'Folio'] and r2[0][11:] in ([], ['Waterfront', 'Power / water cut', 'Utility shut off date', 'Utility shut off source'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'], ['Est Equity $', 'Est Equity %', 'Est Loan Balance', 'Open Mortgages', 'Lender', 'Free & Clear', 'Equity Checked'] + ['Waterfront', 'Power / water cut', 'Utility shut off date', 'Utility shut off source'])) and len(r2) > 50 and all(r[5] == 'Broward' for r in r2[1:]), f'export with tax filter keeps the 11 columns ({len(r2)-1} rows)')
     # switch to Monroe and back keeps data separate
     pg.goto(URL + '?county=monroe#hg=0'); pg.wait_for_selector('#results:not([hidden])', timeout=180000)
     check(pg.evaluate("PFCounty.id") == 'monroe' and cnt(pg) < 100000 and pg.evaluate("PFCounty.has('rogo')"), 'Monroe unaffected (own pack, ROGO rows)')

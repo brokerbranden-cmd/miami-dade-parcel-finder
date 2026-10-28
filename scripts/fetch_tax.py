@@ -26,23 +26,30 @@ def run(pg, name, out):
     else:
         raise RuntimeError('report not listed: ' + name)
     pg.wait_for_load_state('networkidle'); time.sleep(2)
-    pg.locator('button:has-text("Search")').last.click(); pg.wait_for_load_state('networkidle')
-    pg.wait_for_selector('text=search results found', timeout=180000)
+    btn = pg.locator('button:has-text("Search")').last
+    btn.wait_for(state='visible', timeout=int(os.environ.get('TAX_CLICK_MS', 180000)))
+    btn.click(timeout=int(os.environ.get('TAX_CLICK_MS', 180000))); pg.wait_for_load_state('networkidle', timeout=300000)
+    pg.wait_for_selector('text=search results found', timeout=int(os.environ.get('TAX_RESULT_MS', 900000)))
     with pg.expect_download(timeout=600000) as d:
         pg.evaluate('download_report()')  # default format is CSV
-    d.value.save_as(out)
+    d.value.save_as(out + '.part'); os.replace(out + '.part', out)
 
 if __name__ == '__main__':
     os.makedirs(f'{RAW}/tax', exist_ok=True)
+    only = sys.argv[2:]  # optional: report names to fetch
+    reports = [r for r in REPORTS if not only or r in only]
+    failed = []
     with sync_playwright() as p:
         b = p.chromium.launch(headless=True, executable_path='/usr/bin/google-chrome' if os.path.exists('/usr/bin/google-chrome') else None, args=['--no-sandbox'])
         pg = b.new_page(accept_downloads=True, viewport={'width': 1300, 'height': 1000},
                         user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36')
-        for name in REPORTS:
+        for name in reports:
             out = f'{RAW}/tax/{name}.csv'
             try:
                 run(pg, name, out); print(name, os.path.getsize(out), 'bytes', flush=True)
             except Exception as e:
-                print('FAILED', name, str(e)[:200], '(keeping previous file if any)')
+                print('FAILED', name, str(e)[:200], '(keeping previous file if any)'); failed.append(name)
             time.sleep(3)
         b.close()
+    if failed:
+        print('FAILED reports:', failed); sys.exit(1)  # nonzero -> build_all marks the tax step failed/stale, not ok

@@ -729,6 +729,7 @@ function afChips(st){
   if(st.types.length) add('types','Property: '+afList(st.types,k=>TYPE_LABEL[k]||k),s=>{ s.types=[]; });
   if(st.wf) add('wf','Waterfront: '+lab(PFWF.OPTS,st.wf),s=>{ s.wf=''; });
   if(st.ut) add('ut','Power / water cut: '+lab(PFUT.OPTS,st.ut),s=>{ s.ut=''; });
+  if(st.utd) add('utd','Shut off within: '+lab(PFUT.DAYS,st.utd),s=>{ s.utd=0; });
   if(afNeed('mzq')){ const t=mzTokens(st.mzq); if(t.length) add('mzq','Zoning: '+afList(t,x=>x),s=>{ s.mzq=''; });
     if(st.mzSel.length) add('mzSel','Zoning by city: '+afList(st.mzSel,x=>{ const [j,k]=String(x).split('|'); return k+' ('+(j==='Miami-Dade County'?'unincorporated':j)+')'; }),s=>{ s.mzSel=[]; }); }
   if(afNeed('zones')){ if(st.zones.length) add('zones','Zoning type: '+afList(st.zones,k=>ZONE_LABEL[k]||k),s=>{ s.zones=[]; });

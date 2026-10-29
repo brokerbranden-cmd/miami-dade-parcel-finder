@@ -258,6 +258,7 @@
         <button class="btn" type="button" id="stExportBtn" title="Download the filtered properties as a CSV for a skip tracing provider (one row per owner)">Skip trace export</button>
         <label class="btn" for="stFile" tabindex="0" role="button" id="stImportLbl" title="Upload the provider's result CSV">Import results</label><input type="file" id="stFile" accept=".csv,.tsv,.txt,text/csv,text/plain" class="sr">
         <button class="btn" type="button" id="stTextBtn" title="Name, phone and address for your texting tool, then Mark as sent">Text list</button>
+        <button class="btn" type="button" id="scBtn" data-scexport="" title="CSV in Smarter Contact's upload format: one row per owner, skip traced phones best first, DNC / wrong numbers left out, then Mark as sent">Smarter Contact</button>
         <button class="btn" type="button" id="stTplBtn" title="Edit the email the Email button opens in your Outlook">Email template</button>
         <button class="btn" type="button" id="stHelpBtn">How it works</button>
       </div>
@@ -328,6 +329,7 @@
       <div class="sv-act">
         <button class="btn" type="button" id="svExportJson" title="Download your saved list with notes and statuses (to move it to another browser)">Export saved (JSON)</button>
         <button class="btn" type="button" id="svExportCsv">Export saved (CSV)</button>
+        <button class="btn" type="button" id="svScBtn" data-scexport="saved" title="This saved list / folder as a Smarter Contact upload (skip traced phones only)">Smarter Contact</button>
         <label class="btn" for="svImport" tabindex="0" role="button" id="svImportLbl" title="Merge a saved-list JSON file from another browser">Import saved (JSON)</label><input type="file" id="svImport" accept=".json,application/json" class="sr">
         <button class="btn" type="button" id="svBack">Back to search</button>
       </div>
@@ -357,7 +359,7 @@
     <div class="pipecols" id="pipeCols"></div>
   </div>
   <div class="trbox" id="trbox" hidden>
-    <div class="tr-h"><input type="search" id="trQ" placeholder="Search owner, address, phone or email" aria-label="Search skip traced properties"><select id="trSort" aria-label="Sort skip traced properties"><option value="date_d">Newest traced</option><option value="date_a">Oldest traced</option><option value="addr">Address A-Z</option><option value="owner">Owner A-Z</option><option value="phones">Most phones</option><option value="new">Not contacted first</option></select><button class="btn" type="button" id="trExport" title="Owner, property and mailing columns plus traced date, phones and emails">Export CSV</button></div>
+    <div class="tr-h"><input type="search" id="trQ" placeholder="Search owner, address, phone or email" aria-label="Search skip traced properties"><select id="trSort" aria-label="Sort skip traced properties"><option value="date_d">Newest traced</option><option value="date_a">Oldest traced</option><option value="addr">Address A-Z</option><option value="owner">Owner A-Z</option><option value="phones">Most phones</option><option value="new">Not contacted first</option></select><button class="btn" type="button" id="trExport" title="Owner, property and mailing columns plus traced date, phones and emails">Export CSV</button><button class="btn" type="button" id="trScBtn" data-scexport="traced" title="These skip traced properties as a Smarter Contact upload: one row per owner, phones best first">Smarter Contact</button></div>
     <div class="note" id="trInfo" role="status" aria-live="polite"></div>
     <div class="trlist" id="trList"></div>
   </div>
@@ -410,6 +412,7 @@
 <script src="skiptrace.js"></script>
 <script src="skiptrace-api.js"></script>
 <script src="skiptrace-ui.js"></script>
+<script src="smartercontact.js"></script>
 <script src="lenders.js"></script>
 <script src="teardown.js"></script>
 <script src="ask.js"></script>

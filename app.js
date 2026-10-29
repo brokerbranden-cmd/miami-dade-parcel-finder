@@ -348,7 +348,9 @@ async function drawAsmOutlines(){
 const SKS=window.PFSkip.store, SKU=window.PFSkipUI;
 const SEND_KEY=PFC.key('pf.send.v1');
 const TEAMS=[{k:'sms',label:'Text / SMS',noun:'text / SMS team',prefix:'TextSMS',act:'text'},{k:'cc',label:'Call center',noun:'call center',prefix:'CallCenter',act:'call'},{k:'dk',label:'Door knock',noun:'door knock',prefix:'DoorKnock',act:'door'},{k:'ml',label:'Mail',noun:'mail list',prefix:'Mail',act:'mailer'}];
-const teamOf=k=>TEAMS.find(t=>t.k===k);
+/* Smarter Contact (smartercontact.js): an export destination with its own Sent mark (sent numbers kept in sent[f].sc.ph), no Send-to tag button */
+const SC_DEST={k:'sc',label:'Smarter Contact',noun:'Smarter Contact list',prefix:'SmarterContact',act:'text'}, SENT_TO=[...TEAMS,SC_DEST];
+const teamOf=k=>SENT_TO.find(t=>t.k===k);
 const SEND=(()=>{ let o={}; try{ o=JSON.parse(localStorage.getItem(SEND_KEY)||'{}')||{}; }catch(e){} return {tags:o.tags&&typeof o.tags==='object'?o.tags:{}, sent:o.sent&&typeof o.sent==='object'?o.sent:{}}; })();
 let SEND_PENDING=null;
 const saveSend=()=>{ try{ localStorage.setItem(SEND_KEY,JSON.stringify(SEND)); }catch(e){ toast("Couldn't save the tags in this browser."); } };
@@ -365,11 +367,11 @@ function contSet(){ const o=new Set(Object.keys(SEND.sent).filter(wasSent)); for
 /* main CSV export -> "Mark these N as sent to" bar (sticky, brand orange) */
 let EXP_PENDING=null;
 function renderExpBar(){ const el=$('expBar'); if(!el) return; if(!EXP_PENDING){ el.hidden=true; el.innerHTML=''; return; } const n=EXP_PENDING.folios.length; el.hidden=false;
-  el.innerHTML=`<span><b>Exported ${EXP_PENDING.what?esc(EXP_PENDING.what):fmt.format(n)+' '+(n===1?'property':'properties')}.</b> Mark these ${fmt.format(n)} as sent ${EXP_PENDING.day} to:</span><select id="expTeam" aria-label="Sent to which list">${TEAMS.map(t=>`<option value="${t.k}" ${t.k===(EXP_PENDING.team||'')?'selected':''}>${t.label}</option>`).join('')}</select><button type="button" class="btn" id="expMark">Mark as sent</button><button type="button" class="btn ghost" id="expSkip">Not now</button>`; }
+  el.innerHTML=`<span><b>Exported ${EXP_PENDING.what?esc(EXP_PENDING.what):fmt.format(n)+' '+(n===1?'property':'properties')}.</b> Mark these ${fmt.format(n)} as sent ${EXP_PENDING.day} to:</span><select id="expTeam" aria-label="Sent to which list">${SENT_TO.map(t=>`<option value="${t.k}" ${t.k===(EXP_PENDING.team||'')?'selected':''}>${t.label}</option>`).join('')}</select><button type="button" class="btn" id="expMark">Mark as sent</button><button type="button" class="btn ghost" id="expSkip">Not now</button>`; }
 const ACT_CAP=2000;
 function expMark(k){ const P0=EXP_PENDING; EXP_PENDING=null; renderExpBar(); if(!P0) return; const t=teamOf(k), iso=new Date().toISOString(), td=todayDay(), list=P0.list||'Export '+P0.day;
-  P0.folios.forEach(f=>{ (SEND.sent[f]||(SEND.sent[f]={}))[k]={d:P0.day,t:iso,list}; }); saveSend();
-  let lg=0; SV.batch(()=>{ for(const f of P0.folios){ if(lg>=ACT_CAP) break; SV.logActivity(f,{type:t.act,d:td,outcome:'Sent to list',note:`${t.label} · ${list}`},savedInfo(P0.ids.get(f))); lg++; } });
+  P0.folios.forEach(f=>{ const o=SEND.sent[f]||(SEND.sent[f]={}), ph=k==='sc'&&P0.ph&&P0.ph[f], prev=(k==='sc'&&o.sc&&o.sc.ph)||[]; o[k]={d:P0.day,t:iso,list}; if(ph) o[k].ph=[...new Set([...prev,...ph])]; }); saveSend();
+  let lg=0; SV.batch(()=>{ for(const f of P0.folios){ if(lg>=ACT_CAP) break; const id=P0.ids.get(f); SV.logActivity(f,{type:t.act,d:td,outcome:'Sent to list',note:`${t.label} · ${list}`},id!=null?savedInfo(id):undefined); lg++; } });
   P0.folios.forEach(refreshSendUi); renderSend(); toast(`Marked ${fmt.format(P0.folios.length)} as sent ${P0.day} to ${t.label}`+(lg<P0.folios.length?` (activity logged on the first ${fmt.format(lg)})`:'')); if(S.cont||S.hideSent) run(); }
 const tagCount=k=>Object.values(SEND.tags).filter(r=>r&&r[k]).length;
 const dayStr=d=>{ d=new Date(d); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
@@ -380,7 +382,7 @@ function markEmailed(f,addrs,id){ addrs=[].concat(addrs).filter(Boolean); const 
   if(SV.has(f)) SV.logActivity(f,{type:'email',d:todayDay(),outcome:'',note:(addrs.length>1?'Emailed (BCC) ':'Emailed ')+addr+' from Outlook'},id!=null&&id>=0?savedInfo(id):undefined);
   refreshSendUi(f); if(S.view==='traced') renderTraced(); if(S.cont||S.hideSent) run(); }
 const emailedTo=(f,addr)=>{ const s=sentOf(f,'em'); return s&&s.addrs&&s.addrs[addr]||null; };
-function sentBadges(folio){ return emBadge(folio)+TEAMS.map(t=>{ const s=sentOf(folio,t.k); return s?`<span class="sentb" title="Exported to the ${t.noun} list ${s.list?'“'+esc(s.list)+'” ':''}on ${s.d}. It won't be exported to the ${t.noun} again unless you retag it or press Re-send.">${t.label} · Sent ${s.d} <button type="button" class="resend" data-resend="${t.k}" data-folio="${folio}">Re-send</button></span>`:''; }).join(''); }
+function sentBadges(folio){ return emBadge(folio)+SENT_TO.map(t=>{ const s=sentOf(folio,t.k); return s?`<span class="sentb" title="Exported to the ${t.noun} list ${s.list?'“'+esc(s.list)+'” ':''}on ${s.d}. It won't be exported to the ${t.noun} again unless you retag it or press Re-send.">${t.label} · Sent ${s.d} <button type="button" class="resend" data-resend="${t.k}" data-folio="${folio}">Re-send</button></span>`:''; }).join(''); }
 const mzTokens = q => q.toUpperCase().split(/[\s,;]+/).map(t=>t.trim()).filter(Boolean);
 const mzKey=i=>MZ[i]?MZ[i][1]+'|'+MZ_UP[i]:'';
 function mzAllow(q){ const toks=mzTokens(q); if(!toks.length && !S.mzSel.size) return null; const a=new Uint8Array(MZ.length); for(let i=1;i<MZ.length;i++){ const c=MZ_UP[i]; if(S.mzSel.size && S.mzSel.has(mzKey(i))){ a[i]=1; continue; } for(const t of toks){ if(c===t || c.startsWith(t)){ a[i]=1; break; } } } return a; }
@@ -1023,7 +1025,7 @@ function trRows(){ const fs=[...SKS.tracedSet()], ids=folioIds(fs), q=TR.q.trim(
   const cmp={date_d:(a,b)=>(b.r.a||'').localeCompare(a.r.a||'')||a.addr.localeCompare(b.addr), date_a:(a,b)=>(a.r.a||'').localeCompare(b.r.a||'')||a.addr.localeCompare(b.addr), addr:(a,b)=>(a.addr||'~').localeCompare(b.addr||'~',undefined,{numeric:true}), owner:(a,b)=>(a.owner||'~').localeCompare(b.owner||'~'), phones:(a,b)=>b.r.p.length-a.r.p.length||(b.r.a||'').localeCompare(a.r.a||''), new:(a,b)=>(a.c-b.c)||(b.r.a||'').localeCompare(a.r.a||'')}[TR.sort]||((a,b)=>0);
   return out.sort(cmp); }
 function trStatus(f){ const em=sentOf(f,'em'), other=wasSent(f)&&Object.keys(SEND.sent[f]).some(k=>k!=='em'), lt=SV.lastTouch(f);
-  return (em?emBadge(f):'')+(other?TEAMS.map(t=>{ const s=sentOf(f,t.k); return s?`<span class="sentb">${t.label} · Sent ${esc(s.d)}</span>`:''; }).join(''):'')+(lt&&lt.type!=='email'?`<span class="sentb">Contacted · ${esc(ACT_LABEL[lt.type]||lt.type)} ${esc(lt.d)}</span>`:'')+(contacted(f)?'':'<span class="trnew">Not contacted</span>'); }
+  return (em?emBadge(f):'')+(other?SENT_TO.map(t=>{ const s=sentOf(f,t.k); return s?`<span class="sentb">${t.label} · Sent ${esc(s.d)}</span>`:''; }).join(''):'')+(lt&&lt.type!=='email'?`<span class="sentb">Contacted · ${esc(ACT_LABEL[lt.type]||lt.type)} ${esc(lt.d)}</span>`:'')+(contacted(f)?'':'<span class="trnew">Not contacted</span>'); }
 function renderTraced(){ const all=SKS.count(), rows=trRows(), lim=500, show=rows.slice(0,lim);
   $('trQ').value=TR.q; $('trSort').value=TR.sort;
   $('trInfo').textContent=all?`${fmt.format(rows.length)}${rows.length!==all?' of '+fmt.format(all):''} skip traced ${all===1?'property':'properties'} in ${PFC.cfg.name} County ${window.PFSync&&PFSync.on?'(synced with your team)':'on this device'}${rows.length>lim?` · showing the first ${lim}, refine the search or export the CSV for all`:''}. Results from the one-click skip trace (BatchData Worker) and imported files are kept here.`:`No skip traced properties in ${PFC.cfg.name} County on this device yet. Use Skip trace on a card, Skip trace these, or Import results in the filters panel.`;
@@ -2082,6 +2084,15 @@ async function boot(){
         for(const p of PACKS){ if(!p) continue; pk=p; const fo=strCol(p,'folio'), zc=p.c.zip, fl=p.c.flags;
           for(let i=0;i<p.n;i++){ ii=i; cur.folio=fo[i]; cur.addr=getStr(p,'addr',i); cur.zip=D.zip[zc[i]]||''; cur.gov=!!(fl[i]&FLAG.govt); cb(cur); done++; if(done>=nextY){ nextY=done+25000; if(prog) prog(Math.round(done/total*100)); await new Promise(r=>setTimeout(r,0)); } } }
         if(prog) prog(100); },
+      /* Smarter Contact export sources (smartercontact.js): current results, the saved list / open folder, the Skip traced view */
+      sentAll:()=>SEND.sent,
+      scSources:()=>{ const fid=SVF.cur, fn=fid?SV.folderName(fid):'', ns=fid?SV.folderCount(fid):SV.count(), out=[{k:'results',label:`Current results (${fmt.format(results.length)})`}];
+        if(SV.count()) out.push({k:'saved',label:`${fid?'Saved folder “'+fn+'”':'Saved list'} (${fmt.format(ns)})`}); if(SKS.count()) out.push({k:'traced',label:`Skip traced view (${fmt.format(SKS.count())}${TR.q.trim()?', matching “'+TR.q.trim()+'”':''})`});
+        return S.view==='traced'?[out.find(x=>x.k==='traced'),...out.filter(x=>x.k!=='traced')]:S.saved?[...out.filter(x=>x.k==='saved'),...out.filter(x=>x.k!=='saved')]:out; },
+      scItems:async src=>{ await ensureDetail();
+        if(src==='saved'){ await ensureSavedPacks(); const fid=SVF.cur, ids=savedIdx(); const L=SV.list().filter(x=>!fid||x.folders.includes(fid)), o=L.filter(x=>SKS.hasPhone(x.folio)).map(x=>{ const id=ids.get(x.folio); return id!=null?{id,x:skInfo(id)}:{id:null,x:{folio:x.folio,addr:x.addr||'',city:x.city||'',zip:x.zip||'',owner:x.owner||'',mail:x.mail||'',gov:false}}; }); o.total=L.length; return o; }
+        if(src==='traced'){ const L=trRows(), o=L.filter(x=>x.r.p.length).map(x=>x.id!=null?{id:x.id,x:skInfo(x.id)}:{id:null,x:{folio:x.f,addr:x.addr||'',city:x.city||'',zip:x.zip||'',owner:x.owner||'',mail:x.mail||'',gov:false}}); o.total=L.length; return o; }
+        const out=[]; for(let j=0;j<results.length;j++){ const id=results[j], f=getStr(P(id),'folio',I(id)); if(SKS.hasPhone(f)) out.push({id,x:skInfo(id)}); } out.total=results.length; return out; },
       setPending:o=>{ EXP_PENDING=o; renderExpBar(); }, showPhones:()=>{ S.hasPhone=true; S.saved=false; clearIdea(); run(); }, rerender:()=>{ run(); }, run };
     window.PF={skBridge, expStat:()=>({...EXPSTAT}), cmReady:()=>!!CM, cmMeta:()=>CM&&CM.meta, cmGet:f=>CMM.get(f)||null, cmMissing:async fs=>{ if(!PACKS[1]) await loadPack(1,'Loading condo units…'); const all=new Set(); PACKS.forEach(p=>{ if(p){ const c=strCol(p,'folio'); for(let i=0;i<p.n;i++) all.add(c[i]); } }); return fs.filter(f=>!all.has(f)); }, META,D,PACKS,P,I,getStr,LU_T,TYPE_LABEL,SV,esc,money,fmt,dollars,dateStr,monYr,folioFmt,today,toast,savedInfo,loadGeo,loadLeaflet,openDrawer,scoreBadge,vacBadge,sigBadges,ensureSavedPacks,savedIdx,stKey,svDate,download,stamp,csvq,
       setSaved:on=>{ S.saved=!!on; run(); }, rerun:()=>run(),

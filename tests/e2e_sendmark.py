@@ -26,7 +26,7 @@ with sync_playwright() as pw:
     pg.wait_for_selector('#expBar:not([hidden])'); bar = pg.inner_text('#expBar')
     ok(f'Mark these {n:,}' in bar and 'as sent' in bar, f'sticky bar after main export: "{bar[:80]}"')
     ok(pg.evaluate("getComputedStyle(document.getElementById('expBar')).position") == 'sticky', 'bar is sticky')
-    opts = pg.eval_on_selector_all('#expTeam option', 'e=>e.map(x=>x.textContent)'); ok(opts == ['Text / SMS', 'Call center', 'Door knock', 'Mail'], f'team options {opts}')
+    opts = pg.eval_on_selector_all('#expTeam option', 'e=>e.map(x=>x.textContent)'); ok(opts == ['Text / SMS', 'Call center', 'Door knock', 'Mail', 'Smarter Contact'], f'team options {opts}')
     pg.select_option('#expTeam', 'sms'); pg.click('#expMark'); pg.wait_for_timeout(1500)
     ok(pg.is_hidden('#expBar'), 'bar closes after marking')
     f0 = rows[1][10].replace('-', ''); it = pg.evaluate(f'PF.SV.get("{f0}")')

@@ -35,6 +35,8 @@ run broward_lp_unit python3 tests/unit_broward_lp.py
 for m in desktop mobile; do
   for t in scenarios e2e_export e2e_monroe e2e_monroe_city e2e_broward e2e_broward_signals e2e_layout_counties e2e_filter_audit e2e_email e2e_traced e2e_folders e2e_ask e2e_equity e2e_waterfront e2e_utility e2e_pr e2e_activefilters; do run "${t#e2e_}_$m" python3 tests/$t.py "$U" $m; done
 done
+run smartercontact_unit node tests/unit_smartercontact.js
+for m in desktop mobile; do run "smartercontact_$m" python3 tests/e2e_smartercontact.py "$U" $m; done
 run county python3 tests/e2e_county.py "$U"
 echo "# DONE $(date +%T) logs: $L" >> "$S"
 nf=$(grep -c '^FAIL' "$S"); echo "$(grep -c '^PASS' "$S") passed, $nf failed ($S)"

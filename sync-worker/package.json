@@ -1,0 +1,8 @@
+{
+  "name": "parcel-sync-worker",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker + D1: team sync of saved properties and skip trace results, behind Cloudflare Access",
+  "scripts": { "test": "node test/sync.test.mjs" }
+}

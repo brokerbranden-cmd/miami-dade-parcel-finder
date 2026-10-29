@@ -12,7 +12,7 @@ mkdir -p "$WORK/site" "$WORK/node_modules"          # node_modules: wrangler wri
 git -C "$ROOT" archive "$SHA" | tar -x -C "$WORK/site"
 cd "$WORK/site"
 # only the web app is published: no tests, screenshots, build scripts, Worker source or notes
-rm -rf shots tests test_runs scripts worker logs docs drafts raw out .github .gitignore
+rm -rf shots tests test_runs scripts worker sync-worker logs docs drafts raw out .github .gitignore
 find . -maxdepth 1 -name '*.md' -delete
 # a top-level 404.html turns off Pages' single-page-app fallback (unknown paths return 404, not index.html)
 printf '<!doctype html><meta charset="utf-8"><title>Not found</title><p>Not found. <a href="/">Open Parcel Finder</a></p>\n' > 404.html

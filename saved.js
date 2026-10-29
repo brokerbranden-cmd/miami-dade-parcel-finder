@@ -4,7 +4,9 @@
    For an async/remote backend, fetch remote data and call PFSaved.importJSON(data) (newest edit per folio wins),
    and subscribe with PFSaved.onChange(fn) to push local edits upstream.
    Item shape: {folio, savedAt, updatedAt, status, note, vacant, cond, addr, city, zip, pack, stage, next, acts}
-   Outreach: stage (STAGES), next = next follow-up 'YYYY-MM-DD' or '', acts = [{id, d:'YYYY-MM-DD', type, outcome, note, at}] newest first.
+   Outreach: stage (STAGES), next = next follow-up 'YYYY-MM-DD' or '', acts = [{id, d:'YYYY-MM-DD', type, outcome, note, at, by}] newest first.
+   Team sync (sync.js, private site): by / noteBy / statusBy = email of whoever last edited the item / its note / its status or stage
+   (acts carry by too); only set when signed in, so the public copy stores nothing extra. PFSaved.reload() re-reads storage after a sync.
    (ISO timestamps; vacant = your own 'looks vacant / damaged' mark, cond = condition note; pack = 'main' | 'condo'). */
 (function(){
   "use strict";
@@ -13,9 +15,11 @@
   const STAGES = ['New','Contacted','Follow-up','Offer','Under contract','Closed','Dead'];
   const ACT_TYPES = [['call','Call'],['text','Text'],['mailer','Mailer'],['door','Door knock'],['email','Email'],['note','Note']];
   const OUTCOMES = ['','No answer','Left voicemail','Talked','Interested','Not interested','Call back later','Wrong number','Do not contact','Offer made','Sent to list'];
+  const me = () => (window.PFSync && window.PFSync.user) || '';
+  const isEmail = v => typeof v === 'string' && v.length <= 120 && /^[^\s@]+@[^\s@]+$/.test(v);
   const isDay = v => typeof v === 'string' && /^\d{4}-\d\d-\d\d$/.test(v) && !isNaN(Date.parse(v));
   const cleanAct = a => (a && typeof a === 'object' && ACT_TYPES.some(t => t[0] === a.type) && isDay(a.d)) ? { id: String(a.id || ('a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7))).slice(0, 40), d: a.d, type: a.type,
-      outcome: OUTCOMES.includes(a.outcome) ? a.outcome : '', note: typeof a.note === 'string' ? a.note.slice(0, 2000) : '', at: (typeof a.at === 'string' && !isNaN(Date.parse(a.at))) ? a.at : new Date().toISOString() } : null;
+      outcome: OUTCOMES.includes(a.outcome) ? a.outcome : '', note: typeof a.note === 'string' ? a.note.slice(0, 2000) : '', at: (typeof a.at === 'string' && !isNaN(Date.parse(a.at))) ? a.at : new Date().toISOString(), ...(isEmail(a.by) ? { by: a.by } : {}) } : null;
   const sortActs = l => l.sort((x, y) => (y.d + y.at) < (x.d + x.at) ? -1 : 1);
   const localBackend = {
     load(){ try{ return JSON.parse(localStorage.getItem(KEY) || '{}'); }catch(e){ return {}; } },
@@ -38,6 +42,7 @@
       pack: x.pack === 'condo' ? 'condo' : 'main',
       stage: STAGES.includes(x.stage) ? x.stage : 'New', next: isDay(x.next) ? x.next : '',
       acts: sortActs((Array.isArray(x.acts) ? x.acts : []).map(cleanAct).filter(Boolean)).slice(0, 500),
+      ...(isEmail(x.by) ? { by: x.by } : {}), ...(isEmail(x.noteBy) ? { noteBy: x.noteBy } : {}), ...(isEmail(x.statusBy) ? { statusBy: x.statusBy } : {}),
       folders: (() => { const a = Array.isArray(x.folders) ? [...new Set(x.folders.filter(v => typeof v === 'string' && /^[a-z0-9]{1,24}$/.test(v)))].slice(0, 50) : null; return a && a.length ? a : ['default']; })() };   // older items (no folders) land in the default folder
   }
   function clean(obj){ const out = {}; if(obj && typeof obj === 'object') for(const [f, x] of Object.entries(obj)){ const c = cleanItem(x, f); if(c) out[c.folio] = c; } return out; }
@@ -53,7 +58,9 @@
   window.addEventListener('storage', e => { if(e.key === FKEY){ folders = cleanFolders(JSON.parse(e.newValue || '[]')); emit('folders'); } if(e.key === KEY){ items = clean(backend.load()); emit('external'); } });   // another tab changed the list
 
   const api = {
-    STATUSES, STAGES, ACT_TYPES, OUTCOMES, KEY,
+    STATUSES, STAGES, ACT_TYPES, OUTCOMES, KEY, FKEY,
+    /* re-read items and folders from storage (team sync wrote newer copies) */
+    reload(){ items = clean(backend.load()); try{ folders = cleanFolders(JSON.parse(localStorage.getItem(FKEY) || '[]')); }catch(e){} emit('external'); },
     get rev(){ return rev; }, get error(){ return lastError; },
     /* run many add/update/logActivity calls with one storage write + one change event (bulk Mark as sent) */
     batch(fn){ batching++; try{ fn(); } finally { batching--; if(!batching && dirty){ dirty = false; persist('batch'); } } },
@@ -71,11 +78,14 @@
       for(const x of Object.values(items)) if(x.folders.includes(id)){ x.folders = x.folders.filter(v => v !== id); if(!x.folders.length) x.folders = ['default']; }
       saveFolders(); persist('folders'); return true; },
     setFolders(f, ids){ if(!items[f]) return null; const ok = new Set(folders.map(x => x.id)); const a = [...new Set(ids)].filter(v => ok.has(v)); return api.update(f, { folders: a.length ? a : ['default'] }); },
-    add(f, info, fids){ if(items[f]) return items[f]; const t = now(); items[f] = cleanItem({ ...info, folders: Array.isArray(fids) && fids.length ? fids.filter(v => folders.some(x => x.id === v)) : ['default'], folio: f, savedAt: t, updatedAt: t, status: 'New', note: '', vacant: false, cond: '' }); persist('add', f); return items[f]; },
-    update(f, patch){ if(!items[f]) return null; const c = cleanItem({ ...items[f], ...patch, folio: f, savedAt: items[f].savedAt, updatedAt: now() }); if(c){ items[f] = c; persist('update', f); } return items[f]; },
+    add(f, info, fids){ if(items[f]) return items[f]; const t = now(); items[f] = cleanItem({ ...info, folders: Array.isArray(fids) && fids.length ? fids.filter(v => folders.some(x => x.id === v)) : ['default'], folio: f, savedAt: t, updatedAt: t, status: 'New', note: '', vacant: false, cond: '', by: me() }); persist('add', f); return items[f]; },
+    update(f, patch){ if(!items[f]) return null; const cur = items[f], u = me(), who = u ? { by: u } : {};
+      if(u && patch.note !== undefined && patch.note !== cur.note) who.noteBy = u;
+      if(u && ((patch.status !== undefined && patch.status !== cur.status) || (patch.stage !== undefined && patch.stage !== cur.stage))) who.statusBy = u;
+      const c = cleanItem({ ...cur, ...patch, ...who, folio: f, savedAt: cur.savedAt, updatedAt: now() }); if(c){ items[f] = c; persist('update', f); } return items[f]; },
     remove(f){ if(!items[f]) return; delete items[f]; persist('remove', f); },
     /* outreach: logging on an unsaved property saves it first; the first contact moves a New lead to Contacted */
-    logActivity(f, act, info){ const a = cleanAct(act); if(!a) return null; if(!items[f]) api.add(f, info || {}); const cur = items[f];
+    logActivity(f, act, info){ const a = cleanAct(me() && act && !act.by ? { ...act, by: me() } : act); if(!a) return null; if(!items[f]) api.add(f, info || {}); const cur = items[f];
       const acts = sortActs([a, ...cur.acts.filter(x => x.id !== a.id)]).slice(0, 500), patch = { acts };
       if(cur.stage === 'New' && a.type !== 'note' && a.outcome !== 'Sent to list') patch.stage = 'Contacted'; if(a.outcome === 'Offer made' && ['New','Contacted','Follow-up'].includes(cur.stage)) patch.stage = 'Offer';
       api.update(f, patch); return a; },

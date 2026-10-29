@@ -272,6 +272,11 @@ body.saved-mode #panel{opacity:.55}
 .svbox{border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:8px;padding:12px;margin:12px 0;display:grid;gap:6px;background:var(--sunk)}
 .svbox.off{border-left-color:var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .svhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* team sync (private site): who edited, sync status pill */
+.byw{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:11px}
+.syncpill{font-size:12px;white-space:nowrap}
+.syncpill[data-state=ok]{color:#1a7f37}
+.syncpill[data-state=offline],.syncpill[data-state=signin],.syncpill[data-state=error]{color:#b35900;border-color:#b35900}
 .svsave{display:inline-flex;align-items:center;gap:7px}
 .svsave svg{width:17px;height:17px;fill:none;stroke:var(--brand);stroke-width:2;stroke-linejoin:round}
 .svsave.on{border-color:var(--brand)} .svsave.on svg{fill:var(--brand)}

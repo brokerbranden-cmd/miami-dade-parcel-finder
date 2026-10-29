@@ -1,0 +1,18 @@
+# Parcel Finder team sync Worker. Deploy: cd sync-worker && npx wrangler deploy   (no secrets: the Access identifiers below are public)
+name = "parcel-sync"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+# never on workers.dev: the only way in is through Cloudflare Access on app.prop-hunters.com
+workers_dev = false
+preview_urls = false
+routes = [ { pattern = "app.prop-hunters.com/sync-api/*", zone_name = "prop-hunters.com" } ]
+
+[vars]
+ALLOWED_ORIGIN = "https://app.prop-hunters.com"
+ACCESS_TEAM_DOMAIN = "prophunters.cloudflareaccess.com"
+ACCESS_AUD = "72a000a8f09b8ac8534ae40ccec12b617d2474b67ad0be651b8f4417078cb868"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "parcel-sync"
+database_id = "9c09b223-621b-40af-ba44-1b011bf1193e"

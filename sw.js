@@ -5,7 +5,7 @@
    - map tiles (Esri / OSM, CORS only): stale-while-revalidate, capped at ~1,500 tiles
    Nothing is sent anywhere: this only caches GET requests the page already makes. */
 const SHELL = 'pf-shell-v33', DATA = 'pf-data', TILES = 'pf-tiles', MAX_TILES = 1500;
-const SHELL_FILES = ['./', 'index.html', 'deterrents.js', 'counties.js', 'styles.css', 'ui.css', 'ui.js', 'teardown.js', 'ask.js', 'equity.js', 'waterfront.js', 'utility.js', 'app.js', 'saved.js', 'skiptrace.js', 'skiptrace-api.js', 'skiptrace-ui.js', 'drive.js', 'lenders.js', 'lenders-page.js', 'manifest.webmanifest',
+const SHELL_FILES = ['./', 'index.html', 'deterrents.js', 'counties.js', 'sync.js', 'styles.css', 'ui.css', 'ui.js', 'teardown.js', 'ask.js', 'equity.js', 'waterfront.js', 'utility.js', 'app.js', 'saved.js', 'skiptrace.js', 'skiptrace-api.js', 'skiptrace-ui.js', 'drive.js', 'lenders.js', 'lenders-page.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(SHELL).then(c => Promise.all(SHELL_FILES.map(u => c.add(new Request(u, { cache: 'reload' })).catch(() => null)))).then(() => self.skipWaiting()));
@@ -58,7 +58,7 @@ self.addEventListener('fetch', e => {
     if (/\/data\/(?:[\w-]+\/)?meta\.json$/.test(u.pathname)) return e.respondWith(networkFirst(req, DATA));
     if (/\/data\/.+\.(gz|json)$/.test(u.pathname) && u.searchParams.has('v')) return e.respondWith(dataCacheFirst(req));
     if (/\/data\//.test(u.pathname)) return;
-    if (/^\/(skiptrace-api|cdn-cgi)\//.test(u.pathname)) return;   // skip trace Worker (private site) and Cloudflare Access endpoints: never cached
+    if (/^\/(skiptrace-api|sync-api|cdn-cgi)\//.test(u.pathname)) return;   // skip trace + team sync Workers (private site) and Cloudflare Access endpoints: never cached
     return e.respondWith(networkFirst(req, SHELL, req.mode === 'navigate' ? 'index.html' : undefined));
   }
   if (/\/tile\/\d+\/\d+\/\d+$/.test(u.pathname) || /tile\.openstreetmap\.org$/.test(u.hostname)) return e.respondWith(tileSWR(req));

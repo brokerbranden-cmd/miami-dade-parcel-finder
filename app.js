@@ -352,6 +352,10 @@ const teamOf=k=>TEAMS.find(t=>t.k===k);
 const SEND=(()=>{ let o={}; try{ o=JSON.parse(localStorage.getItem(SEND_KEY)||'{}')||{}; }catch(e){} return {tags:o.tags&&typeof o.tags==='object'?o.tags:{}, sent:o.sent&&typeof o.sent==='object'?o.sent:{}}; })();
 let SEND_PENDING=null;
 const saveSend=()=>{ try{ localStorage.setItem(SEND_KEY,JSON.stringify(SEND)); }catch(e){ toast("Couldn't save the tags in this browser."); } };
+/* team sync (sync.js, private site only): newer Send-to tags / call results / bad-email marks arrived from another device -> reload + redraw */
+const SYNC_BY=e=>window.PFSync&&e?esc(window.PFSync.who(e)):'';
+window.addEventListener('pf-sync',ev=>{ const ns=(ev.detail&&ev.detail.ns)||[]; if(ns.includes(SEND_KEY)){ let o={}; try{ o=JSON.parse(localStorage.getItem(SEND_KEY)||'{}')||{}; }catch(e){} SEND.tags=o.tags&&typeof o.tags==='object'?o.tags:{}; SEND.sent=o.sent&&typeof o.sent==='object'?o.sent:{}; }
+  if(!ns.some(k=>k===SEND_KEY||k==='pf.phoneres.v1'||k==='pf.bademail.v1')||!$('trList')) return; try{ if(S.view==='traced') renderTraced(); else run(); }catch(e){} });
 const isTagged=(f,k)=>!!(SEND.tags[f]&&SEND.tags[f][k]);
 const sentOf=(f,k)=>SEND.sent[f]&&SEND.sent[f][k]||null;
 const wasSent=f=>!!(SEND.sent[f]&&Object.keys(SEND.sent[f]).length);
@@ -1003,7 +1007,7 @@ function outInner(folio){ const x=SV.get(folio)||{stage:'New',next:'',acts:[]}, 
     <div class="note">${lt?`Last touch: ${esc(ACT_LABEL[lt.type])} ${esc(lt.d)}${lt.outcome?' · '+esc(lt.outcome):''}`:'No contact logged yet.'}</div>
     <div class="outlog"><select id="actType" aria-label="Activity">${SV.ACT_TYPES.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select><input type="date" id="actDate" value="${t}" aria-label="Activity date">
       <select id="actOutcome" aria-label="Outcome">${SV.OUTCOMES.map(o=>`<option value="${esc(o)}">${o?esc(o):'Outcome…'}</option>`).join('')}</select><input type="text" id="actNote" maxlength="2000" placeholder="Note (optional)" aria-label="Activity note"><button class="btn primary" type="button" id="actAdd">Log</button></div>
-    ${x.acts.length?`<ul class="actlist">${x.acts.map(a=>`<li data-act="${esc(a.id)}"><b>${esc(ACT_LABEL[a.type])}</b> ${esc(a.d)}${a.outcome?' · '+esc(a.outcome):''}${a.note?`<small>${esc(a.note)}</small>`:''} <button type="button" class="lnk" data-actdel="${esc(a.id)}">Delete</button></li>`).join('')}</ul>`:''}
+    ${x.acts.length?`<ul class="actlist">${x.acts.map(a=>`<li data-act="${esc(a.id)}"><b>${esc(ACT_LABEL[a.type])}</b> ${esc(a.d)}${a.outcome?' · '+esc(a.outcome):''}${a.note?`<small>${esc(a.note)}</small>`:''}${a.by?` <span class="byw" title="${esc(a.by)}">by ${SYNC_BY(a.by)}</span>`:''} <button type="button" class="lnk" data-actdel="${esc(a.id)}">Delete</button></li>`).join('')}</ul>`:''}
     <div class="note">Logging an activity saves the property to your saved list. Back up from the Pipeline view.</div>`; }
 function outreachHTML(id,folio){ return `<h3>Outreach</h3><div class="outbox" id="outBox" data-folio="${folio}" data-id="${id}">${outInner(folio)}</div>`; }
 function outFolios(){ if(!S.due&&!S.stage) return null; const t=todayDay(), out=new Set(); for(const x of SV.list()){ if(S.due&&!SV.dueState(x.folio,t)) continue; if(S.stage&&x.stage!==S.stage) continue; out.add(x.folio); } return out; }
@@ -1021,7 +1025,7 @@ function trStatus(f){ const em=sentOf(f,'em'), other=wasSent(f)&&Object.keys(SEN
   return (em?emBadge(f):'')+(other?TEAMS.map(t=>{ const s=sentOf(f,t.k); return s?`<span class="sentb">${t.label} · Sent ${esc(s.d)}</span>`:''; }).join(''):'')+(lt&&lt.type!=='email'?`<span class="sentb">Contacted · ${esc(ACT_LABEL[lt.type]||lt.type)} ${esc(lt.d)}</span>`:'')+(contacted(f)?'':'<span class="trnew">Not contacted</span>'); }
 function renderTraced(){ const all=SKS.count(), rows=trRows(), lim=500, show=rows.slice(0,lim);
   $('trQ').value=TR.q; $('trSort').value=TR.sort;
-  $('trInfo').textContent=all?`${fmt.format(rows.length)}${rows.length!==all?' of '+fmt.format(all):''} skip traced ${all===1?'property':'properties'} in ${PFC.cfg.name} County on this device${rows.length>lim?` · showing the first ${lim}, refine the search or export the CSV for all`:''}. Results from the one-click skip trace (BatchData Worker) and imported files are kept here.`:`No skip traced properties in ${PFC.cfg.name} County on this device yet. Use Skip trace on a card, Skip trace these, or Import results in the filters panel.`;
+  $('trInfo').textContent=all?`${fmt.format(rows.length)}${rows.length!==all?' of '+fmt.format(all):''} skip traced ${all===1?'property':'properties'} in ${PFC.cfg.name} County ${window.PFSync&&PFSync.on?'(synced with your team)':'on this device'}${rows.length>lim?` · showing the first ${lim}, refine the search or export the CSV for all`:''}. Results from the one-click skip trace (BatchData Worker) and imported files are kept here.`:`No skip traced properties in ${PFC.cfg.name} County on this device yet. Use Skip trace on a card, Skip trace these, or Import results in the filters panel.`;
   $('trList').innerHTML=show.map(x=>{ const r=x.r, ph=(SKU.noteSite(x.f,x.addr,x.city),SKU.shown(r).map(q=>SKU.phoneHTML(q.q,q.g,false,x.f)).join('')), em=SKU.ownerBtn(x.f)+r.e.map(SKU.emailHTML).join('');
     return `<article class="trrow${x.id==null?' missing':''}" data-trow="${x.f}" ${x.id!=null?`data-id="${x.id}"`:''} tabindex="0" aria-label="${esc(x.addr||folioFmt(x.f))}. Open details">
       <div class="trmain"><b class="traddr">${esc(x.addr||'No street address')}</b><span class="trcity">${esc(x.city)} ${esc(x.zip)}</span><span class="trowner">${esc(x.owner||r.n||'')}</span><small>Traced ${esc(r.a||'')}${r.s?' · '+esc(r.s):''} · Folio ${esc(folioFmt(x.f))}</small></div>
@@ -1044,12 +1048,12 @@ function renderPipe(){ const ids=savedIdx(), t=todayDay(), by=Object.fromEntries
 function savedBoxHTML(id,folio){
   const sv=SV.get(folio);
   if(!sv) return `<div class="svbox off"><button type="button" class="btn svsave" data-star="${folio}" data-id="${id}" aria-pressed="false">${STAR_SVG}Save this property</button><span class="note">Keep it on your saved list with a status and notes.</span></div>`;
-  return `<div class="svbox"><div class="svhead"><button type="button" class="btn svsave on" data-star="${folio}" data-id="${id}" aria-pressed="true" title="Remove from saved">${STAR_SVG}Saved</button><span class="note">Saved ${svDate(sv.savedAt)}${sv.updatedAt!==sv.savedAt?' · edited '+svDate(sv.updatedAt):''}</span></div>${folderLine(folio)}
-    <label class="svl" for="svStatusSel">Status</label><select id="svStatusSel">${SV.STATUSES.map(s=>`<option ${s===sv.status?'selected':''}>${s}</option>`).join('')}</select>
-    <label class="svl" for="svNote">Notes</label><textarea id="svNote" rows="3" placeholder="Called owner, left voicemail…" maxlength="5000">${esc(sv.note)}</textarea>
+  return `<div class="svbox"><div class="svhead"><button type="button" class="btn svsave on" data-star="${folio}" data-id="${id}" aria-pressed="true" title="Remove from saved">${STAR_SVG}Saved</button><span class="note">Saved ${svDate(sv.savedAt)}${sv.updatedAt!==sv.savedAt?' · edited '+svDate(sv.updatedAt):''}${sv.by?` <span class="byw" title="${esc(sv.by)}">by ${SYNC_BY(sv.by)}</span>`:''}</span></div>${folderLine(folio)}
+    <label class="svl" for="svStatusSel">Status${sv.statusBy?` <span class="byw" title="${esc(sv.statusBy)}">· set by ${SYNC_BY(sv.statusBy)}</span>`:''}</label><select id="svStatusSel">${SV.STATUSES.map(s=>`<option ${s===sv.status?'selected':''}>${s}</option>`).join('')}</select>
+    <label class="svl" for="svNote">Notes${sv.noteBy?` <span class="byw" title="${esc(sv.noteBy)}">· by ${SYNC_BY(sv.noteBy)}</span>`:''}</label><textarea id="svNote" rows="3" placeholder="Called owner, left voicemail…" maxlength="5000">${esc(sv.note)}</textarea>
     <label class="check svvac"><input type="checkbox" id="svVacant" ${sv.vacant?'checked':''}> Looks vacant / damaged</label>
     <label class="svl" for="svCond">Condition note</label><textarea id="svCond" rows="2" placeholder="Boarded windows, tall grass, roof tarp…" maxlength="2000">${esc(sv.cond||'')}</textarea>
-    <span class="note" id="svNoteMsg">Notes save automatically in this browser.</span></div>`;
+    <span class="note" id="svNoteMsg">${window.PFSync&&PFSync.on?'Notes save automatically and sync to your team.':'Notes save automatically in this browser.'}</span></div>`;
 }
 
 function teardownHTML(p,i){
@@ -1780,7 +1784,7 @@ function wireSaved(){
   $('drawerHost').addEventListener('click',e=>{ const a=e.target.closest('[data-finadd]'), d=e.target.closest('[data-findeal]'); if(!a&&!d) return; const UI=window.PFLendersUI; if(!UI) return; $('drawerHost').innerHTML=''; MAP_SEL=-1; if(a) UI.addDeal(a.dataset.finadd); else UI.editDeal(d.dataset.findeal); });
   if(window.PFLenders) window.PFLenders.onChange(()=>{ const box=$('finBox'), sb=$('savedBox'); if(box&&sb) box.innerHTML=finHTML(sb.dataset.folio); });
   $('drawerHost').addEventListener('change',e=>{ if(e.target.id==='svVacant'){ const f=$('savedBox').dataset.folio; SV.update(f,{vacant:e.target.checked}); toast(e.target.checked?'Marked as looking vacant / damaged':'Vacant mark removed'); return; } if(e.target.id==='svStatusSel'){ const f=$('savedBox').dataset.folio; SV.update(f,{status:e.target.value}); toast('Status: '+e.target.value); } });
-  let nt=null; $('drawerHost').addEventListener('input',e=>{ const id=e.target.id; if(id!=='svNote'&&id!=='svCond') return; const f=$('savedBox').dataset.folio, v=e.target.value; clearTimeout(nt); $('svNoteMsg').textContent='Saving…'; nt=setTimeout(()=>{ SV.update(f,id==='svNote'?{note:v}:{cond:v}); const m=$('svNoteMsg'); if(m) m.textContent=SV.error||'Saved in this browser.'; },400); });
+  let nt=null; $('drawerHost').addEventListener('input',e=>{ const id=e.target.id; if(id!=='svNote'&&id!=='svCond') return; const f=$('savedBox').dataset.folio, v=e.target.value; clearTimeout(nt); $('svNoteMsg').textContent='Saving…'; nt=setTimeout(()=>{ SV.update(f,id==='svNote'?{note:v}:{cond:v}); const m=$('svNoteMsg'); if(m) m.textContent=SV.error||(window.PFSync&&PFSync.on?'Saved · syncing to your team.':'Saved in this browser.'); },400); });
 }
 
 /* send to: tagging, export, mark as sent */

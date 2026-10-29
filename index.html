@@ -331,7 +331,7 @@
         <label class="btn" for="svImport" tabindex="0" role="button" id="svImportLbl" title="Merge a saved-list JSON file from another browser">Import saved (JSON)</label><input type="file" id="svImport" accept=".json,application/json" class="sr">
         <button class="btn" type="button" id="svBack">Back to search</button>
       </div>
-      <p class="note">Your saved list lives in this browser only. Use Export / Import to move it between computers; importing merges by folio and keeps the most recent edit.</p>
+      <p class="note" id="svSyncNote">Your saved list lives in this browser only. Use Export / Import to move it between computers; importing merges by folio and keeps the most recent edit.</p>
     </div>
     <div class="resbar">
       <div>
@@ -405,6 +405,7 @@
   <dialog id="lpDialog" class="lpdialog" aria-label="Lender or deal form"></dialog>
 </div>
 <script src="counties.js"></script>
+<script src="sync.js"></script>
 <script src="saved.js"></script>
 <script src="skiptrace.js"></script>
 <script src="skiptrace-api.js"></script>

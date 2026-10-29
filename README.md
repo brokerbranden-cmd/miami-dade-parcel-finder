@@ -486,6 +486,7 @@ one common table (`address, city, disconnect_date, service_type, status, source,
     python3 scripts/utility_lists.py --list
     python3 scripts/utility_lists.py broward pompano_beach pompano_beach_cut_list_2026-09 "raw/.../Sep Cut List.xlsx"
     python3 scripts/utility_lists.py broward deerfield_beach deerfield_beach_cut_list_2026-09 raw/.../DOC09*.pdf
+    python3 scripts/utility_lists.py broward dania_beach dania_beach_PRR-2026-530 "raw/utility_shutoffs/_src/dania_beach/"*.pdf
     python3 scripts/build_utility.py broward
 
 - **Personal data:** only service address, date, service type and the row's status / work-order code are kept. Customer names, account / customer
@@ -507,4 +508,9 @@ one common table (`address, city, disconnect_date, service_type, status, source,
   full pack rebuild, so it is left for the next data refresh.
 - **Current lists (Broward):** Pompano Beach "Sep Cut List" (XLSX work orders; date = work-order close date; completion codes PBF / FNLF are not
   documented by the city), Deerfield Beach UT521L "Delinquent notice cut list for crewmen" (scanned PDFs, OCR; date = run date; a
-  *scheduled* cut for non-payment, not a confirmed disconnect), Coral Springs PRR-30368 water lock-offs, Margate open utility liens.
+  *scheduled* cut for non-payment, not a confirmed disconnect), Coral Springs PRR-30368 water lock-offs, Margate open utility liens, Wilton Manors NextRequest 26-2115 "Off List" (clean XLSX; date = shut-off
+  completion date; one 'YEARS EMPTY LOT' row has no date and is counted as older than 12 months via meta `undated: older`), Dania Beach
+  PRR-2026-530 "Work Report - Post Shut-Off" (text-layer PDFs, one per cycle, read by word x position because long customer names run into
+  the address column; date = shut-off day in the page header; `S/S`, `SPSY`, `SP/SY`, `SPR/SYS`, `IRR` = the separate sprinkler-meter account at
+  that address (status "(sprinkler meter)"), not a unit; an address repeated on later cycles keeps its latest date). Trailing `FRONT` / `REAR`
+  units match the base street address.

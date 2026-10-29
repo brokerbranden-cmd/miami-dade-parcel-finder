@@ -3,7 +3,7 @@
   python3 scripts/build_utility.py miami-dade|broward|monroe      -> data/<dir>/utility.json.gz
 Signals, most accurate first (bit, code):
   1 'list'  Utility shutoff list: a utility's own list of service addresses shut off / disconnected (public-records request, Fla. ch. 119).
-            Drop CSV / XLSX into $RAW/utility_shutoffs/<county>/ (optional sidecar <file>.meta.json: source, city, kind (water|power|lien), label, sheet, header_row, address_col, date_col;
+            Drop CSV / XLSX into $RAW/utility_shutoffs/<county>/ (optional sidecar <file>.meta.json: source, city, kind (water|power|lien), label, sheet, header_row, address_col, date_col, undated ('older' = a non-date note in the date column counts as older than 12 months);
             kind 'lien' = a city's open utility-lien listing (unpaid water / utility bill liened to the parcel), same top tier, label 'Utility lien (open)';
             unmatched rows -> <county>/unmatched/<file>_unmatched.csv) (any column names containing 'address' (service address), optional
             'city' / 'zip', a date column ('shut', 'disconnect' or 'date'), optional 'service' / 'type' and 'utility'); rows are matched to
@@ -126,7 +126,7 @@ def fuzzy_hits(idx, n):
     cand = idx.get('H:' + hn) or []
     longer = {k for k, f, z in cand if k.startswith(c) and len(c) >= len(hn) + 3}
     if len(longer) == 1: return [(f, z) for k, f, z in cand if k in longer], 'prefix', ''
-    shorter = sorted({k for k, f, z in cand if c.startswith(k) and len(c) - len(k) <= 4 and len(k) >= len(hn) + 4}, key=len)
+    shorter = sorted({k for k, f, z in cand if c.startswith(k) and (len(c) - len(k) <= 4 or c[len(k):] == 'FRONT') and len(k) >= len(hn) + 4}, key=len)   # 'FRONT' = front unit ('2209 NE 15 AVE FRONT', Wilton Manors / Dania Beach)
     if shorter: k = shorter[-1]; return [(f, z) for kk, f, z in cand if kk == k], 'base+unit', c[len(k):]
     w = street_only(n).split()
     if len(w) > 3 and re.fullmatch(r'\d{1,2}', w[1]) and not w[2].isdigit() and w[2] not in DIRW and w[2] not in SUFV:   # '405 30 GARDENS DR' (building no.)
@@ -302,7 +302,7 @@ for fn in sorted(glob.glob(os.path.join(UD, '*.csv')) + glob.glob(os.path.join(U
         nrow += 1; n = norm_addr(a1.replace('$', 'S') if m.get('ocr') else a1); n = ocr_fix(n) if m.get('ocr') else n; z = re.sub(r'\D', '', str(r.get(cz) or ''))[:5] if cz else ''
         if not z and a2: zm = re.search(r'\b(\d{5})(?:-\d{4})?\s*$', a2.strip()); z = zm.group(1) if zm else ''
         d = d10(r.get(cd)) if cd else ''
-        if d and d < C12: nold += 1; continue
+        if (d and d < C12) or (cd and not d and m.get('undated') == 'older'): nold += 1; continue   # meta undated 'older': a non-date note in the date column ('YEARS EMPTY LOT', Wilton Manors) = off for years
         hits = idx.get(n) or idx.get('S:' + n) or idx.get('S:' + street_only(n)) or []
         mu = re.match(r'^(.* (?:ST|AVE|RD|DR|CT|PL|TER|BLVD|LN|CIR|HWY|PKWY|WAY|TRL|MNR|CIRCLE)) ([A-Z]|\d{1,3})$', n)
         if not hits and mu:   # trailing unit / building token without APT/UNIT ('3991 WOODSIDE DR B', '11000 NW 44 ST W'): base street address, max 4 parcels
@@ -326,6 +326,7 @@ for fn in sorted(glob.glob(os.path.join(UD, '*.csv')) + glob.glob(os.path.join(U
         lab = m.get('label') or {'water': 'Water shut off', 'power': 'Power shut off', 'service': 'Service shut off', 'lien': 'Utility lien (open)'}[kind]
         src = m.get('source') or ('Utility shutoff list: ' + ((r.get(cu) or '').strip() if cu else util))
         stv = (r.get(cst) or '').strip() if cst else ''
+        if cst and cst == cd and d: stv = ''   # status picked = the date column ('COMPLETION DATE', Wilton Manors): keep only non-date notes ('YEARS EMPTY LOT')
         for f in fs: add(f, 1, d, lab, src, stv)
     if unm and not os.environ.get('UT_OUT'):
         os.makedirs(UNM_DIR, exist_ok=True); up = os.path.join(UNM_DIR, os.path.splitext(os.path.basename(fn))[0] + '_unmatched.csv')

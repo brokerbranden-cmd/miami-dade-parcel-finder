@@ -1838,7 +1838,7 @@ function renderWf(){ const sel=$('wfSel'); if(!sel) return; const f=facet.wfc, d
   const nt=$('wfNote'); if(nt&&d){ const miss=[['ocean','Oceanfront / open water'],['bay','Bay / Intracoastal'],['canal','Canal'],['lake','Lake or other water']].filter(([k])=>!(d.counts||{})[k]).map(x=>x[1]);
     nt.hidden=!miss.length; nt.textContent=miss.length?`${miss.join(', ')}: none mapped in ${PFC.cfg.name}${(d.notes&&d.notes.length)?' ('+d.notes.join(' ')+')':' (no water of that kind next to parcels in the map sources)'}.`:''; } }
 /* power / water cut layer (every county): data/<county>/utility.json.gz, folio-keyed, indexed into p.ut per pack */
-let utTried=0; const UT_VER='4';
+let utTried=0; const UT_VER='5';
 async function ensureUt(){ if(PFUT.data) return; if(utTried>2) return; try{ await PFUT.load({fetchJSON:n=>gzJSON(DP+n+'?v='+META.ver+'-u'+UT_VER), folioCol:p=>strCol(p,'folio'), packs:PACKS}); renderUt(); }catch(e){ utTried++; const s=$('utSrc'); if(s) s.textContent='Power / water data did not load ('+PFUT.err+').'; } }
 function renderUt(){ const sel=$('utSel'); if(!sel) return; const f=facet.utc, d=PFUT.data;
   if(sel.options.length!==PFUT.OPTS.length) sel.innerHTML=PFUT.OPTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');

@@ -11,7 +11,7 @@ Counties are never mixed: one county per run, matching (build_utility.py) is res
 Add a city: write parse_<city>(files) -> (rows, skipped, meta) and register it in PARSERS. Lists that are already a clean
 CSV / XLSX with a service-address column can skip this step and go straight into $RAW/utility_shutoffs/<county>/ with a
 sidecar <file>.meta.json (that is how Coral Springs PRR-30368 and the Margate open-lien listing are loaded)."""
-import os, sys, re, csv, json, glob, subprocess, datetime as dt
+import os, sys, re, csv, json, glob, subprocess, collections, datetime as dt
 RAW = os.environ.get('RAW', '/workspace/raw'); HERE = os.path.dirname(os.path.abspath(__file__))
 COLS = ['address', 'city', 'disconnect_date', 'service_type', 'status', 'source', 'source_file']
 COUNTIES = ('miami-dade', 'broward', 'monroe')
@@ -140,7 +140,70 @@ def parse_deerfield_beach(files):
     return rows, skipped, {'source': 'Deerfield Beach water cut list (Sep 2026)', 'short': 'Deerfield Beach cut list', 'kind': 'water', 'city': 'Deerfield Beach',
                            'ocr': True, 'date_meaning': 'cut list run date (crews cut after this date unless paid)', 'per_file': totals}
 
-PARSERS = {'pompano_beach': ('broward', parse_pompano_beach), 'deerfield_beach': ('broward', parse_deerfield_beach)}
+# ---------- Dania Beach (Broward): text-layer PDFs "Work Report - Post Shut-Off" (one per cycle / shut-off day) ----------
+# Each account block: [account no., CUSTOMER NAME, SERVICE ADDRESS, phones, balances] / ['Dania Beach, FL, 33004', ...] / meter lines.
+# Read with pdftotext -bbox (word x positions), because long customer names run into the address column
+# ('A LONG COMPANY NAME 12 LLC 100 NE 1 AVE'): the address = words on the account line from the x where the block's city line
+# ('Dania Beach, FL') starts up to the 'Home' phone label, plus any wrapped address words between the two lines in that column.
+# Only the service address, the page header 'Shut-Off - MM/DD/YYYY' date and the service type (water; the city has no electric) are kept.
+# 'S/S', 'SPSY', 'SP/SY', 'SPR/SYS' = the separate sprinkler-system (irrigation) meter account at that address, not a unit:
+# the token is removed for matching and the row status says 'sprinkler meter'. Repeats of an address (same or later cycle) are
+# collapsed to one row per address + meter kind, keeping the latest shut-off date (meta 'repeats').
+DANIA_SPR = re.compile(r'(?<!\S)(S/S|SPSY|SP/SY|SPR/SYS|SPR/SY|SP/SYS|SPRSYS|SPRINKLER|IRR)(?!\S)', re.I)
+# billing / meter-location notes typed after the street (not units): 'WBILL', 'TEMP', 'COMMERCIAL', 'DOCK MET', 'LAUN RAV'
+DANIA_NOTE = re.compile(r'(?<!\S)(WBILL|TEMP|COMMERCIAL|DOCK MET|LAUN RAV)$', re.I)
+def bbox_pages(pdf):
+    import html
+    h = subprocess.run(['pdftotext', '-bbox', pdf, '-'], capture_output=True, text=True, check=True).stdout; pages = []
+    for pg in h.split('<page ')[1:]:
+        pages.append([(float(a), float(b), float(c), html.unescape(html.unescape(t))) for a, b, c, t in
+                      re.findall(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="[\d.]+">(.*?)</word>', pg)])
+    return pages
+def parse_dania_beach(files):
+    best, skipped, per, rep = {}, [], {}, 0
+    for fn in sorted(files):
+        nacc = 0; total = None; dates = set()
+        for pi, words in enumerate(bbox_pages(fn), start=1):
+            lines = collections.OrderedDict()
+            for x0, y0, x1, t in sorted(words, key=lambda w: (round(w[1], 0), w[0])):
+                k = next((y for y in lines if abs(y - y0) < 2.5), y0); lines.setdefault(k, []).append((x0, x1, t))
+            ys = sorted(lines); txt = {y: ' '.join(w[2] for w in sorted(lines[y])) for y in ys}
+            m = next((re.search(r'Shut-Off - (\d\d/\d\d/\d{4})', txt[y]) for y in ys if re.search(r'Shut-Off - \d', txt[y])), None)
+            d = iso(m.group(1)) if m else ''; d and dates.add(d)
+            for y in ys:
+                g = re.search(r'Grand Total Accounts (\d+)', txt[y]); total = int(g.group(1)) if g else total
+            for i, y in enumerate(ys):
+                ws = sorted(lines[y])
+                if not ws or not re.fullmatch(r'\d+-\d{3}', ws[0][2]) or ws[0][0] > 80: continue
+                nacc += 1
+                cy = next((y2 for y2 in ys[i + 1:i + 5] if re.search(r'dania beach, fl', txt[y2], re.I)), None)
+                if cy is None:
+                    skipped.append({'source_file': os.path.basename(fn), 'row': f'page {pi}', 'reason': 'no city line under the account line', 'date': d}); continue
+                cx = next(w[0] for w in sorted(lines[cy]) if re.fullmatch(r'dania', w[2], re.I))
+                hx = next((w[0] for w in ws if w[2] in ('Home', 'Work', 'Cell')), 9e9)
+                parts = [w[2] for w in ws if cx - 1.5 <= w[0] < hx]
+                for y2 in ys[i + 1:]:
+                    if y2 >= cy: break
+                    parts += [w[2] for w in sorted(lines[y2]) if cx - 1.5 <= w[0] < hx]   # wrapped address ('1464 S DIXIE (AKA PHIPPEN RD)' / 'HWY')
+                a0 = clean_addr(' '.join(parts)); spr = bool(DANIA_SPR.search(a0))
+                a = clean_addr(DANIA_NOTE.sub('', clean_addr(re.sub(r'\s*\((?:AKA|A/K/A)[^)]*\)', ' ', DANIA_SPR.sub(' ', a0)))))
+                if not re.match(r'^\d+(-\d+)? \S', a):   # '332-334 SE 2 AVE' (address range) is kept
+                    skipped.append({'source_file': os.path.basename(fn), 'row': f'page {pi}', 'reason': f'no street number in service address ({a!r})', 'date': d}); continue
+                key = (a.upper(), spr)
+                if key in best:
+                    rep += 1
+                    if d <= best[key]['disconnect_date']: continue
+                best[key] = {'address': a, 'city': 'Dania Beach', 'disconnect_date': d, 'service_type': 'water',
+                             'status': 'water shut off for nonpayment' + (' (sprinkler meter)' if spr else ''),
+                             'source': 'Dania Beach water shutoff', 'source_file': os.path.basename(fn)}
+        per[os.path.basename(fn)] = {'shut_off_date': ','.join(sorted(dates)), 'accounts_read': nacc, 'report_total': total}
+        print(f'{os.path.basename(fn)}: shut-off {sorted(dates)}, {nacc} accounts read, report total {total}', file=sys.stderr)
+    rows = sorted(best.values(), key=lambda r: (r['disconnect_date'], r['address']))
+    return rows, skipped, {'source': 'Dania Beach water shutoff (PRR-2026-530)', 'short': 'Dania Beach shutoff list', 'kind': 'water', 'city': 'Dania Beach',
+                           'date_meaning': 'post shut-off work report date (water shut off for nonpayment)', 'request': 'PRR-2026-530', 'released': '2026-10-28',
+                           'per_file': per, 'repeats': rep, 'accounts_total': sum(v['accounts_read'] for v in per.values())}
+
+PARSERS = {'pompano_beach': ('broward', parse_pompano_beach), 'deerfield_beach': ('broward', parse_deerfield_beach), 'dania_beach': ('broward', parse_dania_beach)}
 
 def main(a):
     if a[:1] == ['--list'] or len(a) < 4:

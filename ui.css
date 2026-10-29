@@ -238,6 +238,7 @@ td.stcell,th.stcol{min-width:230px}td.stcell .stl{min-height:24px;padding:0 7px}
 .stl.stown:hover{filter:brightness(1.1);background:var(--accent,#0b6b75)}
 .stl.stemb{font-weight:500}
 
+.evb{font-size:11px;font-weight:700;border-radius:4px;padding:0 5px;margin:0 4px;color:#fff;background:#6b7280;white-space:nowrap}.evb.evverified{background:#0a7a3f}.evb.evrisky{background:#b45309}.evb.evbad{background:#991b1b}.evb.evunchecked{background:#6b7280}.stown.risky{border-style:dashed}
 .stem.bad{opacity:.55}.stem.bad s{text-decoration:line-through}.badem{font-size:11px;font-weight:700;color:#8a5a00;border:1px solid #c9a35a;border-radius:4px;padding:0 5px;margin:0 4px}.stbad{font-size:11px;margin-left:4px}
 
 /* ideas a county lacks the data for: shown, disabled (2026-10-22) */

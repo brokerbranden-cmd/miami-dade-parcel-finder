@@ -95,48 +95,55 @@ with sync_playwright() as pw:
     check_url(last(), 'owner.b@example.com', tc(A2['owner'].split()[0]), ac(A2['addr'].strip()), 'Saved list', A2.get('city'))
     it = pg.evaluate(f"PF.SV.get({json.dumps(A2['folio'])})") or {}
     ok(it.get('acts') and it['acts'][0]['type'] == 'email' and 'owner.b@example.com' in it['acts'][0]['note'] and it.get('stage') == 'Contacted', 'Saved: email activity logged, stage Contacted')
-    # Email owner: one message, To = Branden, BCC = owner's emails (deduped, invalid skipped, max 5), repeat warning lists the emailed ones
+    # Email owner: one message, To = Branden, BCC = owner's verified emails (deduped, invalid skipped, max 2), repeat warning lists the emailed ones
+    VER = lambda *a: pg.evaluate(f"PFSkipApi.EV.put({json.dumps([{'e': e, 'v': 'verified', 'why': 'test'} for e in a])})")
+    VER('x1@example.com', 'x2@example.com', 'x3@example.com', 'x4@example.com', 'x5@example.com')
     from urllib.parse import unquote
     D0 = A2
     EM = ['x1@example.com', 'X1@Example.com', 'not-an-email', 'x2@example.com', 'x3@example.com']
     pg.evaluate(f"(()=>{{ const k={json.dumps(skey('miami-dade'))}, o=JSON.parse(localStorage.getItem(k)||'{{}}'); o[{json.dumps(D0['folio'])}]={{a:'2026-10-19',s:'test',n:'',p:[],e:{json.dumps(EM)}}}; localStorage.setItem(k,JSON.stringify(o)); PFSkip.store.reload(); PF.rerun(); }})()"); pg.wait_for_timeout(1500)
     go(f'q={D0["folio"]}&hg=0'); ob = f'.card[data-folio="{D0["folio"]}"] [data-stown]'; pg.wait_for_selector(ob, timeout=60000)
-    ok(pg.inner_text(ob).strip() == 'Email owner (3)' and pg.query_selector(f'.card[data-folio="{D0["folio"]}"] [data-stemail]') is not None, f'card: one "Email owner" button ({pg.inner_text(ob).strip()}) + per-email buttons kept')
+    ok(pg.inner_text(ob).strip() == 'Email owner (2)' and pg.query_selector(f'.card[data-folio="{D0["folio"]}"] [data-stemail]') is not None, f'card: one "Email owner" button ({pg.inner_text(ob).strip()}) + per-email buttons kept')
     n0 = opened(); pg.click(ob); pg.wait_for_timeout(800); u = last()
     ok(opened() == n0 + 1 and u.startswith(DEEP.replace('?', '?mailtouri=mailto%3A')), f'Email owner opens one Outlook web compose via mailtouri ({u[:90]})')
     mt = unquote(u.split('mailtouri=', 1)[1]); q = parse_qs(urlsplit(mt).query); to = mt[7:].split('?')[0]
     bcc = (q.get('bcc') or [''])[0].split(',')
     ok(to == 'Branden@prop-hunters.com', f'To is Branden@prop-hunters.com ({to})')
-    ok(bcc == ['x1@example.com', 'x2@example.com', 'x3@example.com'], f'BCC deduped, invalid skipped: {bcc}')
-    ok(pg.evaluate("PFSkipUI.BCC_MAX") == 5, 'BCC capped at 5')
+    ok(bcc == ['x1@example.com', 'x2@example.com'], f'BCC deduped, invalid skipped, verified only, max 2: {bcc}')
+    ok(pg.evaluate("PFSkipUI.BCC_MAX") == 2, 'BCC capped at 2')
     bd = (q.get('body') or [''])[0].replace('\r\n', '\n'); fd = tc(D0['owner'].split()[0])
     ok(bd.startswith(f'Hey {fd},') and '(305) 812-9445' in bd and 'http' not in bd and 'rather not hear' not in bd, 'owner email body: template, plain text, no links, no opt-out line')
     em = (json.loads(pg.evaluate(f"localStorage.getItem({json.dumps(sendkey('miami-dade'))})") or '{}').get('sent', {}).get(D0['folio']) or {}).get('em') or {}
     ok(set(bcc) <= set(em.get('addrs', {})), f'every BCC address recorded as emailed: {sorted(em.get("addrs", {}))}')
     ok(pg.query_selector(f'.card[data-folio="{D0["folio"]}"] .emb') is not None, 'card shows Emailed')
     n1 = opened(); pg.click(ob); pg.wait_for_selector('#stEmAgain', timeout=10000); wt = pg.inner_text('#stEmAgain')
-    ok(all(x in wt for x in bcc) and 'x4@example.com' not in wt, 'repeat warning lists every address already emailed')
+    ok(all(x in wt for x in bcc) and 'x3@example.com' not in wt, 'repeat warning lists every address already emailed')
     pg.click('[data-stclose]'); pg.wait_for_timeout(300)
     pg.evaluate(f"(()=>{{ const k={json.dumps(skey('miami-dade'))}, o=JSON.parse(localStorage.getItem(k)); o[{json.dumps(D0['folio'])}].e=['x1@example.com','x2@example.com','x3@example.com','x4@example.com','x5@example.com']; localStorage.setItem(k,JSON.stringify(o)); PFSkip.store.reload(); PF.rerun(); }})()"); pg.wait_for_timeout(1500)
     pg.click(ob); pg.wait_for_selector('#stEmNew', timeout=10000)
     pg.click('#stEmNew'); pg.wait_for_timeout(600); u2 = unquote(last().split('mailtouri=', 1)[1])
-    ok(opened() == n1 + 1 and (parse_qs(urlsplit(u2).query).get('bcc') or [''])[0] == 'x4@example.com,x5@example.com', f'"Email only the new" BCCs the 2 not yet emailed')
+    ok(opened() == n1 + 1 and (parse_qs(urlsplit(u2).query).get('bcc') or [''])[0] == 'x3@example.com,x4@example.com', f'"Email only the new" BCCs the not yet emailed (verified, max 2)')
     aid = pg.get_attribute(f'.card[data-folio="{D0["folio"]}"]', 'data-id'); pg.evaluate(f"PF.openDrawer({aid})"); pg.wait_for_selector('.stdraw [data-stown]', timeout=60000); ok(True, 'drawer has Email owner'); pg.keyboard.press('Escape'); pg.wait_for_timeout(400)
     pg.evaluate("localStorage.setItem('pf.emailtpl.v1', JSON.stringify({mode:'mailto', to_addr:'me@prop-hunters.com'}))")
     ok(pg.evaluate(f"PF.skBridge && (()=>{{ return true; }})()"), 'bridge')
     pg.click(ob); pg.wait_for_selector('#stEmGo'); pg.click('#stEmGo'); pg.wait_for_timeout(500); lm = pg.evaluate('window.PF_LAST_EMAIL')
-    ok(lm['url'].startswith('mailto:me@prop-hunters.com?bcc=x1@example.com,') and lm['mode'] == 'mailto', f'mailto mode: To from settings + bcc= ({lm["url"][:70]})')
+    ok(lm['url'].startswith('mailto:me@prop-hunters.com?bcc=') and len(lm['bcc']) == 2 and lm['mode'] == 'mailto', f'mailto mode: To from settings + bcc= ({lm["url"][:70]})')
+    # no verified address: only the single best one goes out
+    pg.evaluate(f"PFSkipApi.EV.put({json.dumps([{'e': e, 'v': 'risky', 'why': 'test'} for e in ['x1@example.com', 'x2@example.com', 'x3@example.com', 'x4@example.com', 'x5@example.com']])})"); pg.wait_for_timeout(800)
+    ok(pg.inner_text(ob).strip() == 'Email owner' and pg.evaluate(f"PFSkipUI.sendPick(PFSkipUI.ownerEmails({json.dumps(D0['folio'])}))") == ['x1@example.com'], f'none verified: Email owner BCCs only the best-ranked risky address ({pg.inner_text(ob).strip()!r} {pg.evaluate(f"PFSkipUI.sendPick(PFSkipUI.ownerEmails({json.dumps(D0[chr(102)+"olio"])}))")})')
+    VER('x1@example.com', 'x2@example.com')
     pg.evaluate("localStorage.removeItem('pf.emailtpl.v1')")
-    # Bad email: known bounces pre-marked; mark by hand; bad ones dimmed, no Email button, left out of BCC
-    pg.evaluate(f"(()=>{{ const k={json.dumps(skey('miami-dade'))}, o=JSON.parse(localStorage.getItem(k)); o[{json.dumps(D0['folio'])}].e=['Cal_L_Cox@yahoo.com','x1@example.com','x2@example.com']; localStorage.setItem(k,JSON.stringify(o)); PFSkip.store.reload(); }})()"); pg.wait_for_timeout(1500)
+    # Bad email: bounces on the shared list (served by the Worker) are bad; mark by hand; bad ones dimmed, no Email button, left out of BCC
+    pg.evaluate("PFSkipApi.BADS.map()['sam_q_lee@yahoo.com'] = 'bounced: recipient rejected'")
+    pg.evaluate(f"(()=>{{ const k={json.dumps(skey('miami-dade'))}, o=JSON.parse(localStorage.getItem(k)); o[{json.dumps(D0['folio'])}].e=['Sam_Q_Lee@yahoo.com','x1@example.com','x2@example.com']; localStorage.setItem(k,JSON.stringify(o)); PFSkip.store.reload(); }})()"); pg.wait_for_timeout(1500)
     aid = pg.get_attribute(f'.card[data-folio="{D0["folio"]}"]', 'data-id'); pg.evaluate(f"PF.openDrawer({aid})"); pg.wait_for_selector('.stdraw .stem.bad', timeout=60000)
-    ok('Bad email' in pg.inner_text('.stdraw') and pg.query_selector('.stdraw [data-stemail="Cal_L_Cox@yahoo.com"]') is None, 'known bounce pre-marked Bad email, dimmed, no Email button')
+    ok(pg.inner_text('.stdraw .stem.bad .evb').strip() == 'Bad' and pg.query_selector('.stdraw [data-stemail="Sam_Q_Lee@yahoo.com"]') is None, 'shared-list bounce shows Bad, dimmed, no Email button')
     ok(pg.inner_text('.stdraw [data-stown]').strip() == 'Email owner (2)', 'bad email left out of Email owner BCC')
     pg.click('.stdraw [data-stbad="x2@example.com"][data-v="1"]'); pg.wait_for_selector('.stdraw [data-stbad="x2@example.com"][data-v="0"]', timeout=10000)
     ok(pg.query_selector('.stdraw [data-stemail="x2@example.com"]') is None and pg.inner_text('.stdraw [data-stown]').strip() == 'Email owner', 'marking by hand: dimmed, no Email button, out of BCC')
     ok(pg.evaluate("PFSkipUI.isBad('x2@example.com') && JSON.parse(localStorage.getItem('pf.bademail.v1'))['x2@example.com'] === true"), 'bad mark saved in the browser')
     pg.click('.stdraw [data-stbad="x2@example.com"][data-v="0"]'); pg.wait_for_selector('.stdraw [data-stemail="x2@example.com"]', timeout=10000); ok(True, 'Unmark restores the Email button')
-    ok(pg.evaluate("PFSkipUI.isBad('jamesw830@earthlink.com') && PFSkipUI.isBad('arinajohanajulio@yahoo.es')"), 'all three known bounces pre-marked')
+    src = pg.evaluate("fetch('skiptrace-ui.js').then(r=>r.text())"); ok(not re.search(r'[\w.+-]+@(yahoo|earthlink|juno|aol|gmail)\.', src), 'no bounced addresses hardcoded in the public site code')
     pg.keyboard.press('Escape'); pg.wait_for_timeout(400)
     # stored templates: an unedited copy of the old default migrates to the new one; an edited one is kept
     OLD = "Hi {owner_first},\n\nMy name is {my_name} with Prop Hunters. I'm a local buyer and wanted to see if you'd consider an offer on {property_address}. No repairs or agents needed.\n\nIf you're open to a quick conversation, you can reach me at {my_phone}.\n\nThanks,\n{my_name}\n\nIf you'd rather not hear from me, just reply and let me know."

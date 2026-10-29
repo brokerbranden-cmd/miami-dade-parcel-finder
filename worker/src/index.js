@@ -6,8 +6,13 @@
                      ACCESS_TEAM_DOMAIN (e.g. prophunters.cloudflareaccess.com) + ACCESS_AUD (Access application AUD tag): when both are set, a valid Cloudflare Access login
                      (Cf-Access-Jwt-Assertion header / CF_Authorization cookie, RS256-verified against the team's public certs) is accepted instead of the access code.
    Routes:  GET /health (public, no secrets)   GET /status (access code or Access login)   POST /skiptrace (access code or Access login)
+            POST /emails/check {emails:[{e, rank, tested, owner}] | [string]}  -> a verdict per address (verified / risky / bad + reason), see email.js
+            GET /emails/bad  -> the shared bad-address list (bounces marked on any device)   POST /emails/bad {items:[{email, bad, why}]} -> mark / unmark
+            (all /emails routes need the access code or an Access login; the list lives in KV key 'bad_emails', never in this repo)
             Also served under the prefix /skiptrace-api (Worker route app.prop-hunters.com/skiptrace-api/* behind Cloudflare Access).
    Nothing personal is logged or stored: the Durable Object only keeps counters (per day, per IP request times and failed-code times). */
+
+import { checkMany, normEmailV, badList, saveBadList, mailboxProvider, mailboxKey } from './email.js';
 
 const BD_URL = 'https://api.batchdata.com/api/v3/property/skip-trace';
 const DEFAULT_ORIGIN = 'https://brokerbranden-cmd.github.io';
@@ -121,16 +126,26 @@ function mapEntry(d) {
   const persons = (Array.isArray(d && d.persons) ? d.persons : []).filter(p => p && typeof p === 'object' && !p.deceased);
   const owners = persons.filter(p => p.propertyOwner); const use = (owners.length ? owners : persons).slice(0, 3);
   const phones = [], emails = []; let name = '';
-  for (const p of use) {
+  const em = [];
+  use.forEach((p, pi) => {
     if (!name && p.name) name = S(p.name.full || [p.name.first, p.name.last].filter(Boolean).join(' '), 80);
     const lit = p.litigator === true;
     const list = (Array.isArray(p.phones) ? p.phones : []).slice().sort((a, b) => (a.rank || 99) - (b.rank || 99));
     // 16 = last reported within 2 years, 32 = older (feeds phone grades in skiptrace.js)
     const recency = d => { const t = Date.parse(d || ''); if (!t) return 0; return Date.now() - t < 730 * 864e5 ? 16 : 32; };
     for (const ph of list) { const n = normPhone(ph.number); if (!n || phones.some(x => x[0] === n)) continue; phones.push([n, phoneType(ph.type), (ph.dnc === true ? 1 : 0) | (lit || ph.tcpa === true ? 2 : 0) | (ph.reachable === true ? 4 : 0) | (ph.reachable === false ? 8 : 0) | recency(ph.lastReportedDate)]); }
-    for (const e of Array.isArray(p.emails) ? p.emails : []) { const m = normEmail(e && (e.email || e)); if (m && !emails.includes(m)) emails.push(m); }
-  }
-  return { phones: phones.slice(0, 8), emails: emails.slice(0, 5), name, hasPerson: persons.length > 0 };
+    (Array.isArray(p.emails) ? p.emails : []).forEach((e, ei) => {
+      const m = normEmail(e && (e.email || e)); if (!m) return;
+      const rank = Number.isFinite(+(e && e.rank)) && +e.rank > 0 ? +e.rank : ei + 1, tested = !!(e && e.tested === true), owner = p.propertyOwner === true;
+      const old = em.find(x => x.e === m);
+      if (old) { old.tested = old.tested || tested; if (rank < old.rank && owner >= old.owner) old.rank = rank; return; }
+      em.push({ e: m, rank, tested, owner, pi });
+    });
+  });
+  // the actual owner's addresses first, then BatchData's rank (1 = best), then person order
+  em.sort((a, b) => (b.owner - a.owner) || (a.rank - b.rank) || (a.pi - b.pi));
+  const info = em.slice(0, 5).map(({ e, rank, tested, owner }) => ({ e, rank, tested, owner }));
+  return { phones: phones.slice(0, 8), emails: info.map(x => x.e), emailInfo: info, name, hasPerson: persons.length > 0 };
 }
 // parse BatchData's response into one result per sent request (index = request position)
 function parseUpstream(body, sent) {
@@ -144,19 +159,23 @@ function parseUpstream(body, sent) {
     const m = mapEntry(d);
     if (meta.matched === false || !m.hasPerson) out[idx] = { status: 'nomatch' };
     else if (!m.phones.length && !m.emails.length) out[idx] = { status: 'nocontact', name: m.name };
-    else out[idx] = { status: 'match', name: m.name, phones: m.phones, emails: m.emails };
+    else out[idx] = { status: 'match', name: m.name, phones: m.phones, emails: m.emails, emailInfo: m.emailInfo };
   });
   return out;
 }
 
 /* ---------- routes ---------- */
+const EMAIL_PATHS = ['/emails/check', '/emails/bad'];
 async function handle(req, env, ctx, fetchImpl) {
+  const dnsFetch = (ctx && ctx.dnsFetch) || fetchImpl;
   const c = conf(env), cors = corsHeaders(req, c), url = new URL(req.url), path = url.pathname.replace(/^\/skiptrace-api(?=\/|$)/, '').replace(/\/+$/, '') || '/';
   const origin = req.headers.get('Origin');
   if (req.method === 'OPTIONS') return origin && c.origins.includes(origin) ? new Response(null, { status: 204, headers: cors }) : new Response(null, { status: 403, headers: cors });
-  if (path === '/health' && req.method === 'GET') return json({ ok: true, service: 'parcel-skiptrace', configured: !!((await bdKey(env)) && env.ACCESS_CODE && env.LIMITER) }, 200, cors);
-  if (path !== '/skiptrace' && path !== '/status') return json({ error: 'not_found' }, 404, cors);
-  if ((path === '/skiptrace' && req.method !== 'POST') || (path === '/status' && req.method !== 'GET')) return json({ error: 'method_not_allowed' }, 405, cors, { Allow: path === '/status' ? 'GET' : 'POST' });
+  if (path === '/health' && req.method === 'GET') return json({ ok: true, service: 'parcel-skiptrace', configured: !!((await bdKey(env)) && env.ACCESS_CODE && env.LIMITER), emailCheck: true, mailboxCheck: !!(mailboxProvider(env) && (await mailboxKey(env))) }, 200, cors);
+  if (path !== '/skiptrace' && path !== '/status' && !EMAIL_PATHS.includes(path)) return json({ error: 'not_found' }, 404, cors);
+  if ((path === '/skiptrace' && req.method !== 'POST') || (path === '/status' && req.method !== 'GET') || (path === '/emails/check' && req.method !== 'POST') || (path === '/emails/bad' && req.method !== 'GET' && req.method !== 'POST'))
+    return json({ error: 'method_not_allowed' }, 405, cors, { Allow: path === '/status' ? 'GET' : path === '/emails/bad' ? 'GET, POST' : 'POST' });
+  if (EMAIL_PATHS.includes(path)) return emailRoute(req, env, c, cors, path, origin, fetchImpl, dnsFetch);
   if (origin && !c.origins.includes(origin)) return json({ error: 'forbidden_origin' }, 403, cors);   // browsers from other sites; curl has no Origin
   const apiKey = await bdKey(env);
   if (!env.ACCESS_CODE || !apiKey || !env.LIMITER) return json({ error: 'not_configured' }, 503, cors);
@@ -204,6 +223,15 @@ async function handle(req, env, ctx, fetchImpl) {
     if (failure) { await limiter(env, { op: 'refund', day, n: sendIdx.length }); return json({ error: failure, ...(upStatus ? { upstreamStatus: upStatus } : {}), ...(upMsg ? { upstreamMessage: upMsg } : {}), ...(await usage()) }, failure === 'provider_rate_limited' ? 429 : 502, cors); }
     const parsed = parseUpstream(up, sendIdx);
     sendIdx.forEach((i, k) => { Object.assign(results[i], parsed[k] || { status: 'error', error: 'no_result' }); });
+    // check every address before the page shows it (free checks always; the mailbox API only when configured)
+    try {
+      const all = []; results.forEach(r => { if (r.status === 'match' && Array.isArray(r.emailInfo)) r.emailInfo.forEach(x => all.push(x)); });
+      if (all.length) {
+        const bad = await badList(env), ver = await checkMany(all, { env, fetchImpl, dnsFetch, bad, reserve: mbReserve(env, day) });
+        all.forEach((x, k) => { const v = ver[k] || {}; x.v = v.v || 'risky'; x.why = String(v.why || '').slice(0, 120); x.src = v.src || ''; });
+        meta.emailsChecked = all.length; meta.emailsBad = all.filter(x => x.v === 'bad').length; meta.emailsVerified = all.filter(x => x.v === 'verified').length;
+      }
+    } catch (e) { /* a failed check leaves the addresses unchecked; never fails the skip trace */ }
     // billed by BatchData = matched properties with a person; keep the daily cap close to that: refund everything else
     const billed = results.filter(r => r.status === 'match' || r.status === 'nocontact').length;
     if (billed < sendIdx.length) await limiter(env, { op: 'refund', day, n: sendIdx.length - billed });
@@ -211,6 +239,56 @@ async function handle(req, env, ctx, fetchImpl) {
   for (const r of results) { if (r.status === 'match') { meta.matched++; meta.withContact++; } else if (r.status === 'nocontact') meta.matched++; else if (r.status === 'nomatch') meta.nomatch++; else meta.errors++; }
   meta.billable = meta.matched;
   return json({ ok: true, results, meta, ...(await usage()) }, 200, cors);
+}
+
+const mbCap = env => cfgInt(env.EMAIL_VERIFY_DAILY, 90, 0, 1e6);
+// daily quota for the paid / free-tier mailbox API: n = 1 reserves, n = -1 gives one back
+const mbReserve = (env, day) => async n => { const r = await limiter(env, { op: 'vreserve', day, n, cap: mbCap(env) }); return !!(r && r.ok); };
+const MAX_CHECK = 50, MAX_MARK = 100;
+async function emailRoute(req, env, c, cors, path, origin, fetchImpl, dnsFetch) {
+  if (origin && !c.origins.includes(origin)) return json({ error: 'forbidden_origin' }, 403, cors);
+  if (!env.ACCESS_CODE || !env.LIMITER) return json({ error: 'not_configured' }, 503, cors);
+  const ip = req.headers.get('CF-Connecting-IP') || 'unknown', now = Date.now(), day = nyDay();
+  const pre = await limiter(env, { op: 'precheck', ip, now });
+  if (!pre.ok) return json({ error: pre.reason, retryAfter: pre.retryAfter }, 429, cors, { 'Retry-After': String(pre.retryAfter || 60) });
+  const viaAccess = await accessOk(req, env, fetchImpl);
+  if (!viaAccess && !(await codeOk(req.headers.get('X-Access-Code'), env.ACCESS_CODE))) { await limiter(env, { op: 'fail', ip, now }); return json({ error: 'bad_access_code' }, 401, cors); }
+  if (path === '/emails/bad' && req.method === 'GET') {
+    const o = await badList(env);
+    return json({ ok: true, bad: Object.keys(o).sort().map(e => ({ e, why: o[e].w || '', at: o[e].t || '' })) }, 200, cors);
+  }
+  const rl = await limiter(env, { op: 'rate', ip, now, perMin: RATE_PER_MIN * 3, perHour: RATE_PER_HOUR * 3 });
+  if (!rl.ok) return json({ error: 'rate_limited', retryAfter: rl.retryAfter }, 429, cors, { 'Retry-After': String(rl.retryAfter || 60) });
+  const len = +req.headers.get('Content-Length') || 0; if (len > MAX_BODY) return json({ error: 'body_too_large' }, 413, cors);
+  let body; try { const t = await req.text(); if (t.length > MAX_BODY) return json({ error: 'body_too_large' }, 413, cors); body = JSON.parse(t); } catch (e) { return json({ error: 'bad_json' }, 400, cors); }
+  if (path === '/emails/check') {
+    const raw = Array.isArray(body && body.emails) ? body.emails : null;
+    if (!raw || !raw.length) return json({ error: 'no_emails' }, 400, cors);
+    if (raw.length > MAX_CHECK) return json({ error: 'too_many_emails', max: MAX_CHECK }, 413, cors);
+    const seen = new Set(), list = [];
+    for (const x of raw) {
+      const o = typeof x === 'string' ? { e: x } : x && typeof x === 'object' ? x : null; if (!o) return json({ error: 'bad_item' }, 400, cors);
+      const e = normEmailV(o.e || o.email).slice(0, 254); if (!e || seen.has(e)) continue; seen.add(e);
+      list.push({ e, rank: Number.isFinite(+o.rank) && +o.rank > 0 ? +o.rank : 0, tested: o.tested === true || o.tested === 1, owner: o.owner === true || o.owner === 1 });
+    }
+    const bad = await badList(env), ver = await checkMany(list, { env, fetchImpl, dnsFetch, bad, reserve: mbReserve(env, day) });
+    return json({ ok: true, results: ver.map(v => ({ e: v.e, v: v.v, why: String(v.why || '').slice(0, 120), src: v.src || '' })), mailboxCheck: !!(mailboxProvider(env) && (await mailboxKey(env))) }, 200, cors);
+  }
+  // POST /emails/bad: mark / unmark, shared by every device
+  if (!env.SK_KV) return json({ error: 'not_configured' }, 503, cors);
+  const raw = Array.isArray(body && body.items) ? body.items : body && (body.email || body.e) ? [body] : null;
+  if (!raw || !raw.length) return json({ error: 'no_items' }, 400, cors);
+  if (raw.length > MAX_MARK) return json({ error: 'too_many_items', max: MAX_MARK }, 413, cors);
+  const o = await badList(env); let changed = 0;
+  for (const it of raw) {
+    if (!it || typeof it !== 'object') return json({ error: 'bad_item' }, 400, cors);
+    const e = normEmailV(it.email || it.e); if (!e || e.length > 254 || !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(e)) return json({ error: 'bad_email' }, 400, cors);
+    if (it.bad === false) { if (o[e]) { delete o[e]; changed++; } }
+    else { o[e] = { w: S(it.why, 120) || 'marked bad', t: new Date(now).toISOString() }; changed++; }
+  }
+  if (Object.keys(o).length > 20000) return json({ error: 'list_full' }, 507, cors);
+  if (changed) await saveBadList(env, o);
+  return json({ ok: true, changed, count: Object.keys(o).length }, 200, cors);
 }
 
 /* ---------- Durable Object: counters only (SQLite-backed, atomic) ---------- */
@@ -235,6 +313,11 @@ export class Limiter {
       const used = (await s.get('d:' + o.day)) || 0;
       if (used + o.n > o.cap) out = { ok: false, remaining: Math.max(0, o.cap - used) };
       else { await s.put('d:' + o.day, used + o.n); const old = await s.list({ prefix: 'd:' }); for (const k of old.keys()) if (k !== 'd:' + o.day) await s.delete(k); }
+    } else if (o.op === 'vreserve') {   // mailbox-check API calls per day (separate 'v:' counter)
+      const used = (await s.get('v:' + o.day)) || 0;
+      if (o.n < 0) await s.put('v:' + o.day, Math.max(0, used + o.n));
+      else if (used + o.n > o.cap) out = { ok: false, remaining: Math.max(0, o.cap - used) };
+      else { await s.put('v:' + o.day, used + o.n); const old = await s.list({ prefix: 'v:' }); for (const k of old.keys()) if (k !== 'v:' + o.day) await s.delete(k); }
     } else if (o.op === 'refund') {
       const used = (await s.get('d:' + o.day)) || 0; await s.put('d:' + o.day, Math.max(0, used - (o.n | 0)));
     }

@@ -47,5 +47,24 @@ globalThis.fetch = async (url, init) => {
   const s4 = store(); const sum4 = await A.run(mkGroups(120), { store: s4, code: 'C', chunk: 50 }); eq([sum4.stopped, sum4.remaining, s4.count() > 0, sum4.sent], ['daily_cap', 7, true, 50], 'daily cap stops run, partial kept');
   globalThis.fetch = async () => { throw new TypeError('failed'); }; const sum5 = await A.run(mkGroups(3), { store: store(), code: 'C' }); eq(sum5.stopped, 'network', 'network error reported');
   globalThis.fetch = async () => res({ error: 'bad_access_code' }, 401); try { await A.status('x'); eq('no throw', 'throw', 'status 401 throws'); } catch (e) { eq([e.code, e.status], ['bad_access_code', 401], 'status 401 -> ApiError'); eq(A.messageFor(e).includes('not accepted'), true, 'friendly message'); }
+  // email verdicts + shared bad list
+  globalThis.localStorage = mem(); A.clearCode();
+  eq(A.EV.put([{ e: 'A@X.co', v: 'verified', why: 'tested', rank: 1, tested: true, owner: true }, { e: 'b@x.co', v: 'weird' }, { e: '', v: 'bad' }]), 2, 'EV.put keeps valid entries');
+  eq([A.EV.get('a@x.co').v, A.EV.get('a@x.co').r, A.EV.get('a@x.co').t, A.EV.get('B@x.co').v, A.EV.stale('a@x.co'), A.EV.stale('zz@x.co')], ['verified', 1, 1, 'risky', false, true], 'EV.get: verdict, rank, tested; unknown verdict -> risky; stale');
+  eq(JSON.parse(localStorage.getItem('pf.emailv.v1'))['a@x.co'].v, 'verified', 'verdicts cached in pf.emailv.v1');
+  let hits = 0; globalThis.fetch = async () => { hits++; return res({}); };
+  eq([await A.EV.check(['a@x.co']), await A.BADS.refresh(true), await A.BADS.mark('q@x.co', true, 'bounced'), hits], [[], false, false, 0], 'without a code nothing is sent to the Worker (local mark only)');
+  eq(A.BADS.has('Q@x.co'), true, 'local mark kept'); A.setCode('C');
+  const sent = []; globalThis.fetch = async (url, init) => { const b = init.body ? JSON.parse(init.body) : null; sent.push([url.replace(/^.*\/skiptrace/, ''), init.method, b]);
+    if (/\/emails\/check$/.test(url)) return res({ ok: true, results: b.emails.map(x => ({ e: x.e, v: x.tested ? 'verified' : x.e.startsWith('dead') ? 'bad' : 'risky', why: 'w' })) });
+    if (/\/emails\/bad$/.test(url)) return init.method === 'GET' ? res({ ok: true, bad: [{ e: 'Gone@x.co', why: 'bounced' }] }) : res({ ok: true });
+    return res({}, 404); };
+  const big = Array.from({ length: 60 }, (_, i) => 'u' + i + '@x.co'); const cr = await A.EV.check(['a@x.co', 'A@x.co', 'dead@x.co', ...big]);
+  eq([sent.length, sent[0][2].emails.length, sent[1][2].emails.length, sent[0][2].emails[0], cr.length], [2, 50, 12, { e: 'a@x.co', rank: 1, tested: true, owner: true }, 62], 'check: deduped, 50 per call, sends stored rank / tested / owner');
+  eq([A.EV.get('a@x.co').v, A.EV.get('dead@x.co').v, A.EV.get('u5@x.co').v, A.EV.get('a@x.co').r], ['verified', 'bad', 'risky', 1], 'check results saved, rank kept');
+  sent.length = 0; eq(await A.BADS.refresh(true), true, 'refresh ok'); eq([A.BADS.has('gone@x.co'), A.BADS.why('gone@x.co'), A.BADS.has('q@x.co'), A.BADS.fresh()], [true, 'bounced', false, true], 'shared list replaces the cache');
+  sent.length = 0; eq(await A.BADS.mark('New@x.co', true, 'bounced'), true, 'mark ok');
+  eq([/\/emails\/bad$/.test(sent[0][0]), sent[0][1], sent[0][2], sent[1][1]], [true, 'POST', { items: [{ email: 'new@x.co', bad: true, why: 'bounced' }] }, 'GET'], 'mark POSTs the address then reloads the list');
+  sent.length = 0; await A.BADS.mark('new@x.co', false); eq(sent[0][2], { items: [{ email: 'new@x.co', bad: false, why: '' }] }, 'unmark POSTs bad:false');
   console.log(fails ? `\n${fails} FAILED` : '\nall passed'); process.exit(fails ? 1 : 0);
 })();

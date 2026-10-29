@@ -38,12 +38,39 @@
   const shown = r => SK.graded(r).filter(x => x.g !== 'F');   // cards / table: F hidden, best grade first
   const topPhones = (r, k, folio) => { const a = shown(r); return { html: a.slice(0, k).map(x => phoneHTML(x.q, x.g, false, folio)).join(''), more: Math.max(0, a.length - k) }; };
 
-  const BAD_KEY = 'pf.bademail.v1', BAD_KNOWN = ['cal_l_cox@yahoo.com', 'jamesw830@earthlink.com', 'arinajohanajulio@yahoo.es'];
+  /* bad emails: a mark made on this device (pf.bademail.v1, also synced by sync.js) wins; otherwise the shared list the Worker serves
+     (GET /emails/bad: bounces marked on any device, never stored in this repo); otherwise the Worker's check of the address */
+  const BAD_KEY = 'pf.bademail.v1', EV = API && API.EV, BADS = API && API.BADS;
   const badMap = () => { let o = {}; try { o = JSON.parse(localStorage.getItem(BAD_KEY) || '{}') || {}; } catch (e) {} return o; };
-  const isBad = e => { const k = String(e || '').trim().toLowerCase(), o = badMap(); return k in o ? !!o[k] : BAD_KNOWN.includes(k); };
-  const setBad = (e, v) => { const o = badMap(); o[String(e).trim().toLowerCase()] = !!v; try { localStorage.setItem(BAD_KEY, JSON.stringify(o)); } catch (x) {} };
-  const goodEmails = r => ((r && r.e) || []).filter(e => !isBad(e));
-  const mailto = e => isBad(e) ? `<span class="stem bad" title="Marked as a bad email (bounced): left out of Email owner and has no Email button"><s class="stl em">${esc(e)}</s><span class="badem">Bad email</span><button type="button" class="lnk stbad" data-stbad="${esc(e)}" data-v="0" title="Unmark ${esc(e)}">Unmark</button></span>` : `<span class="stem"><a class="stl em" href="mailto:${esc(e)}" title="Email ${esc(e)}">${esc(e)}</a><button type="button" class="stl stemb" data-stemail="${esc(e)}" title="Open a pre-filled email to ${esc(e)} in your Outlook (sent from your own mailbox)">Email</button><button type="button" class="lnk stbad" data-stbad="${esc(e)}" data-v="1" title="Mark ${esc(e)} as a bad email (bounced)">Bad?</button></span>`;
+  const nEm = e => String(e || '').trim().toLowerCase();
+  const isBad = e => { const k = nEm(e), o = badMap(); return k in o ? !!o[k] : !!(BADS && BADS.has(k)); };
+  const setBad = (e, v) => { const o = badMap(); o[nEm(e)] = !!v; try { localStorage.setItem(BAD_KEY, JSON.stringify(o)); } catch (x) {} };
+  // verdict: {v: 'verified'|'risky'|'bad'|'unchecked', why}
+  function emailCheck(e) {
+    const k = nEm(e), o = badMap();
+    if (isBad(k)) return { v: 'bad', why: k in o ? 'Marked bad (bounced)' : 'Marked bad on a team device: ' + ((BADS && BADS.why(k)) || 'bounced') };
+    const x = EV && EV.get(k);
+    if (!x) return { v: 'unchecked', why: 'Not checked yet' + (EV && EV.canCheck() ? '' : ': enter the skip trace access code (or use the private site) to check emails') };
+    if (x.v === 'bad' && (x.s === 'list' || (k in o && !o[k]))) return { v: 'risky', why: 'You unmarked it (check said: ' + (x.w || 'bad') + ')' };   // unmarked by hand: no longer bad, still not trusted
+    return { v: x.v, why: x.w || '' };
+  }
+  const EVL = { verified: 'Verified', risky: 'Risky', bad: 'Bad', unchecked: 'Unchecked' };
+  const evTip = { verified: 'Verified: safe to email', risky: 'Risky: may bounce', bad: 'Bad: will bounce, never emailed', unchecked: 'Not checked yet (treated as risky)' };
+  const evBadge = c => `<span class="evb ev${c.v}" title="${esc(evTip[c.v] + (c.why ? ' · ' + c.why : ''))}">${EVL[c.v]}</span>`;
+  // stored emails sorted for sending: verified first, then risky / unchecked, best BatchData rank (owner first) within each; bad last
+  const EVO = { verified: 0, risky: 1, unchecked: 1, bad: 3 };
+  const sortEmails = list => list.map((e, i) => { const c = emailCheck(e), x = EV && EV.get(e); return { e, c, k: [EVO[c.v], x && x.o ? 0 : 1, x && x.r ? x.r : 50, i] }; })
+    .sort((a, b) => { for (let j = 0; j < 4; j++) if (a.k[j] !== b.k[j]) return a.k[j] - b.k[j]; return 0; });
+  const goodEmails = r => sortEmails(((r && r.e) || [])).filter(x => x.c.v !== 'bad').map(x => x.e);
+  const mailto = e => { const c = emailCheck(e); return c.v === 'bad' ? `<span class="stem bad" title="${esc(c.why)}: left out of Email owner and has no Email button"><s class="stl em">${esc(e)}</s>${evBadge(c)}<button type="button" class="lnk stbad" data-stbad="${esc(e)}" data-v="0" title="Not bad? Unmark ${esc(e)}">Unmark</button></span>` : `<span class="stem ev-${c.v}"><a class="stl em" href="mailto:${esc(e)}" title="Email ${esc(e)}">${esc(e)}</a>${evBadge(c)}<button type="button" class="stl stemb" data-stemail="${esc(e)}" title="Open a pre-filled email to ${esc(e)} in your Outlook (sent from your own mailbox)">Email</button><button type="button" class="lnk stbad" data-stbad="${esc(e)}" data-v="1" title="Mark ${esc(e)} as a bad email (bounced): every device stops emailing it">Bad?</button></span>`; };
+  /* emails shown without a verdict are checked in the background (batched), then everything redraws */
+  const evQueue = new Set(), evTried = new Set(); let evTimer = 0, evRedraw = null;
+  const needCheck = list => { if (!EV || !EV.canCheck()) return; for (const e of list || []) { const k = nEm(e); if (k && !evTried.has(k) && EV.stale(k) && !isBad(k)) evQueue.add(k); } if (evQueue.size && !evTimer) evTimer = setTimeout(flushChecks, 400); };
+  async function flushChecks() {
+    evTimer = 0; const list = [...evQueue].slice(0, 200); list.forEach(k => { evQueue.delete(k); evTried.add(k); });
+    if (list.length) { try { await EV.check(list); } catch (e) { /* offline / not signed in: stays Unchecked */ } }
+    if (evQueue.size) evTimer = setTimeout(flushChecks, 400);
+  }
 
   /* ---------- email owners from your own Outlook (this site never sends mail) ---------- */
   const TPL_KEY = 'pf.emailtpl.v1';
@@ -77,9 +104,13 @@
       my_name: t.my_name, my_phone: t.my_phone };
   }
   /* Email owner: one message, To = your own address, BCC = the owner's skip-traced emails (deduped, valid only, max BCC_MAX) */
-  const BCC_MAX = 5, EMAIL_RE = /^[^\s@<>(),;:"'\[\]\\]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i;
-  const ownerEmails = folio => { const r = ST.get(folio), seen = new Set(), out = []; for (const e of (r && r.e) || []) { const v = String(e || '').trim(); const k = v.toLowerCase(); if (!EMAIL_RE.test(v) || seen.has(k) || isBad(v)) continue; seen.add(k); out.push(v); } return out; };
-  const ownerBtn = folio => { const n = ownerEmails(folio).length; return n ? `<button type="button" class="stl stown" data-stown="${esc(folio)}" title="One email from your Outlook: To yourself, the owner's ${n} ${n === 1 ? 'address' : 'addresses'} in BCC">Email owner${n > 1 ? ' (' + Math.min(n, BCC_MAX) + ')' : ''}</button>` : ''; };
+  const BCC_MAX = 2, EMAIL_RE = /^[^\s@<>(),;:"'\[\]\\]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i;
+  // every usable (not bad) address, best first
+  const ownerEmails = folio => { const r = ST.get(folio), seen = new Set(), out = []; for (const e of (r && r.e) || []) { const v = String(e || '').trim(); const k = v.toLowerCase(); if (!EMAIL_RE.test(v) || seen.has(k)) continue; seen.add(k); out.push(v); } needCheck(out); return sortEmails(out).filter(x => x.c.v !== 'bad').map(x => x.e); };
+  // who Email owner BCCs: the verified addresses (max BCC_MAX); with none verified, only the single best-ranked risky one; never a bad one
+  const sendPick = list => { const s = sortEmails(list).filter(x => x.c.v !== 'bad'); const v = s.filter(x => x.c.v === 'verified'); return (v.length ? v.slice(0, BCC_MAX) : s.slice(0, 1)).map(x => x.e); };
+  const ownerBtn = folio => { const all = ownerEmails(folio), pick = sendPick(all), n = pick.length; if (!n) return ''; const ver = emailCheck(pick[0]).v === 'verified';
+    return `<button type="button" class="stl stown${ver ? '' : ' risky'}" data-stown="${esc(folio)}" title="One email from your Outlook: To yourself, ${ver ? 'the owner\'s ' + n + ' verified ' + (n === 1 ? 'address' : 'addresses') : 'the owner\'s best-ranked address (not verified, may bounce)'} in BCC${all.length > n ? '; ' + (all.length - n) + ' riskier left out' : ''}">Email owner${n > 1 ? ' (' + n + ')' : ''}</button>`; };
   function bccUrl(to, bcc, vars, t) {
     t = t || tplGet(); const subject = fill(t.subject, vars), body = fill(t.body, vars).replace(/\r\n?/g, '\n'), E = encodeURIComponent;
     const mailto = `mailto:${E(to).replace(/%40/g, '@')}?bcc=${bcc.map(E).join(',').replace(/%40/g, '@')}&subject=${E(subject)}&body=${E(body.replace(/\n/g, '\r\n'))}`;
@@ -91,14 +122,14 @@
     window.PF_LAST_EMAIL = { url, folio, to, bcc: list.slice(), mode: t.mode };
     if (t.mode === 'mailto') { const a = document.createElement('a'); a.href = url; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }
     else window.open(url, '_blank', 'noopener');
-    B.markEmailed(folio, list, id); const all = ownerEmails(folio).length;
-    B.toast(`Opened one email in Outlook with ${list.length} ${list.length === 1 ? 'address' : 'addresses'} in BCC. Marked as emailed.` + (all > list.length ? ` ${all - list.length} more not included (max ${BCC_MAX} per message).` : ''));
+    B.markEmailed(folio, list, id); const all = ownerEmails(folio).length, ver = list.filter(e => emailCheck(e).v === 'verified').length;
+    B.toast(`Opened one email in Outlook with ${list.length} ${list.length === 1 ? 'address' : 'addresses'} in BCC${ver === list.length ? ' (verified)' : ' (not verified, may bounce)'}. Marked as emailed.` + (all > list.length ? ` ${all - list.length} riskier ${all - list.length === 1 ? 'address' : 'addresses'} left out (only verified ones, max ${BCC_MAX}, or the single best one).` : ''));
   }
   function ownerClick(B, b) {
     const folio = b.dataset.stown, idEl = b.closest('[data-id]') || document.getElementById('savedBox'), id = idEl && idEl.dataset.id != null ? +idEl.dataset.id : -1;
-    const all = ownerEmails(folio); if (!all.length) { B.toast('No valid email for this owner.'); return; }
+    const all = ownerEmails(folio); if (!all.length) { B.toast('No usable email for this owner (all marked bad).'); return; }
     const fresh = all.filter(e => !B.emailedTo(folio, e)), old = all.filter(e => B.emailedTo(folio, e));
-    const pick = a => a.slice(0, BCC_MAX);
+    const pick = a => sendPick(a);
     if (!old.length) { openOwner(B, id, folio, pick(all)); return; }
     openModal('Email this owner again?', `<div id="stEmAgain"><div class="stwarn" role="alert">Already emailed:<ul>${old.map(e => `<li><b>${esc(e)}</b> on ${esc(B.emailedTo(folio, e))}</li>`).join('')}</ul>Sending the same owner repeat emails is the quickest way to land in spam or get reported.</div>
       <div class="stact">${fresh.length ? `<button type="button" class="btn primary" id="stEmNew">Email only the ${fresh.length} new</button>` : ''}<button type="button" class="btn${fresh.length ? '' : ' primary'}" id="stEmGo">Email all again</button><button type="button" class="btn" data-stclose>Cancel</button></div></div>`);
@@ -135,7 +166,7 @@
       <div class="sttplrow"><label>Your name <input type="text" id="stTplName" value="${esc(t.my_name)}" autocomplete="name"></label><label>Your phone <input type="text" id="stTplPhone" value="${esc(t.my_phone)}" autocomplete="tel"></label></div>
       <label class="sttplfull">Subject <input type="text" id="stTplSubj" value="${esc(t.subject)}"></label>
       <label class="sttplfull">Message (plain text) <textarea id="stTplBody" rows="10">${esc(t.body)}</textarea></label>
-      <div class="sttips" id="stTips" role="note"><b>Inbox tips</b><ul><li>Send one at a time at a normal pace, and keep daily volume modest at first (new senders build trust slowly).</li><li>“Email owner” puts at most 5 of an owner's addresses in BCC per message.</li><li>Keep it plain text and personal: short, written like a one-to-one note.</li><li>Avoid links, images and attachments.</li><li>Stop right away if someone asks you to.</li></ul></div>
+      <div class="sttips" id="stTips" role="note"><b>Inbox tips</b><ul><li>Send one at a time at a normal pace, and keep daily volume modest at first (new senders build trust slowly).</li><li>Every skip-traced email is checked first: <b>Verified</b>, <b>Risky</b> (may bounce) or <b>Bad</b> (never emailed). “Email owner” BCCs only verified addresses (at most 2), or the single best-ranked one when none is verified.</li><li>Mark a bounce with <b>Bad?</b>: every device stops emailing it.</li><li>Keep it plain text and personal: short, written like a one-to-one note.</li><li>Avoid links, images and attachments.</li><li>Stop right away if someone asks you to.</li></ul></div>
       <div class="stact"><button type="button" class="btn primary" id="stTplSave">Save template</button><button type="button" class="btn" id="stTplReset">Reset to default</button><button type="button" class="btn" data-stclose>Close</button><span class="note" id="stTplMsg" role="status" aria-live="polite"></span></div></div>`);
     const read = () => ({ mode: $('stTplMailto').checked ? 'mailto' : 'web', to_addr: $('stTplTo').value.trim() || TPL_DEF.to_addr, my_name: $('stTplName').value, my_phone: $('stTplPhone').value, subject: $('stTplSubj').value, body: $('stTplBody').value });
     $('stTplSave').onclick = () => { $('stTplMsg').textContent = tplSet(read()) ? 'Saved.' : "Couldn't save in this browser."; };
@@ -158,7 +189,7 @@
     const none = !r.p.length && !r.e.length;
     return `${none ? '<div class="note">Skip traced: the provider found no phone or email.</div>' : ''}
       ${r.p.length ? `<ul class="stlist">${SK.graded(r).map(x => `<li${x.g === 'F' ? ' class="gF"' : ''}>${phoneHTML(x.q, x.g, true, folio)}</li>`).join('')}</ul><div class="note phgnote">Grades: <b>A+</b> you reached the owner · <b>A</b> recent mobile, not on the Do-Not-Call list · <b>B</b> active, older or less certain · <b>C</b> VoIP, weak link or Do-Not-Call: call last · <b>F</b> disconnected / wrong: hidden from cards.</div>` : ''}
-      ${r.e.length ? `<div class="stemails">${ownerBtn(folio)}${r.e.map(mailto).join('')}</div>` : ''}
+      ${r.e.length ? `<div class="stemails">${ownerBtn(folio)}${sortEmails(r.e).map(x => mailto(x.e)).join('')}</div>` : ''}
       <div class="note">${r.n ? 'Provider name: ' + esc(r.n) + ' · ' : ''}${r.s === (API && API.SRC) ? 'Skip traced' : 'Imported'} ${esc(r.a || '')}${r.s ? ' · ' + esc(r.s) : ''}. <button type="button" class="lnk" data-stdel="${esc(folio)}">Remove this property's skip trace data</button></div>`;
   }
   const drawerHTML = folio => `<h3>Phones &amp; email</h3><div class="stdraw" data-stfolio="${esc(folio)}">${drawerBody(folio)}</div>`;
@@ -269,7 +300,7 @@
         const T = s => SK.title(s);
         for (const p of ok.slice(0, per)) {
           const prev = byPhone.get(p[0]); if (prev) { prev.folios.push(f); dupes++; folios.add(f); idmap.set(f, ids[j]); continue; }
-          const row = { f, vals: [T(fn), o.isCompany && !(fn) ? ln : T(ln), SK.fmtPhone(p[0]), TYPE[p[1]] || '', r.e[0] || '', x.addr, /unincorporated/i.test(x.city) ? '' : x.city, 'FL', SK.zip5(x.zip) || x.zip, x.owner.split(' | ').filter(Boolean).join('; '), B.folioOut(f), PFC.cfg.name, p.g || ''], folios: [f] };
+          const row = { f, vals: [T(fn), o.isCompany && !(fn) ? ln : T(ln), SK.fmtPhone(p[0]), TYPE[p[1]] || '', (goodEmails(r)[0] || ''), x.addr, /unincorporated/i.test(x.city) ? '' : x.city, 'FL', SK.zip5(x.zip) || x.zip, x.owner.split(' | ').filter(Boolean).join('; '), B.folioOut(f), PFC.cfg.name, p.g || ''], folios: [f] };
           byPhone.set(p[0], row); rows.push(row); folios.add(f); idmap.set(f, ids[j]);
         }
       }
@@ -539,7 +570,11 @@
     if (!$('stGrp')) return; let busy = false; const guard = fn => async () => { if (busy) return; busy = true; try { await fn(); } catch (e) { console.error(e); B.toast('Skip trace: ' + (e && e.message || e)); } busy = false; };
     if ($('stApiBtn')) $('stApiBtn').onclick = guard(() => apiModal(B));
     document.addEventListener('click', e => { const b = e.target.closest('[data-stgo]'); if (!b || !API) return; e.preventDefault(); e.stopPropagation(); const f = b.dataset.stgo; const holder = b.closest('[data-id]') || document.getElementById('savedBox'); const id = holder && holder.dataset.id != null ? +holder.dataset.id : -1; if (id < 0) { B.toast('Open the property and try again.'); return; } traceOne(B, id, f, b).catch(err => { console.error(err); B.toast('Skip trace: ' + (err && err.message || err)); }); });
-    document.addEventListener('click', e => { const b = e.target.closest('[data-stbad]'); if (!b) return; e.preventDefault(); e.stopPropagation(); setBad(b.dataset.stbad, b.dataset.v === '1'); ST.reload(); document.querySelectorAll('.stdraw[data-stfolio]').forEach(x => { x.innerHTML = drawerBody(x.dataset.stfolio); }); }, true);
+    const redrawAll = () => { ST.reload(); document.querySelectorAll('.stdraw[data-stfolio]').forEach(x => { x.innerHTML = drawerBody(x.dataset.stfolio); }); };
+    document.addEventListener('click', e => { const b = e.target.closest('[data-stbad]'); if (!b) return; e.preventDefault(); e.stopPropagation(); const em = b.dataset.stbad, bad = b.dataset.v === '1'; setBad(em, bad); redrawAll();
+      if (BADS) BADS.mark(em, bad, bad ? 'bounced (marked by hand)' : '').then(ok => { if (!ok && EV && EV.canCheck()) B.toast('Saved on this device; could not update the shared bad list (offline?).'); redrawAll(); }); }, true);
+    // verdicts / shared list arrive in the background: redraw (debounced)
+    if (EV) { EV.onChange(() => { clearTimeout(evRedraw); evRedraw = setTimeout(() => { redrawAll(); try { window.dispatchEvent(new CustomEvent('pf-emailv')); } catch (e) {} }, 400); }); if (BADS) { BADS.refresh(); setInterval(() => { if (!document.hidden) BADS.refresh(); }, 10 * 60e3); } }   // new verdicts: drawers redraw here, cards / lists via 'pf-emailv' in app.js
     document.addEventListener('click', e => { const b = e.target.closest('[data-stres]'); if (!b) return; e.preventDefault(); e.stopPropagation(); SK.setCallResult(b.dataset.stres, b.dataset.v); ST.reload(); document.querySelectorAll('.stdraw[data-stfolio]').forEach(x => { x.innerHTML = drawerBody(x.dataset.stfolio); }); }, true);
     document.addEventListener('click', e => { const b = e.target.closest('[data-stown]'); if (!b) return; e.preventDefault(); e.stopPropagation(); ownerClick(B, b); }, true);
     document.addEventListener('click', e => { const b = e.target.closest('[data-stemail]'); if (!b) return; e.preventDefault(); e.stopPropagation(); emailClick(B, b); }, true);
@@ -553,7 +588,7 @@
     ST.onChange(refreshPanel); refreshPanel();
     window.PFSkipUI.openExport = () => exportModal(B); window.PFSkipUI.openText = () => textModal(B); window.PFSkipUI.openApi = () => apiModal(B); window.PFSkipUI.traceOne = (id, folio) => traceOne(B, id, folio); window.PFSkipUI.importText = (name, text) => mapModal(B, name, text); window.PFSkipUI.openTemplate = () => templateModal(B); window.PFSkipUI.emailUrlFor = (id, folio, to) => emailUrl(to, emailVars(B, id, folio));
   }
-  window.PFSkipUI = { noteSite, textMsg, waMsg, gradeBadge, shown, cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, BCC_MAX, isBad, setBad, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
+  window.PFSkipUI = { noteSite, textMsg, waMsg, gradeBadge, shown, cardLine, cellHTML, drawerHTML, drawerBody, refreshPanel, phoneHTML, emailHTML: mailto, ownerBtn, ownerEmails, sendPick, emailCheck, BCC_MAX, isBad, setBad, closeModal, ownerNames, titleCase, tplGet, TPL_DEF };
   const start = () => wire(window.PF.skBridge);
   if (window.PF_READY && window.PF) start(); else document.addEventListener('pf:ready', start, { once: true });
 })();

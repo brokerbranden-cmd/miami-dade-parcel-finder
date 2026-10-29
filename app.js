@@ -356,6 +356,7 @@ const saveSend=()=>{ try{ localStorage.setItem(SEND_KEY,JSON.stringify(SEND)); }
 const SYNC_BY=e=>window.PFSync&&e?esc(window.PFSync.who(e)):'';
 window.addEventListener('pf-sync',ev=>{ const ns=(ev.detail&&ev.detail.ns)||[]; if(ns.includes(SEND_KEY)){ let o={}; try{ o=JSON.parse(localStorage.getItem(SEND_KEY)||'{}')||{}; }catch(e){} SEND.tags=o.tags&&typeof o.tags==='object'?o.tags:{}; SEND.sent=o.sent&&typeof o.sent==='object'?o.sent:{}; }
   if(!ns.some(k=>k===SEND_KEY||k==='pf.phoneres.v1'||k==='pf.bademail.v1')||!$('trList')) return; try{ if(S.view==='traced') renderTraced(); else run(); }catch(e){} });
+window.addEventListener('pf-emailv',()=>{ if(!$('trList')) return; try{ if(S.view==='traced') renderTraced(); else run(); }catch(e){} });   // new email check verdicts (Verified / Risky / Bad)
 const isTagged=(f,k)=>!!(SEND.tags[f]&&SEND.tags[f][k]);
 const sentOf=(f,k)=>SEND.sent[f]&&SEND.sent[f][k]||null;
 const wasSent=f=>!!(SEND.sent[f]&&Object.keys(SEND.sent[f]).length);
@@ -1033,10 +1034,10 @@ function renderTraced(){ const all=SKS.count(), rows=trRows(), lim=500, show=row
       <div class="trstat sendline">${trStatus(x.f)}</div></article>`; }).join('');
 }
 function trCSV(){ const rows=trRows(), NP=5, NE=3;
-  const head=EXP_HEAD.trim()+',Traced Date,'+Array.from({length:NP},(_,k)=>`Phone ${k+1},Phone ${k+1} Type`).join(',')+','+Array.from({length:NE},(_,k)=>'Email '+(k+1)).join(',')+','+Array.from({length:NP},(_,k)=>`Phone ${k+1} Grade`).join(',')+'\n';   // grades appended last
+  const head=EXP_HEAD.trim()+',Traced Date,'+Array.from({length:NP},(_,k)=>`Phone ${k+1},Phone ${k+1} Type`).join(',')+','+Array.from({length:NE},(_,k)=>'Email '+(k+1)).join(',')+','+Array.from({length:NP},(_,k)=>`Phone ${k+1} Grade`).join(',')+','+Array.from({length:NE},(_,k)=>`Email ${k+1} Check`).join(',')+'\n';   // grades, then email checks, appended last
   const T={m:'Mobile',l:'Landline',v:'VoIP'}; const lines=rows.map(x=>{ const base=x.id!=null?exportRow(P(x.id),I(x.id)):contactRow(x.owner,x.addr||'No site address',x.city,x.zip,x.mail,folio13(x.f)); const r=x.r;
-    const G=PFSkip.graded(r), ph=Array.from({length:NP},(_,k)=>{ const x=G[k]; return x?[x.q[0],T[x.q[1]]||'']:['','']; }).flat(), em=Array.from({length:NE},(_,k)=>r.e[k]||''), gr=Array.from({length:NP},(_,k)=>G[k]?G[k].g:'');
-    return base+','+[r.a||'',...ph,...em,...gr].map(csvq).join(','); });
+    const G=PFSkip.graded(r), ph=Array.from({length:NP},(_,k)=>{ const x=G[k]; return x?[x.q[0],T[x.q[1]]||'']:['','']; }).flat(), em=Array.from({length:NE},(_,k)=>r.e[k]||''), gr=Array.from({length:NP},(_,k)=>G[k]?G[k].g:''), EVL={verified:'Verified',risky:'Risky',bad:'Bad',unchecked:'Unchecked'}, ck=em.map(e=>{ if(!e) return ''; const c=window.PFSkipUI&&PFSkipUI.emailCheck?PFSkipUI.emailCheck(e):null; return c?EVL[c.v]||'':''; });
+    return base+','+[r.a||'',...ph,...em,...gr,...ck].map(csvq).join(','); });
   return {blob:new Blob([head+lines.join('\n')+(lines.length?'\n':'')],{type:'text/csv'}),n:rows.length}; }
 function renderPipe(){ const ids=savedIdx(), t=todayDay(), by=Object.fromEntries(SV.STAGES.map(s=>[s,[]]));
   for(const x of SV.list()) by[x.stage].push(x);

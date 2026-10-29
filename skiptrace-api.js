@@ -59,6 +59,7 @@
   function applyResult(store, group, r, day) {
     if (!r || (r.status !== 'match' && r.status !== 'nocontact' && r.status !== 'nomatch')) return false;   // errors are not stored, so they can be retried
     const rec = { n: r.name || '', p: r.status === 'match' ? (r.phones || []).map(q => [q[0], q[1] || '', q[2] | 0]) : [], e: r.status === 'match' ? (r.emails || []).slice() : [] };
+    if (r.status === 'match' && Array.isArray(r.emailInfo)) EV.put(r.emailInfo);   // the Worker already checked each address (verified / risky / bad)
     for (const f of group.folios) store.merge(f, rec, SRC, day);
     return true;
   }
@@ -95,6 +96,63 @@
     }
     return sum;
   }
-  const api = { WORKER_URL, BASE_URL, viaAccess, ApiError, getCode, setCode, clearCode, call, status, buildItem, hasAddress, applyResult, newSummary, tally, run, messageFor, SRC };
+  /* ---------- email checks (before anyone is emailed) ----------
+     Verdicts per address, cached on this device in pf.emailv.v1: {email: {v: 'verified'|'risky'|'bad', w: reason, r: BatchData rank, t: tested 1/0, o: owner 1/0, at}}.
+     The Worker checks every address right after a skip trace; stored addresses without a verdict are sent to POST /emails/check (needs the access code
+     or the private site's login). The shared bad list (bounces marked on any device) comes from GET /emails/bad and is cached in pf.badshared.v1. */
+  const EV_KEY = 'pf.emailv.v1', BADS_KEY = 'pf.badshared.v1', EV_TTL = 30 * 864e5, BADS_TTL = 10 * 60e3;
+  const nE = e => String(e == null ? '' : e).trim().toLowerCase();
+  const jget = (k, d) => { try { const o = JSON.parse(ls().getItem(k) || 'null'); return o && typeof o === 'object' ? o : d; } catch (e) { return d; } };
+  const jset = (k, o) => { try { ls().setItem(k, JSON.stringify(o)); return true; } catch (e) { return false; } };
+  let evMem = null; const evSubs = new Set();
+  const EV = {
+    all() { if (!evMem) evMem = jget(EV_KEY, {}); return evMem; },
+    get(e) { const x = EV.all()[nE(e)]; return x && typeof x === 'object' ? x : null; },
+    put(list) {
+      const o = EV.all(); let n = 0;
+      for (const x of list || []) { const e = nE(x && (x.e || x.email)); if (!e || !x.v) continue; const old = o[e] || {}; const v = ['verified', 'risky', 'bad'].includes(x.v) ? x.v : 'risky';
+        o[e] = { v, w: String(x.why || '').slice(0, 120), s: String(x.src || '').slice(0, 12), r: x.rank != null ? (+x.rank || 0) : (old.r || 0), t: x.tested != null ? (x.tested ? 1 : 0) : (old.t || 0), o: x.owner != null ? (x.owner ? 1 : 0) : (old.o || 0), at: Date.now() }; n++;
+        if (v === 'bad' && x.src === 'list') { const m = BADS.map(); if (!(e in m)) { m[e] = String(x.why || '').replace(/^marked bad:\s*/i, '').slice(0, 120) || 'marked bad'; jset(BADS_KEY, { at: badsAt, list: m }); } }   // the Worker just read the shared list: keep the cache in step
+      }
+      const keys = Object.keys(o); if (keys.length > 6000) keys.sort((a, b) => (o[a].at || 0) - (o[b].at || 0)).slice(0, keys.length - 5000).forEach(k => delete o[k]);
+      if (n) { jset(EV_KEY, o); evSubs.forEach(fn => { try { fn(); } catch (e) {} }); } return n;
+    },
+    stale(e) { const x = EV.get(e); return !x || Date.now() - (x.at || 0) > EV_TTL; },
+    onChange(fn) { evSubs.add(fn); return () => evSubs.delete(fn); },
+    canCheck: () => !!getCode(),
+    // check addresses (max 50 per call); returns the Worker's results or [] when not signed in / offline
+    async check(emails, signal) {
+      const list = [...new Set((emails || []).map(nE).filter(Boolean))]; const out = [];
+      if (!list.length || !EV.canCheck()) return out;
+      for (let i = 0; i < list.length; i += 50) {
+        const part = list.slice(i, i + 50).map(e => { const x = EV.get(e) || {}; return { e, rank: x.r || 0, tested: !!x.t, owner: !!x.o }; });
+        const d = await call('/emails/check', { body: { emails: part }, signal }); const res = (d.results || []).map(r => { const x = EV.get(r.e) || {}; return { ...r, rank: x.r || 0, tested: !!x.t, owner: !!x.o }; });
+        EV.put(res); out.push(...res);
+      }
+      return out;
+    }
+  };
+  let badsMem = null, badsAt = 0, badsBusy = null;
+  const BADS = {
+    map() { if (!badsMem) { const o = jget(BADS_KEY, null); badsMem = o && o.list && typeof o.list === 'object' ? o.list : {}; badsAt = o && +o.at || 0; } return badsMem; },
+    has: e => Object.prototype.hasOwnProperty.call(BADS.map(), nE(e)),
+    why: e => BADS.map()[nE(e)] || '',
+    fresh: () => (BADS.map(), Date.now() - badsAt < BADS_TTL),
+    async refresh(force) {
+      if (!EV.canCheck()) return false; if (!force && BADS.fresh()) return true; if (badsBusy) return badsBusy;
+      badsBusy = (async () => { try { const d = await call('/emails/bad'); const list = {}; for (const x of d.bad || []) { const e = nE(x && x.e); if (e) list[e] = String(x.why || '').slice(0, 120) || 'marked bad'; }
+        badsMem = list; badsAt = Date.now(); jset(BADS_KEY, { at: badsAt, list }); evSubs.forEach(fn => { try { fn(); } catch (e) {} }); return true; } catch (e) { return false; } finally { badsBusy = null; } })();
+      return badsBusy;
+    },
+    // mark / unmark for every device; resolves true when the Worker saved it
+    async mark(email, bad, why) {
+      const e = nE(email); if (!e) return false; const m = BADS.map();
+      if (bad) m[e] = why || 'marked bad'; else delete m[e]; jset(BADS_KEY, { at: badsAt, list: m });
+      if (!EV.canCheck()) return false;
+      try { await call('/emails/bad', { body: { items: [{ email: e, bad: !!bad, why: why || '' }] } }); await BADS.refresh(true); return true; } catch (x) { return false; }
+    }
+  };
+
+  const api = { EV, BADS, WORKER_URL, BASE_URL, viaAccess, ApiError, getCode, setCode, clearCode, call, status, buildItem, hasAddress, applyResult, newSummary, tally, run, messageFor, SRC };
   root.PFSkipApi = api; if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

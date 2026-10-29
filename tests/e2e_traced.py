@@ -85,7 +85,8 @@ with sync_playwright() as pw:
     ok(len(rows) == 4, f'CSV has the 3 traced properties ({len(rows)-1})')
     h = rows[0]; ra = next(x for x in rows[1:] if x[10].replace('-', '') == A['folio'])
     ok(ra[h.index('Phone 1')] == '3055550101' and ra[h.index('Phone 2')] != '' and ra[h.index('Email 1')] == 'a.owner@example.com' and ra[h.index('Traced Date')] == '2026-10-12', 'CSV row carries phones (plain), email, date')
-    ok(h[-5:] == [f'Phone {k} Grade' for k in range(1, 6)] and ra[h.index('Phone 1 Grade')] in ('A+', 'A', 'B', 'C', 'F'), 'CSV phone grade columns appended last')
+    ok(h[-3:] == [f'Email {k} Check' for k in range(1, 4)] and ra[h.index('Email 1 Check')] in ('Verified', 'Risky', 'Bad', 'Unchecked') and ra[h.index('Email 3 Check')] == '', 'CSV email check columns appended last')
+    ok(h[-8:-3] == [f'Phone {k} Grade' for k in range(1, 6)] and ra[h.index('Phone 1 Grade')] in ('A+', 'A', 'B', 'C', 'F'), 'CSV phone grade columns before the email checks')
     # row click -> drawer
     pg.click(f'[data-trow="{C["folio"]}"] .traddr'); pg.wait_for_selector('#savedBox', timeout=60000)
     ok(pg.get_attribute('#savedBox', 'data-folio') == C['folio'], 'clicking a row opens the drawer for that property')

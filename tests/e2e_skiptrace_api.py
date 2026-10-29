@@ -12,7 +12,7 @@ def ok(c, m):
     print(('PASS ' if c else 'FAIL ') + f'[{TAG}] ' + m, flush=True)
     if not c: errs.append(m)
 # ---- mocked Worker ----
-M = {'calls': [], 'status_calls': 0, 'remaining': 500, 'cap': 500, 'force': {}, 'delay': 0, 'fail_after': None, 'bad_code_status': False, 'n_post': 0}
+M = {'calls': [], 'status_calls': 0, 'remaining': 500, 'cap': 500, 'force': {}, 'delay': 0, 'fail_after': None, 'bad_code_status': False, 'n_post': 0, 'bad': {}, 'checks': [], 'bad_posts': []}
 def result_for(it):
     f = it['id']
     if f in M['force']: return dict(M['force'][f], id=f)
@@ -28,6 +28,17 @@ def handler(route):
     code = r.headers.get('x-access-code', '')
     jf = lambda o, s=200: route.fulfill(status=s, headers={**CORS, 'content-type': 'application/json'}, body=json.dumps(o))
     if code != CODE: return jf({'error': 'bad_access_code'}, 401)
+    if '/emails/bad' in u:   # shared bad list (mock of the Worker's KV list)
+        if r.method == 'GET': return jf({'ok': True, 'bad': [{'e': e, 'why': w} for e, w in sorted(M['bad'].items())]})
+        for it in r.post_data_json['items']:
+            M['bad_posts'].append(it)
+            if it.get('bad') is False: M['bad'].pop(it['email'], None)
+            else: M['bad'][it['email']] = it.get('why') or 'marked bad'
+        return jf({'ok': True, 'changed': 1, 'count': len(M['bad'])})
+    if '/emails/check' in u:
+        em = r.post_data_json['emails']; M['checks'].append([x['e'] for x in em])
+        v = lambda e, t: 'bad' if e in M['bad'] or e.startswith('dead') else 'verified' if t or e.startswith('v') else 'risky'
+        return jf({'ok': True, 'results': [{'e': x['e'], 'v': v(x['e'], x.get('tested')), 'why': 'mock check', 'src': 'mock'} for x in em], 'mailboxCheck': False})
     if u.endswith('/status'):
         M['status_calls'] += 1; return jf({'ok': True, 'dailyCap': M['cap'], 'usedToday': M['cap'] - M['remaining'], 'remainingToday': M['remaining'], 'maxPerRequest': 50})
     body = r.post_data_json; items = body['items']; M['calls'].append(items); M['n_post'] += 1
@@ -177,6 +188,46 @@ with sync_playwright() as pw:
     fE = pg.evaluate("[...document.querySelectorAll('#cards .card')].filter(c=>c.querySelector('[data-stgo]'))[0].dataset.folio"); M['force'][fE] = {'status': 'match', 'name': 'E', 'phones': [['3055559201', 'm', 0]], 'emails': []}
     pg.evaluate(f"document.querySelector('#cards .card[data-folio=\"{fE}\"] [data-stgo]').click()"); pg.wait_for_selector('#skCode'); pg.fill('#skCode', CODE); jsclick('#skCodeGo')
     pg.wait_for_selector(f'#cards .card[data-folio="{fE}"] a[href="tel:+13055559201"]', timeout=60000); ok(True, 'card button asks for the code once, then runs the lookup')
+
+    # ---------- emails are checked before anyone is emailed ----------
+    load('miami-dade', 'city=Homestead&q=SW 2&hg=0&ph=0'); pg.wait_for_selector('#cards .card')
+    fG = pg.evaluate("[...document.querySelectorAll('#cards .card')].filter(c=>c.querySelector('[data-stgo]'))[0].dataset.folio")
+    M['bad'] = {'bounced@example.com': 'bounced: user unknown'}
+    EI = [{'e': 'v1@example.com', 'rank': 1, 'tested': True, 'owner': True, 'v': 'verified', 'why': 'BatchData tested it'}, {'e': 'v2@example.com', 'rank': 2, 'tested': True, 'owner': True, 'v': 'verified', 'why': 'BatchData tested it'},
+          {'e': 'risky@example.com', 'rank': 3, 'tested': False, 'owner': True, 'v': 'risky', 'why': 'domain takes mail; mailbox not confirmed'}, {'e': 'dead@example.com', 'rank': 4, 'tested': False, 'owner': True, 'v': 'bad', 'why': 'domain has no mail server (dead domain)'},
+          {'e': 'bounced@example.com', 'rank': 5, 'tested': False, 'owner': True, 'v': 'bad', 'why': 'marked bad: bounced: user unknown', 'src': 'list'}]
+    M['force'][fG] = {'status': 'match', 'name': 'Gee Owner', 'phones': [['3055559401', 'm', 0]], 'emails': [x['e'] for x in EI], 'emailInfo': EI}
+    pg.evaluate(f"document.querySelector('#cards .card[data-folio=\"{fG}\"] [data-stgo]').click()"); cardG = f'#cards .card[data-folio="{fG}"]'
+    pg.wait_for_selector(f'{cardG} [data-stown]', timeout=60000)
+    ok(pg.inner_text(f'{cardG} [data-stown]').strip() == 'Email owner (2)' and 'v1@example.com' in pg.inner_text(cardG) and pg.query_selector(f'{cardG} .evb.evverified') is not None, 'card: Email owner (2) = the 2 verified; best address shown with a Verified badge')
+    ev = pg.evaluate("JSON.parse(localStorage.getItem('pf.emailv.v1'))"); ok(ev['v1@example.com']['v'] == 'verified' and ev['dead@example.com']['v'] == 'bad' and ev['v2@example.com']['r'] == 2 and ev['v2@example.com']['t'] == 1, 'Worker verdicts + rank / tested saved on the device')
+    aid = pg.get_attribute(cardG, 'data-id'); pg.evaluate(f"PF.openDrawer({aid})"); pg.wait_for_selector('.stdraw .evb.evbad', timeout=60000); dr = '.drawer .stdraw'
+    badges = pg.evaluate("[...document.querySelectorAll('.drawer .stdraw .stem')].map(x=>[x.querySelector('.em').textContent, x.querySelector('.evb').textContent, !!x.querySelector('[data-stemail]')])")
+    ok(badges == [['v1@example.com', 'Verified', True], ['v2@example.com', 'Verified', True], ['risky@example.com', 'Risky', True], ['dead@example.com', 'Bad', False], ['bounced@example.com', 'Bad', False]], f'drawer: every email has Verified / Risky / Bad, best first; bad ones have no Email button {badges}')
+    pg.evaluate("window.__opened=[]; window.open=function(u){ window.__opened.push(String(u)); return null; }")
+    pg.evaluate(f"document.querySelector('{dr} [data-stown]').click()"); pg.wait_for_timeout(600); lm = pg.evaluate('window.PF_LAST_EMAIL') or {}
+    ok(lm.get('bcc') == ['v1@example.com', 'v2@example.com'], f'Email owner BCCs only the verified ones, best rank first, max 2: {lm.get("bcc")}')
+    # Bad? goes to the shared list (every device)
+    M['bad_posts'].clear(); pg.evaluate(f"document.querySelector('{dr} [data-stbad=\"v1@example.com\"][data-v=\"1\"]').click()"); pg.wait_for_function("(()=>{const x=[...document.querySelectorAll('.drawer .stdraw .stem.bad .em')].map(e=>e.textContent); return x.includes('v1@example.com');})()", timeout=20000)
+    pg.wait_for_timeout(800); ok(M['bad_posts'] and M['bad_posts'][-1]['email'] == 'v1@example.com' and M['bad_posts'][-1]['bad'] is True and 'v1@example.com' in M['bad'], 'Bad? is sent to the shared list on the Worker')
+    ok(pg.inner_text(f'{dr} [data-stown]').strip() == 'Email owner', 'after marking one bad, Email owner BCCs the 1 verified left')
+    pg.evaluate(f"document.querySelector('{dr} [data-stbad=\"v1@example.com\"][data-v=\"0\"]').click()"); pg.wait_for_timeout(1500)
+    ok('v1@example.com' not in M['bad'] and pg.inner_text(f'{dr} [data-stown]').strip() == 'Email owner (2)', 'Unmark removes it from the shared list too')
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(300)
+    # another device: no local marks, the shared list still makes it bad; stored addresses without a verdict are checked by the Worker
+    M['bad']['v2@example.com'] = 'bounced: mailbox full'; M['checks'].clear()
+    pg.evaluate("localStorage.removeItem('pf.bademail.v1'); localStorage.removeItem('pf.badshared.v1'); localStorage.removeItem('pf.emailv.v1')")
+    fH = [f for f in pg.evaluate("[...document.querySelectorAll('#cards .card')].map(c=>c.dataset.folio)") if f != fG][0]
+    pg.evaluate(f"(()=>{{ const k='pf.skip.v1', o=JSON.parse(localStorage.getItem(k)||'{{}}'); o[{json.dumps(fH)}]={{a:'2026-10-29',s:'test',n:'',p:[],e:['r2@example.com','r1@example.com','dead2@example.com']}}; localStorage.setItem(k,JSON.stringify(o)); }})()")
+    load('miami-dade', f'q={fG}&hg=0'); pg.wait_for_function(f"(()=>{{ const c=document.querySelector('#cards .card[data-folio=\"{fG}\"] [data-stown]'); return c && c.textContent.trim()==='Email owner'; }})()", timeout=60000)
+    ok(pg.evaluate("PFSkipUI.isBad('v2@example.com') && !PFSkipUI.isBad('v1@example.com')"), 'fresh device: the shared list (from the Worker) marks the bounce bad, nothing stored locally')
+    ok(any('v1@example.com' in c for c in M['checks']), f'stored emails without a verdict are checked by the Worker ({sum(len(c) for c in M["checks"])} sent)')
+    go(f'q={fH}&hg=0'); cardH = f'#cards .card[data-folio="{fH}"]'; pg.wait_for_function(f"!!document.querySelector('{cardH} .evb.evrisky')", timeout=60000)
+    pg.evaluate("window.__opened=[]; window.open=function(u){ window.__opened.push(String(u)); return null; }")
+    pg.evaluate(f"document.querySelector('{cardH} [data-stown]').click()"); pg.wait_for_timeout(600); lm = pg.evaluate('window.PF_LAST_EMAIL') or {}
+    ok(lm.get('bcc') == ['r2@example.com'] and pg.evaluate("PFSkipUI.emailCheck('dead2@example.com').v") == 'bad', f'no verified address: Email owner BCCs only the single best-ranked risky one, never a bad one ({lm.get("bcc")})')
+    ok(pg.evaluate("PFSkipUI.BCC_MAX") == 2, 'BCC capped at 2')
+    M['bad'] = {}
 
     # ---------- no secrets in the page / sources ----------
     allsrc = pg.evaluate("Promise.all(['skiptrace-api.js','skiptrace-ui.js','app.js','index.html'].map(f=>fetch(f).then(r=>r.text()))).then(a=>a.join('\\n'))")

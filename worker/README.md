@@ -44,6 +44,26 @@ Deploy: `cd worker && npx wrangler deploy` (the Durable Object migration `v1` is
   Phones are already in the store format `[10 digits, 'm'|'l'|'v'|'', flags]` where flags `1` = DNC and `2` = litigator / TCPA-restricted.
 * Errors: `{error: code}` with `bad_access_code` (401), `locked_out` / `rate_limited` / `daily_cap` (429), `too_many_items` / `body_too_large` (413), `forbidden_origin` (403), `provider_*` (502/429), `not_configured` (503).
 
+## Email checks (before anyone is emailed)
+Every email found by a skip trace is checked right away; the result rides on each match as `emailInfo: [{e, rank, tested, owner, v, why, src}]`
+(`v` = `verified` | `risky` | `bad`). The plain `emails` list stays the owner's addresses, best BatchData rank first.
+Checks, in order: shared bad list → syntax / known typo domains / disposable or placeholder domains → MX lookup over DNS-over-HTTPS
+(no MX = bad) → optional mailbox API → old-ISP and role addresses = risky → BatchData "tested" = verified → otherwise risky.
+Workers cannot open SMTP connections, so a real mailbox check needs a paid/free-tier API (off by default):
+
+| Setting | Where | Meaning |
+|---|---|---|
+| `EMAIL_VERIFY_PROVIDER` | var | `quickemailverification` (100 free/day) or `zerobounce` (100 free/month). Unset = off |
+| `EMAIL_VERIFY_API_KEY` | secret (or KV `email_verify_key`) | the provider key; never returned by any route |
+| `EMAIL_VERIFY_DAILY` | var | max mailbox calls per day (default 90); results cached 90 days (bad: 365) |
+
+Routes (same auth as `/status`):
+- `POST /emails/check` `{emails:[{e,rank,tested,owner}] | ["a@b.co"]}` (max 50) → `{results:[{e,v,why,src}]}`
+- `GET /emails/bad` → `{bad:[{e,why,at}]}` — the shared bounce list (KV key `bad_emails`), served only to signed-in callers
+- `POST /emails/bad` `{items:[{email,bad:true|false,why}]}` (max 100) — mark / unmark from any device
+
+The list holds personal data, so it lives only in KV and is never committed to this repo.
+
 ## Protections
 * Access code compared in constant time (SHA-256 digests, no early exit); 8 wrong codes from one IP in 15 minutes locks that IP out for 15 minutes.
 * CORS limited to `ALLOWED_ORIGIN`; browser requests from any other origin get 403.

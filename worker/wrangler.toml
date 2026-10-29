@@ -27,3 +27,8 @@ class_name = "Limiter"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Limiter"]
+
+# Optional real mailbox check for skip-traced emails (OFF: nothing below is set). To turn it on later:
+#   EMAIL_VERIFY_PROVIDER = "quickemailverification"   (or "zerobounce")  as a plain var,
+#   the API key as a secret (wrangler secret put EMAIL_VERIFY_API_KEY) or in KV key 'email_verify_key',
+#   EMAIL_VERIFY_DAILY = "90"  (calls per New York day; QuickEmailVerification's free tier is 100/day)

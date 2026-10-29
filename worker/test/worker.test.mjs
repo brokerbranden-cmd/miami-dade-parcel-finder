@@ -150,4 +150,88 @@ await t('Cloudflare Access login: valid JWT replaces the access code; forged / w
   r = await run(req('GET', '/status', { origin: APP }), e1, f); assert.equal(r.res.status, 403, 'app origin not allowed unless listed'); r = await run(req('GET', '/status', { origin: APP }), mkEnv({ ALLOWED_ORIGIN: ORIGIN + ',' + APP }).env, f); assert.equal(r.res.headers.get('Access-Control-Allow-Origin'), APP);
   assert.ok(certCalls >= 1 && certCalls <= 4, 'certs cached');
 });
+
+/* ---------- email checks ---------- */
+const { _emailTest } = await import('../src/email.js');
+const mkKV = (init) => { const m = new Map(Object.entries(init || {})); return { m, get: async k => m.has(k) ? m.get(k) : null, put: async (k, v) => { m.set(k, v); } }; };
+// fake DNS-over-HTTPS: deadmx.example has no MX, nx.example does not exist, nullmx.example has a null MX, everything else takes mail
+let dnsCalls = 0;
+const dns = async (url) => { dnsCalls++; const u = new URL(url); assert.equal(u.hostname, 'cloudflare-dns.com'); const n = u.searchParams.get('name');
+  if (n === 'down.example') throw new Error('net');
+  if (n === 'nx.example') return new Response(JSON.stringify({ Status: 3 }));
+  if (n === 'deadmx.example' || n === 'blackplanet.com') return new Response(JSON.stringify({ Status: 0, Answer: [{ type: 5, data: 'x.' }] }));
+  if (n === 'nullmx.example') return new Response(JSON.stringify({ Status: 0, Answer: [{ type: 15, data: '0 .' }] }));
+  return new Response(JSON.stringify({ Status: 0, Answer: [{ type: 15, data: '10 mx.' + n + '.' }] })); };
+const runE = async (r, env, f, d) => { const res = await handle(r, env, { dnsFetch: d || dns }, f || mkFetch(() => ({}))); let j = null; try { j = await res.clone().json(); } catch (e) {} return { res, j }; };
+await t('email static checks: syntax, typo domains, throwaway, provider username rules', async () => {
+  const { staticCheck } = _emailTest;
+  for (const e of ['nope', 'a@b', 'a b@c.com', 'a..b@gmail.com', '.a@x.com', 'ana@gmial.com', 'x@mailinator.com', 'ab_cd@gmail.com', 'abc@gmail.com', 'lo-pez@gmail.com', '1abc@yahoo.com', 'ab-c@aol.com', '_x@hotmail.com'])
+    assert.equal(staticCheck(e) && staticCheck(e).v, 'bad', e);
+  for (const e of ['jo.hn.do.e420@gmail.com', 'ana.perez@gmail.com', 'sam_q_lee@yahoo.com', 'pat99@earthlink.net', 'a@b.co', 'kim_ro@hotmail.com', 'lee-123@live.com']) assert.equal(staticCheck(e), null, e);
+});
+await t('POST /emails/check: dead domain / no MX / null MX = bad; old ISP = risky; BatchData tested = verified; shared list = bad; DNS down = risky', async () => {
+  _emailTest.resetMx(); const kv = mkKV({ bad_emails: JSON.stringify({ 'gone@example.org': { w: 'bounced: user unknown', t: '2026-10-29' } }) });
+  const { env } = mkEnv({ SK_KV: kv });
+  const { res, j } = await runE(req('POST', '/emails/check', { origin: ORIGIN, body: { emails: ['a@nx.example', 'b@deadmx.example', { e: 'c@nullmx.example' }, 'someone@blackplanet.com', 'x@juno.com', { e: 'ok@good.example', tested: true, rank: 1 }, 'plain@good.example', 'GONE@example.org', 'info@good.example', 'z@down.example', 'ab_c@gmail.com', 'x@juno.com'] } }), env);
+  assert.equal(res.status, 200); assert.equal(res.headers.get('Access-Control-Allow-Origin'), ORIGIN); assert.equal(j.mailboxCheck, false);
+  const v = Object.fromEntries(j.results.map(r => [r.e, r.v])); assert.equal(j.results.length, 11, 'deduped');
+  assert.deepEqual(v, { 'a@nx.example': 'bad', 'b@deadmx.example': 'bad', 'c@nullmx.example': 'bad', 'someone@blackplanet.com': 'bad', 'x@juno.com': 'risky', 'ok@good.example': 'verified', 'plain@good.example': 'risky', 'gone@example.org': 'bad', 'info@good.example': 'risky', 'z@down.example': 'risky', 'ab_c@gmail.com': 'bad' });
+  assert.match(j.results.find(r => r.e === 'gone@example.org').why, /bounced/); assert.match(j.results.find(r => r.e === 'b@deadmx.example').why, /no mail server/);
+  const n = dnsCalls; await runE(req('POST', '/emails/check', { body: { emails: ['q@good.example'] } }), env); assert.equal(dnsCalls, n, 'MX cached per domain');
+});
+await t('/emails routes: auth, validation, limits', async () => {
+  const { env } = mkEnv({ SK_KV: mkKV() });
+  assert.equal((await runE(req('POST', '/emails/check', { code: null, body: { emails: ['a@b.co'] } }), env)).res.status, 401);
+  assert.equal((await runE(req('GET', '/emails/bad', { code: 'wrong' }), env)).res.status, 401);
+  assert.equal((await runE(req('GET', '/emails/check'), env)).res.status, 405);
+  assert.equal((await runE(req('POST', '/emails/check', { origin: 'https://evil.example', body: { emails: ['a@b.co'] } }), env)).res.status, 403);
+  assert.equal((await runE(req('POST', '/emails/check', { body: { emails: [] } }), env)).j.error, 'no_emails');
+  assert.equal((await runE(req('POST', '/emails/check', { body: { emails: Array.from({ length: 51 }, (_, i) => i + '@b.co') } }), env)).res.status, 413);
+  assert.equal((await runE(req('POST', '/emails/bad', { body: { email: 'not an email' } }), env)).j.error, 'bad_email');
+  assert.equal((await runE(req('POST', '/emails/bad', { body: { email: 'a@b.co' } }), mkEnv().env)).res.status, 503, 'no KV');
+  const r = await runE(req('OPTIONS', '/skiptrace-api/emails/bad', { code: null, origin: ORIGIN }), env); assert.equal(r.res.status, 204);
+});
+await t('shared bad list: mark from one device, every device sees it, unmark, skip trace marks it bad', async () => {
+  _emailTest.resetMx(); const kv = mkKV(); const { env } = mkEnv({ SK_KV: kv });
+  let r = await runE(req('POST', '/emails/bad', { body: { items: [{ email: 'Ana@Example.com', why: 'bounced: mailbox full' }, { email: 'b@good.example' }] } }), env);
+  assert.equal(r.j.ok, true); assert.equal(r.j.count, 2);
+  r = await runE(req('GET', '/skiptrace-api/emails/bad'), env); assert.deepEqual(r.j.bad.map(x => x.e), ['ana@example.com', 'b@good.example']); assert.equal(r.j.bad[0].why, 'bounced: mailbox full');
+  r = await runE(req('POST', '/emails/bad', { body: { email: 'b@good.example', bad: false } }), env); assert.equal(r.j.count, 1);
+  r = await runE(req('POST', '/skiptrace', { body: { items: [item('1')] } }), env, mkFetch(ok1));
+  const x = r.j.results[0]; assert.deepEqual(x.emails, ['ana@example.com']); assert.equal(x.emailInfo[0].v, 'bad'); assert.match(x.emailInfo[0].why, /mailbox full/); assert.equal(r.j.meta.emailsBad, 1);
+  assert.ok(!kv.m.has('batchdata_key'));
+});
+await t('mapEntry keeps rank / tested / owner and puts the owner\'s best-ranked addresses first; skip trace verdicts', async () => {
+  const m = mapEntry({ persons: [person({ emails: [{ email: 'second@good.example', rank: 2, tested: true }, { email: 'first@good.example', rank: 1 }, { email: 'old@juno.com', rank: 3, tested: true }] }), person({ propertyOwner: false })] });
+  assert.deepEqual(m.emails, ['first@good.example', 'second@good.example', 'old@juno.com']);
+  assert.deepEqual(m.emailInfo.map(x => [x.rank, x.tested, x.owner]), [[1, false, true], [2, true, true], [3, true, true]]);
+  const rel = mapEntry({ persons: [{ propertyOwner: false, emails: [{ email: 'r2@x.co', rank: 2 }, { email: 'r1@x.co', rank: 1 }] }, { propertyOwner: false, emails: [{ email: 'p2@x.co', rank: 1 }] }] });
+  assert.deepEqual(rel.emails, ['r1@x.co', 'p2@x.co', 'r2@x.co']); assert.equal(rel.emailInfo[0].owner, false);
+  assert.equal(mapEntry({ persons: [person({ emails: Array.from({ length: 9 }, (_, i) => ({ email: 'e' + i + '@x.co', rank: i + 1 })) })] }).emails.length, 5);
+  _emailTest.resetMx(); const { env } = mkEnv();
+  const f = mkFetch(reqs => upstreamOf(reqs, r => ({ input: r, persons: [person({ emails: [{ email: 'second@good.example', rank: 2, tested: true }, { email: 'first@good.example', rank: 1 }, { email: 'd@deadmx.example', rank: 3 }] })], meta: { matched: true } })));
+  const r = await runE(req('POST', '/skiptrace', { body: { items: [item('1')] } }), env, f);
+  assert.deepEqual(r.j.results[0].emailInfo.map(x => [x.e, x.v]), [['first@good.example', 'risky'], ['second@good.example', 'verified'], ['d@deadmx.example', 'bad']]);
+  assert.deepEqual([r.j.meta.emailsChecked, r.j.meta.emailsBad, r.j.meta.emailsVerified], [3, 1, 1]);
+  // DNS failing everywhere never fails the skip trace
+  const r2 = await runE(req('POST', '/skiptrace', { body: { items: [item('2')] } }), mkEnv().env, f, async () => { throw new Error('dns down'); }); assert.equal(r2.j.results[0].status, 'match');
+});
+await t('mailbox API: off by default; when configured it is used, capped per day, cached in KV, key never leaks', async () => {
+  _emailTest.resetMx(); const KEY = 'ev-key-not-real';
+  const prov = []; const f = async (url, init) => { const u = String(url);
+    if (u.startsWith('https://api.quickemailverification.com/')) { prov.push(u); const e = new URL(u).searchParams.get('email'); return new Response(JSON.stringify(e.startsWith('dead') ? { result: 'invalid', reason: 'rejected_email' } : e.startsWith('all') ? { result: 'valid', accept_all: 'true' } : e.startsWith('unk') ? { result: 'unknown' } : { result: 'valid', accept_all: 'false', disposable: 'false' })); }
+    if (u.startsWith('https://api.zerobounce.net/')) { prov.push(u); return new Response(JSON.stringify({ status: 'invalid', sub_status: 'mailbox_not_found' })); }
+    return mkFetch(ok1)(url, init); };
+  let r = await runE(req('POST', '/emails/check', { body: { emails: ['live@good.example'] } }), mkEnv({ SK_KV: mkKV() }).env, f); assert.equal(prov.length, 0, 'off'); assert.equal(r.j.results[0].v, 'risky');
+  const kv = mkKV(); const { env } = mkEnv({ SK_KV: kv, EMAIL_VERIFY_PROVIDER: 'quickemailverification', EMAIL_VERIFY_API_KEY: KEY, EMAIL_VERIFY_DAILY: '3' });
+  r = await runE(req('GET', '/health', { code: null }), env, f); assert.equal(r.j.mailboxCheck, true); assert.ok(!JSON.stringify(r.j).includes(KEY));
+  r = await runE(req('POST', '/emails/check', { body: { emails: ['live@good.example', 'dead@good.example', 'all@good.example', 'x@juno.com', 'bad@nx.example'] } }), env, f);
+  assert.deepEqual(r.j.results.map(x => x.v), ['verified', 'bad', 'risky', 'risky', 'bad']); assert.equal(prov.length, 3, 'nx domain not sent; 4th hits the daily cap of 3'); assert.equal(r.j.results[0].src, 'mailbox'); assert.ok(!JSON.stringify(r.j).includes(KEY));
+  r = await runE(req('POST', '/emails/check', { body: { emails: ['live@good.example', 'dead@good.example'] } }), env, f); assert.equal(prov.length, 3, 'cached'); assert.deepEqual(r.j.results.map(x => x.v), ['verified', 'bad']);
+  assert.ok([...kv.m.keys()].every(k => !k.includes('@')), 'cache keys are hashed');
+  const e2 = mkEnv({ SK_KV: mkKV({ email_verify_key: 'kv-ev-key' }), EMAIL_VERIFY_PROVIDER: 'zerobounce' }).env; prov.length = 0;
+  r = await runE(req('POST', '/emails/check', { body: { emails: ['someone@good.example'] } }), e2, f); assert.equal(r.j.results[0].v, 'bad'); assert.match(prov[0], /api_key=kv-ev-key/); assert.match(r.j.results[0].why, /mailbox not found/);
+  const e3 = mkEnv({ SK_KV: mkKV(), EMAIL_VERIFY_PROVIDER: 'qev', EMAIL_VERIFY_API_KEY: KEY, EMAIL_VERIFY_DAILY: '1' }).env; prov.length = 0;
+  r = await runE(req('POST', '/emails/check', { body: { emails: ['unk1@good.example', 'live2@good.example'] } }), e3, f); assert.equal(prov.length, 2, 'unknown result gives the call back'); assert.equal(r.j.results[1].v, 'verified');
+});
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

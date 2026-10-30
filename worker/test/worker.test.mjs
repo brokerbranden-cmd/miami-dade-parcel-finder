@@ -234,4 +234,30 @@ await t('mailbox API: off by default; when configured it is used, capped per day
   const e3 = mkEnv({ SK_KV: mkKV(), EMAIL_VERIFY_PROVIDER: 'qev', EMAIL_VERIFY_API_KEY: KEY, EMAIL_VERIFY_DAILY: '1' }).env; prov.length = 0;
   r = await runE(req('POST', '/emails/check', { body: { emails: ['unk1@good.example', 'live2@good.example'] } }), e3, f); assert.equal(prov.length, 2, 'unknown result gives the call back'); assert.equal(r.j.results[1].v, 'verified');
 });
+await t('QEV rejected -> shared bad list (dedupe); Yahoo family never Verified', async () => {
+  _emailTest.resetMx(); const KEY = 'ev-key-not-real'; const prov = [];
+  const f = async (url, init) => { const u = String(url);
+    if (u.startsWith('https://api.quickemailverification.com/')) { prov.push(u); const e = new URL(u).searchParams.get('email'); return new Response(JSON.stringify(e.startsWith('dead') ? { result: 'invalid', reason: 'rejected_email' } : { result: 'valid', accept_all: 'false', disposable: 'false' })); }
+    if (u.startsWith('https://cloudflare-dns.com/')) return new Response(JSON.stringify({ Status: 0, Answer: [{ type: 15, data: '10 mx.example.' }] }));
+    return mkFetch(ok1)(url, init); };
+  const kv = mkKV({ bad_emails: JSON.stringify({ 'old@good.example': { w: 'bounced: no such user', t: '2026-10-29T19:34:13Z' } }) });
+  const { env } = mkEnv({ SK_KV: kv, EMAIL_VERIFY_PROVIDER: 'quickemailverification', EMAIL_VERIFY_API_KEY: KEY });
+  let r = await runE(req('POST', '/emails/check', { body: { emails: ['dead1@good.example', 'dead2@yahoo.com', 'live@good.example', 'live.person@yahoo.com', 'someone@bellsouth.net', 'abc@att.net', 'abcd@aol.com', 'old@good.example'] } }), env, f);
+  const v = Object.fromEntries(r.j.results.map(x => [x.e, x]));
+  assert.equal(v['dead1@good.example'].v, 'bad'); assert.equal(v['dead2@yahoo.com'].v, 'bad'); assert.equal(v['live@good.example'].v, 'verified');
+  for (const e of ['live.person@yahoo.com', 'someone@bellsouth.net', 'abc@att.net', 'abcd@aol.com']) { assert.equal(v[e].v, 'risky', e); assert.match(v[e].why, /cannot be confirmed/); }
+  assert.ok(r.j.results.every(x => !('rej' in x)), 'internal flag not returned'); assert.equal(v['old@good.example'].src, 'list'); assert.equal(prov.length, 7, 'listed address not sent');
+  let o = JSON.parse(kv.m.get('bad_emails')); assert.deepEqual(Object.keys(o).sort(), ['dead1@good.example', 'dead2@yahoo.com', 'old@good.example']);
+  assert.match(o['dead1@good.example'].w, /mailbox check: rejected email/); assert.equal(o['old@good.example'].w, 'bounced: no such user', 'existing entry untouched');
+  r = await runE(req('GET', '/emails/bad'), env, f); assert.equal(r.j.bad.length, 3);
+  // again: served from the list now, no new provider calls, no duplicates; cached rejected results still land on the list if it was cleared
+  r = await runE(req('POST', '/emails/check', { body: { emails: ['dead1@good.example', 'live.person@yahoo.com'] } }), env, f); assert.equal(prov.length, 7); assert.equal(r.j.results[0].src, 'list'); assert.equal(r.j.results[1].v, 'risky');
+  assert.equal(Object.keys(JSON.parse(kv.m.get('bad_emails'))).length, 3);
+  kv.m.set('bad_emails', '{}'); r = await runE(req('POST', '/emails/check', { body: { emails: ['dead1@good.example'] } }), env, f); assert.equal(prov.length, 7, 'cached'); assert.deepEqual(Object.keys(JSON.parse(kv.m.get('bad_emails'))), ['dead1@good.example']);
+  // BatchData "tested" on a Yahoo-family address is not Verified either; other domains still are
+  _emailTest.resetMx(); const e2 = mkEnv({ SK_KV: mkKV() }).env;
+  r = await runE(req('POST', '/emails/check', { body: { emails: [{ e: 'tested.one@yahoo.com', tested: true }, { e: 'tested@good.example', tested: true }] } }), e2, f);
+  assert.deepEqual(r.j.results.map(x => x.v), ['risky', 'verified']);
+  assert.ok(_emailTest.isYahooFamily('yahoo.co.uk') && _emailTest.isYahooFamily('ymail.com') && _emailTest.isYahooFamily('rocketmail.com') && _emailTest.isYahooFamily('sbcglobal.net') && !_emailTest.isYahooFamily('gmail.com') && !_emailTest.isYahooFamily('notyahoo.com'));
+});
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

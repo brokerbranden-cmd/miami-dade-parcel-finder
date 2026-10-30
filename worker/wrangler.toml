@@ -24,9 +24,7 @@ id = "71a8b95c182c4b1782c850f34c7e4fcc"
 name = "LIMITER"
 class_name = "Limiter"
 
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["Limiter"]
+# [[migrations]] v1 (new_sqlite_classes Limiter) already applied on the live Worker; omitted so deploys do not re-apply it
 
 # Optional real mailbox check for skip-traced emails (OFF: nothing below is set). To turn it on later:
 #   EMAIL_VERIFY_PROVIDER = "quickemailverification"   (or "zerobounce")  as a plain var,

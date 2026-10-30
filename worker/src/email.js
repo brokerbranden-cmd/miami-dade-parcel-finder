@@ -22,6 +22,11 @@ const LEGACY = new Set(['juno.com', 'netzero.net', 'netzero.com', 'earthlink.net
   'compuserve.com', 'verizon.net', 'gte.net', 'bellsouth.net', 'att.net', 'sbcglobal.net', 'prodigy.net', 'pacbell.net', 'swbell.net', 'ameritech.net', 'flash.net', 'nvbell.net', 'wans.net', 'snet.net',
   'msn.com', 'webtv.net', 'adelphia.net', 'insightbb.com', 'localnet.com', 'excite.com', 'lycos.com', 'hughes.net', 'usa.net', 'bigfoot.com', 'altavista.com',
   'worldnet.att.net', 'charter.net', 'rr.com', 'cfl.rr.com', 'tampabay.rr.com']);
+// Yahoo-hosted mailboxes (Yahoo, AOL, AT&T / SBC / BellSouth): their servers accept every address during a mailbox check, so a 'valid'
+// answer proves nothing (bounced Oct 2026 addresses came back valid). Never shown as Verified: best case is Risky.
+const YAHOO_FAMILY = /^(yahoo\.[a-z.]+|ymail\.com|rocketmail\.com|aol\.com|aim\.com|att\.net|sbcglobal\.net|bellsouth\.net|pacbell\.net|swbell\.net|prodigy\.net|ameritech\.net|flash\.net|nvbell\.net|wans\.net|snet\.net)$/;
+export const isYahooFamily = dom => YAHOO_FAMILY.test(String(dom || '').toLowerCase());
+const YAHOO_WHY = 'Yahoo / AOL / AT&T mailbox: these servers accept every address, so it cannot be confirmed';
 const ROLE = /^(info|admin|administrator|office|sales|contact|support|help|noreply|no-reply|donotreply|webmaster|postmaster|hostmaster|abuse|billing|accounts|hello|mail|team|marketing|service|reception|frontdesk)$/;
 const PROVIDER_RULES = [
   // [domains, test(local) -> '' ok | reason]
@@ -99,7 +104,7 @@ async function providerCall(prov, key, email, fetchImpl) {
       const r = await fetchImpl('https://api.quickemailverification.com/v1/verify?email=' + encodeURIComponent(email) + '&apikey=' + encodeURIComponent(key), { headers: { Accept: 'application/json' }, signal: ac.signal });
       if (!r.ok) return null; const j = await r.json(); const res = String(j && j.result || '').toLowerCase(), reason = String(j && j.reason || '').replace(/_/g, ' ');
       if (String(j && j.disposable) === 'true') return { v: 'bad', why: 'throwaway inbox (mailbox check)' };
-      if (res === 'invalid') return { v: 'bad', why: 'mailbox check: ' + (reason || 'rejected') };
+      if (res === 'invalid') return { v: 'bad', why: 'mailbox check: ' + (reason || 'rejected'), rej: true };
       if (res === 'valid') return String(j.accept_all) === 'true' ? { v: 'risky', why: 'mailbox check: domain accepts every address (cannot confirm)' } : { v: 'verified', why: 'mailbox check: mailbox exists' };
       return null;
     }
@@ -107,7 +112,7 @@ async function providerCall(prov, key, email, fetchImpl) {
       const r = await fetchImpl('https://api.zerobounce.net/v2/validate?api_key=' + encodeURIComponent(key) + '&email=' + encodeURIComponent(email) + '&ip_address=', { headers: { Accept: 'application/json' }, signal: ac.signal });
       if (!r.ok) return null; const j = await r.json(); const st = String(j && j.status || '').toLowerCase(), sub = String(j && j.sub_status || '').replace(/_/g, ' ');
       if (st === 'valid') return { v: 'verified', why: 'mailbox check: mailbox exists' };
-      if (st === 'invalid' || st === 'spamtrap' || st === 'abuse' || st === 'do_not_mail') return { v: 'bad', why: 'mailbox check: ' + (sub || st.replace(/_/g, ' ')) };
+      if (st === 'invalid' || st === 'spamtrap' || st === 'abuse' || st === 'do_not_mail') return { v: 'bad', why: 'mailbox check: ' + (sub || st.replace(/_/g, ' ')), ...(st === 'invalid' ? { rej: true } : {}) };
       if (st === 'catch-all') return { v: 'risky', why: 'mailbox check: domain accepts every address (cannot confirm)' };
       return null;
     }
@@ -116,6 +121,11 @@ async function providerCall(prov, key, email, fetchImpl) {
 }
 /* opts: {env, fetchImpl (provider), dnsFetch, reserve(n)->bool (daily quota), bad (shared list object)} ; meta: {rank, tested, owner} */
 export async function checkOne(email, meta, opts) {
+  const r = await checkOneRaw(email, meta, opts);
+  if (r && r.v === 'verified' && isYahooFamily(domainOf(r.e))) return { ...r, v: 'risky', why: YAHOO_WHY };
+  return r;
+}
+async function checkOneRaw(email, meta, opts) {
   const e = normEmailV(email), m = meta || {};
   const b = opts.bad && opts.bad[e]; if (b) return { e, v: 'bad', why: 'marked bad' + (b.w ? ': ' + String(b.w).slice(0, 80) : ''), src: 'list' };
   const st = staticCheck(e); if (st) return { e, ...st };
@@ -125,11 +135,11 @@ export async function checkOne(email, meta, opts) {
   if (prov && mx !== 'unknown') {
     let cached = null; const ck = 'ev:' + (await sha(e));
     try { const v = opts.env.SK_KV && await opts.env.SK_KV.get(ck); if (v) cached = JSON.parse(v); } catch (x) { cached = null; }
-    if (cached && cached.v) return { e, v: cached.v, why: cached.why, src: 'mailbox' };
+    if (cached && cached.v) return { e, v: cached.v, why: cached.why, src: 'mailbox', ...(cached.rej ? { rej: true } : {}) };
     const key = await mailboxKey(opts.env);
     if (key && (await opts.reserve(1))) {
       const r = await providerCall(prov, key, e, opts.fetchImpl);
-      if (r) { try { if (opts.env.SK_KV) await opts.env.SK_KV.put(ck, JSON.stringify({ v: r.v, why: r.why, at: Date.now() }), { expirationTtl: (r.v === 'bad' ? 365 : 90) * 86400 }); } catch (x) { /* cache is best effort */ } return { e, ...r, src: 'mailbox' }; }
+      if (r) { try { if (opts.env.SK_KV) await opts.env.SK_KV.put(ck, JSON.stringify({ v: r.v, why: r.why, at: Date.now(), ...(r.rej ? { rej: true } : {}) }), { expirationTtl: (r.v === 'bad' ? 365 : 90) * 86400 }); } catch (x) { /* cache is best effort */ } return { e, ...r, src: 'mailbox' }; }
       await opts.reserve(-1);   // unknown result: provider does not bill, give the call back
     }
   }
@@ -143,6 +153,15 @@ export async function checkMany(list, opts) {
   const out = [], q = list.slice(); let i = 0;
   const worker = async () => { while (i < q.length) { const k = i++; const it = q[k]; try { out[k] = await checkOne(it.e, it, opts); } catch (x) { out[k] = { e: normEmailV(it.e), v: 'risky', why: 'check failed', src: 'error' }; } } };
   await Promise.all(Array.from({ length: Math.min(6, q.length) }, worker));
+  // mailbox check said the address does not exist: add it to the shared bad list (one read-merge-write, skips ones already listed)
+  const rej = out.filter(x => x && x.rej && x.v === 'bad'); for (const x of out) if (x) delete x.rej;
+  if (rej.length && opts.env && opts.env.SK_KV) {
+    try {
+      const o = await badList(opts.env), t = new Date().toISOString().replace(/\.\d+Z$/, 'Z'); let n = 0;
+      for (const x of rej) if (!o[x.e] && Object.keys(o).length < 20000) { o[x.e] = { w: String(x.why || 'mailbox check: rejected').slice(0, 120), t }; n++; }
+      if (n) { await saveBadList(opts.env, o); if (opts.bad) for (const x of rej) opts.bad[x.e] = o[x.e]; }
+    } catch (x) { /* best effort: the verdict is still Bad and cached */ }
+  }
   return out;
 }
-export const _emailTest = { staticCheck, mxStatus, checkOne, isLegacy, resetMx: () => { mxCache.clear(); mxFlight.clear(); }, LEGACY, TYPO, DISPOSABLE };
+export const _emailTest = { isYahooFamily, staticCheck, mxStatus, checkOne, isLegacy, resetMx: () => { mxCache.clear(); mxFlight.clear(); }, LEGACY, TYPO, DISPOSABLE };

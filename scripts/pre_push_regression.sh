@@ -29,7 +29,9 @@ run(){ local n=$1; shift; local a rc why
   if [ $rc = 0 ]; then echo "PASS $n$([ $a = 2 ] && echo ' (re-run after browser crash)')" | tee -a "$S"; else echo "FAIL $n (exit $rc) $(grep -m1 -E '^FAIL|FAILED|Error' "$L/$n.log" | cut -c1-200)" | tee -a "$S"; fi; }
 run unit node tests/unit_skiptrace.js
 run unit_ask node tests/unit_ask.js
+run orgname_unit python3 tests/unit_orgname.py
 run ownerkind python3 tests/e2e_ownerkind.py "$U"
+run orgname_e2e python3 tests/e2e_orgname.py "$U"
 run utility_list python3 tests/unit_utility_list.py
 run broward_lp_unit python3 tests/unit_broward_lp.py
 for m in desktop mobile; do

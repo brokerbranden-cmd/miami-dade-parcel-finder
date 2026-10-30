@@ -163,10 +163,106 @@ const ORG_LEGAL=/\b(?:L ?L ?C|INC|CORP|CORPORATION|LTD|L ?L ?P|P ?L ?L ?C)\b/;  
 const ORG_CHURCH=/\b(?:CHURC?H?|TEMPLE|PARISH|MISSION|MISION|CHAPEL|IGLESIA)\b/;
 const ORG_CHURCH_BACK=/\b(?:OF|THE|GOD|DIOS|CHRIST\w*|CRISTO|CRISTIANA|JESUS|HOLY|MEMORIAL|BAPT\w*|AME|CME|ST|SAINT|SANTA|SAN|LIFE|VIDA|COMMUNITY|NEW|NUEVA|FIRST|BIBLE|GOSPEL|APOSTOLIC|MISSIONARY|ASSEMBLY|UNITED|ALLIANCE|LUTH\w*|PRESBYTERIAN|EPISCOPAL|CATHOLIC|ADVENTIST|NAZARENE|FAITH|GRACE|VICTORY|TRINITY|CALVARY|HOPE|PRAISE|WORD|KINGDOM|ZION|BETHEL|SHILOH|MT|MOUNT|TEMPLE|TESTAMENT|INTERNATIONAL|FULL|REAL|RESCUE|DE|DEL|LA|EL|EVANGELICA|PENTECOSTAL|MISIONERA|HISPANA|SPANISH|HAITIAN|KOREAN|CHINESE|GREEK|BAPTIST|METHODIST|HWY|BAY|CHURCH|SHORE)\b/;
 const ORG_PERSON=/(?:&\s?[WH]\b|\bH\s?\/\s?E\b|\bH\/E\b|\bLE\b|\bL E\b|\bETAL\b|\bETUX\b|\bJTRS\b|\bJR\b|\bSR\b|\bIII?\b)/;
-function orgName(raw){
+/* Business-word layer (Oct 30, 2026: 'AMERICAN EXPRESS TRAVEL RELATE', 'SOUTHERN SHORES ACQUISITIONS L', 'FLORIDA EASTERN ECCLESIASTICAL'
+   were listed under Individuals). Same rules for every county pack (scripts/org_name.py is the Python twin; tests/unit_orgname.py checks both):
+   - ORG_BIZ: words a person's name never carries (ACQUISITIONS, HOLDINGS, PROPERTIES, SERVICES, ECCLESIASTICAL ...) -> organization
+     (unless the line has a person marker such as LE, JR, ETAL, &W), also when the 30-character roll field cut the word ('... PROPERTI').
+   - '&' corporate patterns: '& SONS', '& CO', '& ASSOCIATES', '& PARTNERS', '& BROS', '& COMPANY'.
+   - ORG_SOFT words that are also surnames (TRAVEL, EXPRESS, CAPITAL, BANK, CHURCH, TEMPLE, SHORES ...) and ORG_GEO words (FLORIDA, SOUTHERN,
+     EASTERN, AMERICAN, NATIONAL ...) count when the line does not look like a person: no person marker, no couple ('JOHN & MARY ...'), no
+     middle initial, and no common given name. Given names are data-driven per pack (orgGiven: first / second words of short 2-4 word
+     names on rows not already company / government, seen 8-15+ times by pack size; the condo pack adds the main pack's; under 200 given names
+     -> hard rules only), so 'JOHN BANK' / 'SMITH TRAVEL MARIA' stay individuals in every county whatever the name order.
+     2+ soft / geo signals, or 1 soft signal on a non-person line, or a geo first word on a 3+ word non-person line -> organization. */
+const ORG_W=a=>new RegExp('\\b(?:'+a.join('|')+')\\b');
+const ORG_BIZ_LIST=['ACQUISITIONS?','ACQUISTIONS?','ACQUISITON\\w*','ACQS','HOLDINGS','HLDGS','HLDG','HOLDCO','PROPCO','OPCO','ASSETS','SOLUTIONS','CONSTRUCTION','CONSTRUCTORS','CONTRACTORS','CONTRACTING',
+  'DEVELOPERS?','DEVELOPMENTS?','DEVELOPMNT','DEVELOPEMENT','DEVLPMT','PROPERTIES','PROPERTYS','PROPERTI','PROPS','PROPRTIES','RENTALS','EQUITIES','INVESTORS','INVESTMENTS?','INVEST','INVESTING','INVS','LENDING','LENDERS',
+  'RESIDENTIAL','PORTFOLIO','PORTFOLIOS','OPPORTUNIT\\w*','SERVICES','SERVICING','SVCS','ENTERPRISES?','MANAGEMENT','MANAGEMNT','MGMT','MNGMT','REALTY','REALTORS','REAL ESTATE','VENTURES?','PARTNERS','PARTNERSHIPS?',
+  'MORTGAGE','MTGE','FINANCIAL','FUNDING','BUILDERS','INTERNATIONAL','INTERNATL','INTL','COMPANY','COMPANIES','ASSOCIATES','INDUSTRIES','TECHNOLOGIES','TECHNOLOGY','LOGISTICS','CONSULTING','CONSULTANTS','TRADING',
+  'IMPORTS?','EXPORTS?','DISTRIBUTORS?','DISTRIBUTION','PRODUCTIONS','BANCORP','BANCSHARES','SECURITIES','INSURANCE','ASSURANCE','LEASING','AUTOMOTIVE','RESTAURANTS?','HOTELS?','MOTELS?','RESORTS?',
+  'TOWNHOMES','TOWNHOUSES','CONDOMINIUMS?','HOA','POA','CORPORATE','PLC','GMBH','SRL','LLLP','LTDA','S DE R ?L','SOCIEDAD','INVERSIONES','INMOBILIARIA','PROPIEDADES','GRUPO','REIT','UNIVERSITY','ACADEMY',
+  'ECCLESIASTICAL','ECCLESIA','DIOCESAN','ARCHDIOCESAN','PRESBYTERY','SYNOD','PARISHES','CONGREGATIONAL','EVANGELISTIC','BIBLE','GOSPEL','HOLINESS','ORATORY','MONASTERY','CONVENT','SHRINE',
+  'APARTMENT','HOMEBUILDERS','HOMEBUILDER','STORAGE','WAREHOUSE','WAREHOUSES','PARKING','YACHT','PRTNSHP','PARTNSHP','PTNSHP','PRTSHP','LMTD','LIMITADA','ANONIMA','TOWNHOME','TOWNHOUSES','AVIATION','AIRLINES?','AIRWAYS','RAILWAY','RAILROAD','TELEPHONE','TELECOM\\w*','COMMUNICATIONS','UTILITIES',
+  'ELECTRIC','PETROLEUM','OIL','CHEVRON','EXXON','SHELL OIL','MOBIL','AMOCO','CITGO','SUNOCO','WALGREEN\\w*','PUBLIX','WINN DIXIE','MCDONALDS','WALMART','WAL MART','TARGET CORP\\w*','HOME DEPOT','LOWES HOME',
+  'TRAVEL RELATE\\w*','DST','PROPRIETORSHIP','PNTSHP','PTNRSHP','PRTNRSHP','PARTNRSHP','PRTNRS?','PTNRS?','PARTNR','LIMITED','LIMTED','RTLY','INVMTS?','INVTS',
+  'CHAMBER OF','FRATERNITY','SORORITY','ORGANIZATION','CONFERENCE','FEDERATION','TRIBE OF','VOLUNTEERS?','AMBULANCE','RESCUE','WASTEWATER','PLUMBING','CONSERVANCY','ENVIRONMENTAL','LANDSCAPING','LAUNDRY',
+  'REMODELING','ACCOUNTING','FUNERAL','CHEVROLET','WORKSPACES','BUNGALOWS','MARKETING','SOROPTIMISTS?','RED CROSS','MOST REVEREND','SECRETARY OF','KINGDOM OF','REPUBLIC OF','GOVERNMENT OF',
+  'CONSULATE','CONSULADO','EMBASSY','CITY HALL','FLOOD CON\\w*','HOME FOR THE','HOUSE OF (?:THE|GOD|PRAYER|WORSHIP|FAITH|PRAISE|HOPE)','OWNERS','NEIGHBORHOOD','COMMERCE','VACATIONS?','TOURS','TROLLEY','SEAWALLS',
+  'BOY SCOU\\w*','SCOUTS','COUNCIL OF','COUNCIL ON','PRESIDENTS COUNCIL','METHODI\\w*','AFFORDABLE','RELATED SERVICES','D ?B ?A','TR CO','TRUST CO','TRUST COMPANY','CREDIT UNION','N ?A'+'(?= TR| TRS| TRUSTEE|$)'];
+/* glued / spaced / misspelt LLC and INC ('HOMESWEETHOME1LLC', 'BRICKELL 500 2303 I N C', 'OCEAN RESERVE 722 LCC') and foreign company
+   endings on a line of 2+ words ('PRETORIA ESTATE AG', 'IT GLOBAL SRO', 'PATRINVEST GLOBAL S L', '... B V') */
+const ORG_GLUED=/[A-Z0-9]{2}L{2,3}C$|\bL L C$|\bI N C$|\bLCC$|\bCLLC$|\bLLLC\b/, ORG_FOREIGN_END=/ (?:SRO|S R O|S L U|SLU|B V|BV|N V|NV|LTDA|SARL|S A R L|S DE R ?L(?: DE C ?V)?|S A DE C ?V|SA DE CV|PTY LTD|BHD|KFT|EIRL)$/, ORG_FOREIGN_WEAK=/ (?:AG|SAS|S A S|SPA|S P A|S L|SL)$/;
+const ORG_BIZ=ORG_W(ORG_BIZ_LIST.slice(0,-1)), ORG_NA_END=/\b(?:BANK|BK|TRUST|ASSOCIATION|ASSN) N ?A$/;
+const ORG_BIZ_PFX=['ACQUISITION','HOLDINGS','PROPERTIES','MANAGEMENT','DEVELOPMENT','INVESTMENTS','ENTERPRISES','INTERNATIONAL','FOUNDATION','CORPORATION','PARTNERSHIP','PARTNERS','COMPANY','SERVICES',
+  'REALTY','VENTURES','PORTFOLIO','OPPORTUNITY','SOLUTIONS','CONSTRUCTION','DEVELOPERS','INCORPORATED','ASSOCIATES','ECCLESIASTICAL','CONDOMINIUM','APARTMENTS','RENTALS','EQUITIES','INVESTORS','LENDING','MORTGAGE','FINANCIAL','INDUSTRIES','TECHNOLOGIES',
+  'HOSPITALITY','VACATION','ENVIRONMENTAL','PROFESSIONAL','COMMERCIAL','INDUSTRIAL','RECREATION','MAINTENANCE','ASSOCIATION','CORPORATION','TOWNHOMES','TOWNHOUSES','NEIGHBORHOOD','HOMEOWNERS',
+  'COMMUNITY','EDUCATION','HEALTHCARE','REHABILITATION','CONSERVATION','ENGINEERING','AUTOMOTIVE','LANDSCAPING','VOLUNTEER','RESCUE','EVANGELISTIC','INTERDENOMINATIONAL','CONSTRUCTORS','DISTRIBUTORS'];
+const ORG_AMP=/&\s?(?:SONS|BROS|BROTHERS|CO|COMPANY|ASSOCIATES|ASSOC|ASSOCS|PARTNERS|PARTNER)\b/;
+// ORG_SOFT_B: business words that are rarely names (one is enough on a non-person line of 3+ words; ORG_SOFT_2 also on 2-word lines)
+// ORG_SOFT_N: words that are also common given names / surnames (VILLA, PARK, TEMPLE, CHURCH, SENIOR, ROYAL ...): only as a 2nd signal
+const ORG_SOFT_B_LIST=['TRAVEL','EXPRESS','CAPITAL','EQUITY','HOMES','GROUP','FUND','FUNDS','BANK','BK','BANKING','SERVICE','SVC','SVS','SERV','PROPERTY','PROP','ASSET','REO','ACQ','HOLDING','CO','CORPS','ESTATES','TOWERS',
+  'CENTER','CENTRE','CTR','DISTRICT','AUTHORITY','COUNTY','SCHOOL','MEDICAL','CLINIC','MOTORS','AUTO','FARMS','RANCH','NURSERY','GROVES','MARKET','LANDS','HOUSING','DEVELOPMENT','INVESTMENT','INV','MGT','RENTAL',
+  'FINANCE','ESCROW','LOANS','SAVINGS','VENTURE','TRADERS','SUPPLY','SUPPLIES','PRODUCTS','SYSTEMS','IMPORT','EXPORT','ACRES','GARDENS','POINTE','OFFICE','OFFICES','PROFESSIONAL','DENTAL','HEALTH','HEALTHCARE',
+  'COMMUNITY','COMMUNITIES','PROJECTS','CONSOLIDATED','TOWNHOUSE','SHORES','SUITES','RESORT','CLUB','CHAPEL','MISSION','ASSEMBLY','BUSINESS','COMMERCIAL','INDUSTRIAL','RETAIL','SHOPPING','MULTIFAMILY','LOGISTIC',
+  'MAINTENANCE','MAINT','RECREATION','RECREATIONAL','EDUCATION','EDUCATIONAL','TECH','MEDIA','ENGINEERING','PHARMACY','PHARMACEUTICAL','HOSPITALITY','REHABILITATION','ASSISTED','MEMORIAL','PRAYER','WORSHIP','DELIVERANCE','OWNER','LOFTS','MANORS','COURTS','PRESERVE','PRESERV','PROJ','MOBILE','UNITS'];
+const ORG_SOFT_2=new Set(['PROP','PROPERTY','ASSET','ACQ','HOLDING','CAPITAL','GROUP','EQUITY','ESTATES','TOWERS','CENTER','CENTRE','CTR','GARDENS','POINTE','TOWNHOUSE','SUITES','RESORT','MOTORS','CLINIC','NURSERY','SUPPLY','SUPPLIES',
+  'PRODUCTS','SYSTEMS','HEALTHCARE','PROFESSIONAL','COMMUNITY','COMMUNITIES','CONSOLIDATED','SAVINGS','ESCROW','LOANS','BUSINESS','COMMERCIAL','INDUSTRIAL','SHOPPING','MULTIFAMILY','MAINTENANCE','HOSPITALITY','PHARMACY','ENGINEERING']);
+const ORG_SOFT_N_LIST=['TEMPLE','CHURCH','PARISH','VILLA','VILLAS','PARK','SENIOR','ROYAL','HOUSE','BEACH','LOAN','PRIME','ISLAND','ISLANDS','HARBOR','HARBOUR','LODGE','INN','CARE','UNITED','ALLIED','GENERAL','UNIVERSAL','PREMIER',
+  'ELITE','IMPERIAL','CHRISTIAN','DEV','PARTNER','TRADE','GROVE','FARM','TOWER','MANAGE','LIVING','MARINA','MARINE','ABBEY','TITLE','LAND','HOME','STAR','SUN','GOLD','GOLDEN','SILVER','DIAMOND','CROWN','EAGLE','PALM','PALMS','LAKE','LAKES','OAK','OAKS','PINE','RIVER','CHAPTER','COUNCIL','PLAZA','REAL','SQUARE','PLACE','TERRACE','PATIO','NORTH','SOUTH','EAST','WEST'];
+const ORG_GEO_LIST=['FLORIDA','FLA','SOUTHERN','NORTHERN','EASTERN','WESTERN','SOUTHEAST','SOUTHEASTERN','SOUTHWEST','SOUTHWESTERN','NORTHEAST','NORTHEASTERN','NORTHWEST','NORTHWESTERN','MIDWEST','CENTRAL','ATLANTIC',
+  'PACIFIC','COASTAL','GULF','CARIBBEAN','SUNCOAST','AMERICAN','AMERICAS','USA','U S A','NATIONAL','NATL','FEDERAL','INTERSTATE','GLOBAL','WORLD','WORLDWIDE','CONTINENTAL','METRO','METROPOLITAN',
+  'MIAMI','DADE','BROWARD','BISCAYNE','EVERGLADES','TROPICAL','TROPICS','LATIN','EURO','EUROPEAN','TRANSATLANTIC','OCEAN','OCEANFRONT','BAYFRONT','DOWNTOWN','KEYS','KEY WEST','LAUDERDALE','HIALEAH','POMPANO','DEERFIELD','PLANTATION','SAWGRASS','INTRACOASTAL','GREATER'];
+const ORG_RX=a=>new RegExp('\\b(?:'+a.join('|')+')\\b','g');
+const ORG_SOFT_B=ORG_RX(ORG_SOFT_B_LIST), ORG_SOFT_N=ORG_RX(ORG_SOFT_N_LIST), ORG_GEO=ORG_RX(ORG_GEO_LIST);
+const ORG_SIG_WORDS=new Set([...ORG_SOFT_B_LIST,...ORG_SOFT_N_LIST,...ORG_GEO_LIST].join(' ').split(' '));
+let ORG_GIVEN=null;   // given names of the most recently loaded pack (PF.orgName default)
+// a line that is a trust / trustee / separate-property or land trust ('... LIVING TRUS', '... LAND TRU', '... REV SEPARATE PROP'): not a company
+const ORG_TRUSTISH=/\b(?:TR|TRS|TRU|TRUS|TRUST|TRUSTS|TRUSTE|TRUSTEE|TRUSTEES|REV|IRREV|IRR|REVOC\w*|IRREVOC\w*|IRA|SEPARATE|SEP|QPRT|GRAT|LIV|LIVING TRU?S?T?|LAND T|LD T|LND T|PROP T|LANDTRUST\w*)$|\b(?:TRUST|TRUSTEE|TRUSTEES|REVOCABLE|IRREVOCABLE|REV TR|LIVING TRUST|SEPARATE PROP\w*|SEP PROP\w*|LAND TRUST|LANDTRUST|IRA|QPRT|GRAT|REV INTER\w*|INTER VIVOS)\b/;
+/* given names, data-driven per pack: words in the first or second place of short (2-4 word) owner lines of rows the roll does not
+   flag as company / government, with no business word and no digit, seen >= 15 times (first-last counties put the given name first,
+   last-first counties second; a surname that lands in the set only makes the check more careful). Neutral words are left out. */
+const ORG_GIVEN_SKIP=new Set(['LIFE','ESTATE','EST','THE','OF','AND','FOR','AT','BY','IN','ON','TO','NEW','OLD','ONE','TWO','THREE','FOUR','FIVE','SIX','ALL','OUR','MY','MI','SU',
+  'CASA','BUILDING','FAMILY','TOWN','VILLAGE','CITY','BAY','SUNSET','SUNRISE','WATER','DE','DEL','LA','LAS','LOS','EL','DA','DOS','DI','VAN','VON','JR','SR','II','III','IV','LE','ETAL','TR','TRS','EST','JTRS','REM']);
+function orgGiven(names,flags){ const c=new Map();
+  for(let r=0;r<names.length;r++){ const raw=names[r]; if(!raw || (flags && (flags[r]&(8|32)))) continue;
+    for(const l0 of String(raw).toUpperCase().split('|')){ if(ORG_CAREOF.test(l0)) break;
+      const l=l0.replace(/['’.]/g,'').replace(/[^A-Z0-9&\/]+/g,' ').replace(/\s+/g,' ').trim(); if(!l||/\d/.test(l)) continue;
+      const t=l.split(' '); if(t.length<2||t.length>4) continue;
+      if(ORG_LEGAL.test(l)||ORG_BIZ.test(l)||ORG_AMP.test(l)) continue;
+      for(let i=0;i<2;i++){ const x=t[i]; if(x.length>1 && x!=='&') c.set(x,(c.get(x)||0)+1); } } }
+  const lim=Math.max(8,Math.min(15,Math.round(names.length/20000))), g=new Set(); for(const [w,k] of c) if(k>=lim && !ORG_SIG_WORDS.has(w) && !ORG_GIVEN_SKIP.has(w)) g.add(w); return g; }
+const ORG_STREET=/\b(?:ST|STREET|AVE|AVENUE|AVENU|RD|ROAD|BLVD|BOULEVARD|DR|DRIVE|CT|COURT|TER|TERR|TERRACE|PL|PLACE|WAY|LN|LANE|HWY|HIGHWAY|CIR|CIRCLE|TRL|TRAIL|PKWY|PARKWAY|NW|NE|SW|SE|UNIT|APT|STE|SUITE|BLDG)\b/;
+function orgBiz(l,l0,w,pers,given,first,afterRem){
+  if(pers || afterRem) return '';
+  if(ORG_GLUED.test(l) && !ORG_TRUSTISH.test(l)) return 'llc';   // 'HOMESWEETHOME1LLC', 'NW22LLC'
+  if(w.length<2) return '';
+  // the first owner line is a street address ('113 NE 7TH STREET', '4000-4006 NW 124 AVENUE', '10750 ROYAL PALM BLVD #6 LAND'): the name of
+  // an LLC or a land trust, never a person's
+  if(first && /^\d/.test(w[0]) && ORG_STREET.test(l)) return 'addr';
+  if(ORG_TRUSTISH.test(l)) return '';      // trusts ('... LIVING TRUS', '... LAND TRU') are not companies; the roll's trust flag covers them
+  if(ORG_BIZ.test(l)) return 'biz'; if(ORG_FOREIGN_END.test(l)) return 'foreign';
+  if(ORG_NA_END.test(l)) return 'na'; if(ORG_AMP.test(l)) return 'amp';
+  const last=w[w.length-1], g=given||ORG_GIVEN;
+  const couple=w.length<=6 && w.some((x,i)=>(x==='&' ? [w[i-1],w[i+1]].some(y=>y && !ORG_SIG_WORDS.has(y)) : x==='AND' && g && [w[i-1],w[i+1]].some(y=>y && g.has(y))));
+  if(couple) return '';   // 'JOHN & MARY ...', 'VELIZ ANGEL AND BEATRIZ ...'
+  if(l0.length>=28 && last.length>=5 && !(g&&g.has(last)) && ORG_BIZ_PFX.some(x=>x.startsWith(last))) return 'cut';   // '... PROPERTI', '... ACQUISITI' cut at 30 characters
+  if(!g||g.size<200) return '';   // no / too small given-name set (tiny pack, no names): hard rules only, as the Python twin
+  const weak=ORG_FOREIGN_WEAK.test(l);
+  const personish=w.some((x,i)=>i>0 && x.length===1 && /[A-Z]/.test(x) && w.length<=5 && !(weak && i>=w.length-2))
+    || (g && w.some(x=>g.has(x) && !ORG_SIG_WORDS.has(x)));
+  if(personish) return '';
+  if(weak) return 'foreign';   // 'PRETORIA ESTATE AG', 'ORMATA MALAGA S L' (not 'WILLIAMS TRAVIS AG', 'RAMSARAN ARLENE S L')
+  const sb=l.match(ORG_SOFT_B)||[], sn=l.match(ORG_SOFT_N)||[], geo=l.match(ORG_GEO)||[]; if(!sb.length && !geo.length) return '';
+  const nsig=new Set([...sb,...sn,...geo]).size;
+  if(nsig>=2) return 'two';
+  if(sb.length && (w.length>=3 || ORG_SOFT_2.has(sb[0]))) return 'soft';
+  return w.length>=3 && ORG_GEO_LIST.includes(w[0]) ? 'geo' : '';
+}
+function orgName(raw,given){
   const lines=String(raw||'').toUpperCase().split(/\s*\|\s*/); const keep=[];
-  for(const l of lines){ if(ORG_CAREOF.test(l)) break; if(/^\s*REM\b/.test(l)) continue; keep.push(l); }
-  for(const l0 of keep){
+  let rem=false;   // lines after a 'REM ...' line name the remaindermen (people or a charity), not the owner
+  for(const l of lines){ if(ORG_CAREOF.test(l)) break; if(/^\s*REM\b/.test(l)){ rem=true; continue; } keep.push([l,rem]); }
+  for(let k=0;k<keep.length;k++){ const [l0,afterRem]=keep[k];
     const l=l0.replace(/['’.]/g,'').replace(/[^A-Z0-9&\/]+/g,' ').replace(/\s+/g,' ').trim(); if(!l) continue;
     const w=l.split(' '), pers=ORG_PERSON.test(l);
     if(ORG_LEGAL.test(l)) return true;
@@ -174,10 +270,11 @@ function orgName(raw){
     if(!pers && w.length>=2 && (ORG_LEGAL_END.test(l) || (ORG_LC_SP.test(l)&&!l.includes('&')) || (l0.length>=28&&ORG_TRUNC.test(l)))) return true;
     const m=l.match(ORG_CHURCH);
     if(m && !ORG_PERSON.test(l) && w.length>=2){ const rest=l.replace(m[0],' '); if(ORG_CHURCH_BACK.test(rest)) { if(m[0]!=='IGLESIA'||/\bIGLESIA (?:DE|DEL|LA|EL|BAUTISTA|EVANGELICA|CRISTIANA|CRISTO|PENTECOSTAL|ADVENTISTA|METODISTA|CATOLICA|NUEVA|HISPANA|MISIONERA|DIOS)\b/.test(l)||/^IGLESIA \w+ \w+/.test(l)) return true; } }
+    if(orgBiz(l,l0,w,pers,given,k===0,afterRem)) return true;
   }
   return false;
 }
-function reclassOwners(p){ if(!p||p.okFix!=null) return; const ow=strCol(p,'owner'), f=p.c.flags, fx=[]; for(let i=0;i<p.n;i++) if(!(f[i]&(8|16|32)) && orgName(ow[i])){ f[i]|=8; fx.push(i); } p.okFix=fx.length; p.okFixIdx=new Set(fx); }
+function reclassOwners(p){ if(!p||p.okFix!=null) return; const ow=strCol(p,'owner'), f=p.c.flags, fx=[], p0=PACKS[0]; let given=orgGiven(ow,f); if(p0&&p0!==p&&p0.given) given=new Set([...p0.given,...given]); ORG_GIVEN=given; p.given=given; for(let i=0;i<p.n;i++) if(!(f[i]&(8|16|32)) && orgName(ow[i],given)){ f[i]|=8; fx.push(i); } p.okFix=fx.length; p.okFixIdx=new Set(fx); }
 function prepPack(p){
   if(!p||p.td||!ZREC) return; const c=p.c, n=p.n;
   const um=new Float32Array(n), qm=new Float32Array(n), sm=new Float32Array(n), al=new Float32Array(n), below=new Int8Array(n), zmin=new Float32Array(n), sfz=new Int8Array(n);

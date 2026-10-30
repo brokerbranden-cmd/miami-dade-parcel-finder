@@ -1,7 +1,7 @@
 """Headless e2e: owner-type classification. Utilities, banks, associations and institutions must be hidden by the 'Individuals' owner filter
 (they are 'Companies & organizations'), and water-management districts / federal / county owners by 'Hide government-owned'.
 Persons whose surname looks like a company word must stay individuals."""
-import sys
+import sys, os, json
 from playwright.sync_api import sync_playwright
 import legacy_ui  # noqa: F401  (simplified UI in legacy mode, see legacy_ui.py)
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8080/'
@@ -65,7 +65,7 @@ with sync_playwright() as pw:
     rc = hsearch('#sig=RC&owner=corp'); ok(any(x['folio'] == '0141110010350' for x in rc['rows']), 'RC + Companies & organizations includes IGLESIA DEL DIOS VIVO')
     for sg in ['LP', 'TD', 'TC', 'US', 'BV', 'CC', 'LN', 'PR', 'DC', 'FC']: person_check('miami-dade', f'#sig={sg}&owner=person', need=False)
     person_check('miami-dade', '#owner=person&type=condo'); person_check('miami-dade', '#owner=person&ds=50', need=False)
-    for county, names in [('monroe', ['C O D SUPPLIES', 'HABITAT FOR HUMANITY', 'IGLESIA BAUTISTA']), ('broward', ['ATT RESIDENCE 1', 'IGLESIA DE DIOS', 'GOLF & TENNIS CLUB', 'CATHEDRAL OF PRAISE'])]:
+    for county, names in [('monroe', ['C O D SUPPLIES', 'HABITAT FOR HUMANITY', 'IGLESIA BAUTISTA']), ('broward', ['ATT RESIDENCE 1', 'IGLESIA DE DIOS', 'GOLF & TENNIS CLUB', 'CATHEDRAL OF PRAISE', 'AMERICAN EXPRESS TRAVEL', 'SOUTHERN SHORES ACQUISITIONS', 'FLORIDA EASTERN ECCLESIASTICAL'])]:
         pg.goto(URL + '?county=' + county); pg.wait_for_function('window.PF_READY', timeout=240000); pg.wait_for_timeout(1500)
         for h in ['#owner=person', '#owner=person&mtax=any', '#owner=person&o_oos=yes', '#owner=person&o_absz=yes', '#owner=person&x_life=yes', '#owner=person&td=basic']:
             person_check(county, h, need=h in ('#owner=person', '#owner=person&mtax=any'))
@@ -76,8 +76,13 @@ with sync_playwright() as pw:
             ok(p_['n'] == 0 and c_['n'] > 0, f"{county} '{q}': individuals={p_['n']} companies&orgs={c_['n']}")
         fx = pg.evaluate('PF.okFix()'); print(county, 'reclassified', fx); 
         twin = pg.evaluate(f"fetch('data/{county}/meta.json').then(r=>r.json()).then(m=>!!m.ownerKind)")
-        if twin:   # pack classified at build time by owner_kind.py: the app's orgName must find nothing left to fix (build and app agree)
-            ok(fx[0]['fixed'] == 0, f"{county}: pack built with the Python twin, app reclassified {fx[0]["fixed"]} names (must be 0: build twin and app agree)")
+        if twin:   # pack classified at build time by owner_kind.py (hard rules only): the app adds the given-name-aware business-word rules on load;
+                   # it must reclassify exactly what the Python twin org_name(name, org_given(pack)) does (tests/unit_orgname.py checks every row)
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+            import unit_orgname as UO
+            d0 = UO.parse(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', county, json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', county, 'meta.json')))['packs'][0]['files'][0]))
+            want = len(UO.py_fixed(d0, UO.org_given(d0['owner'], d0['flags'])))
+            ok(fx[0]['fixed'] == want, f"{county}: app reclassified {fx[0]['fixed']} names on load, Python twin with the pack's given names: {want} (must match)")
         else:      # older pack built before the twin: the app-side reclassification must kick in
             ok(fx[0]['fixed'] > 0, f'{county}: app reclassified some owner names')
     b.close()
